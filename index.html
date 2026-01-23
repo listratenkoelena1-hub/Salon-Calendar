@@ -4,44 +4,59 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Календарь салона</title>
+
 <style>
 body {
 font-family: Arial, sans-serif;
 margin: 10px;
 }
+
+h3 {
+margin-bottom: 10px;
+}
+
 table {
 border-collapse: collapse;
 width: 100%;
 }
+
 th, td {
 border: 1px solid #ccc;
 padding: 6px;
 text-align: center;
-font-size: 14px;
+font-size: 13px;
 }
+
 th {
 background: #f2f2f2;
 position: sticky;
 top: 0;
+z-index: 2;
 }
+
 .time {
 background: #fafafa;
 font-weight: bold;
-}
-.busy {
-background: #ffb3b3;
+position: sticky;
+left: 0;
+z-index: 1;
 }
 </style>
 </head>
+
 <body>
 
 <h3>Календарь записей</h3>
 
-<label>Дата:
-<input type="date" id="datePicker">
+<label>
+Дата:
+<input type="date">
 </label>
 
+<br><br>
+
 <table>
+<thead>
 <tr>
 <th>Time</th>
 <th>Master 1</th>
@@ -55,24 +70,37 @@ background: #ffb3b3;
 <th>Master 9</th>
 <th>Anyone</th>
 </tr>
+</thead>
+
+<tbody id="calendarBody"></tbody>
+</table>
 
 <script>
+const tbody = document.getElementById('calendarBody');
+
 for (let h = 8; h <= 20; h++) {
 for (let m = 0; m < 60; m += 15) {
 
 let hour12 = h % 12 === 0 ? 12 : h % 12;
 let ampm = h < 12 ? 'AM' : 'PM';
-let time = hour12 + ':' + String(m).padStart(2,'0') + ' ' + ampm;
+let timeLabel = hour12 + ':' + String(m).padStart(2, '0') + ' ' + ampm;
 
-document.write('<tr>');
-document.write('<td class="time">' + time + '</td>');
+const tr = document.createElement('tr');
+
+const timeCell = document.createElement('td');
+timeCell.className = 'time';
+timeCell.textContent = timeLabel;
+tr.appendChild(timeCell);
+
 for (let i = 0; i < 10; i++) {
-document.write('<td></td>');
+const td = document.createElement('td');
+tr.appendChild(td);
+}
+
+tbody.appendChild(tr);
 }
 }
 </script>
-
-</table>
 
 </body>
 </html>
