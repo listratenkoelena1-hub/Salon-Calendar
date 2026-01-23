@@ -1,18 +1,62 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
 <meta charset="UTF-8">
 <title>Salon Calendar</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body { font-family: Arial, sans-serif; margin: 10px; }
-header { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
-table { border-collapse: collapse; width: 100%; table-layout: fixed; }
-th, td { border: 1px solid #ccc; height: 32px; text-align: center; font-size: 12px; }
-th { background: #f5f5f5; }
-.time { width: 70px; background: #fafafa; }
-.slot { cursor: pointer; }
+body {
+font-family: Arial, sans-serif;
+margin: 10px;
+}
+
+h2 {
+margin-bottom: 10px;
+}
+
+.top-bar {
+display: flex;
+gap: 10px;
+align-items: center;
+margin-bottom: 10px;
+}
+
+button {
+padding: 8px 12px;
+font-size: 14px;
+cursor: pointer;
+}
+
+table {
+border-collapse: collapse;
+width: 100%;
+}
+
+th, td {
+border: 1px solid #ccc;
+padding: 4px;
+text-align: center;
+font-size: 12px;
+height: 26px;
+}
+
+th {
+background: #f0f0f0;
+position: sticky;
+top: 0;
+z-index: 2;
+}
+
+td.time {
+background: #fafafa;
+font-weight: bold;
+width: 70px;
+}
+
+.slot {
+cursor: pointer;
+}
 
 .appointment {
 font-size: 11px;
@@ -20,66 +64,101 @@ color: #000;
 border-radius: 4px;
 }
 
-button { padding: 6px 10px; }
-
+/* Модальное окно */
 .modal {
+display: none;
 position: fixed;
 inset: 0;
 background: rgba(0,0,0,0.4);
-display: flex;
-align-items: center;
 justify-content: center;
-z-index: 1000;
+align-items: center;
+z-index: 10;
 }
-.hidden { display: none; }
-.modal-content {
-background: white;
-padding: 15px;
-border-radius: 10px;
-width: 300px;
-}
-.modal-content h3 { margin-top: 0; }
-.modal-content label { display: block; margin-top: 8px; font-size: 12px; }
-.modal-content input, .modal-content select, .modal-content textarea {
-width: 100%;
-}
-.modal-content textarea { resize: none; }
 
-.staff-item {
+.modal-content {
+background: #fff;
+padding: 15px;
+width: 300px;
+border-radius: 6px;
+}
+
+.modal-content label {
+display: block;
+margin-top: 8px;
+font-size: 13px;
+}
+
+.modal-content input,
+.modal-content select,
+.modal-content textarea {
+width: 100%;
+padding: 5px;
+margin-top: 3px;
+}
+
+.modal-actions {
+margin-top: 10px;
 display: flex;
 justify-content: space-between;
-align-items: center;
-margin: 5px 0;
 }
 </style>
 </head>
 
 <body>
 
-<header>
-<input type="date" id="calendarDate">
-<button onclick="openAdd()">Add appointment</button>
-<button onclick="openStaff()">Staff</button>
-</header>
+<h2>Salon Calendar</h2>
 
-<table id="calendar"></table>
+<div class="top-bar">
+<input type="date" id="currentDate">
+<button onclick="openAddModal()">Add appointment</button>
+</div>
 
-<!-- ADD / EDIT APPOINTMENT -->
-<div id="appointmentModal" class="modal hidden">
+<table id="calendar">
+<thead>
+<tr>
+<th>Time</th>
+<th>Staff 1</th>
+<th>Staff 2</th>
+<th>Staff 3</th>
+<th>Staff 4</th>
+<th>Staff 5</th>
+<th>Staff 6</th>
+<th>Staff 7</th>
+<th>Staff 8</th>
+<th>Staff 9</th>
+<th>Anyone</th>
+</tr>
+</thead>
+<tbody id="calendarBody"></tbody>
+</table>
+
+<!-- ADD APPOINTMENT MODAL -->
+<div class="modal" id="addModal">
 <div class="modal-content">
-<h3>Appointment</h3>
+<h3>Add appointment</h3>
 
 <label>Date</label>
-<input type="date" id="aDate" readonly>
+<input type="date" id="apptDate" readonly>
 
 <label>Staff</label>
-<select id="aStaff"></select>
+<select id="apptStaff">
+<option>Staff 1</option>
+<option>Staff 2</option>
+<option>Staff 3</option>
+<option>Staff 4</option>
+<option>Staff 5</option>
+<option>Staff 6</option>
+<option>Staff 7</option>
+<option>Staff 8</option>
+<option>Staff 9</option>
+<option>Anyone</option>
+</select>
 
 <label>Start time</label>
-<select id="aTime"></select>
+<select id="apptTime"></select>
 
 <label>Duration</label>
-<select id="aDuration">
+<select id="apptDuration">
 <option value="15">15 min</option>
 <option value="30">30 min</option>
 <option value="45">45 min</option>
@@ -90,217 +169,92 @@ margin: 5px 0;
 <option value="120">2:00</option>
 <option value="150">2:30</option>
 <option value="180">3:00</option>
+<option value="210">3:30</option>
 </select>
 
 <label>Client</label>
-<input id="aClient">
+<input id="apptClient">
 
-<label>Note</label>
-<textarea id="aNote"></textarea>
+<label>Notes</label>
+<textarea id="apptNotes"></textarea>
 
-<br>
+<div class="modal-actions">
 <button onclick="saveAppointment()">Save</button>
-<button onclick="deleteAppointment()">Delete</button>
-<button onclick="closeAppointment()">Cancel</button>
+<button onclick="closeAddModal()">Cancel</button>
 </div>
-</div>
-
-<!-- STAFF -->
-<div id="staffModal" class="modal hidden">
-<div class="modal-content">
-<h3>Staff</h3>
-<div id="staffList"></div>
-<hr>
-<input id="newStaffName" placeholder="Name">
-<input type="color" id="newStaffColor" value="#cce5ff">
-<button onclick="addStaff()">Add</button>
-<br><br>
-<button onclick="closeStaff()">Close</button>
 </div>
 </div>
 
-<!-- CONFLICT -->
-<div id="conflictModal" class="modal hidden">
-<div class="modal-content">
-<h3>⚠️ Time conflict</h3>
-<p>This staff member is busy.<br>Please choose another time.</p>
-<button onclick="closeConflict()">OK</button>
-</div>
-</div>
+<!-- FIREBASE -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 
-<script>
-let staff = [
-{name:'Anna', color:'#ffe0b2'},
-{name:'Maria', color:'#e1bee7'},
-{name:'Olga', color:'#c8e6c9'}
-];
-
-let appointments = [];
-let editIndex = null;
-
-const calendar = document.getElementById('calendar');
-const calendarDate = document.getElementById('calendarDate');
-calendarDate.valueAsDate = new Date();
-
-calendarDate.onchange = renderCalendar;
-
-function timeSlots() {
-let slots = [];
-for (let h=8; h<=20; h++) {
-for (let m=0; m<60; m+=15) {
-if (h===20 && m>0) continue;
-let date = new Date();
-date.setHours(h,m,0,0);
-slots.push(date.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}));
-}
-}
-return slots;
-}
-
-function renderCalendar() {
-calendar.innerHTML = '';
-let header = '<tr><th class="time">Time</th>';
-staff.forEach(s => header += `<th>${s.name}</th>`);
-header += '</tr>';
-calendar.innerHTML += header;
-
-timeSlots().forEach(t => {
-let row = `<tr><td class="time">${t}</td>`;
-staff.forEach((_,i)=> row+=`<td class="slot" data-time="${t}" data-staff="${i}"></td>`);
-row+='</tr>';
-calendar.innerHTML+=row;
-});
-
-drawAppointments();
-}
-
-function drawAppointments() {
-document.querySelectorAll('.slot').forEach(td=>td.innerHTML='');
-
-appointments
-.filter(a=>a.date===calendarDate.value)
-.forEach((a,i)=>{
-let startIndex = timeSlots().indexOf(a.time);
-let blocks = a.duration/15;
-for (let b=0;b<blocks;b++) {
-let cell = document.querySelector(
-`.slot[data-time="${timeSlots()[startIndex+b]}"][data-staff="${a.staff}"]`
-);
-if (cell) {
-cell.innerHTML = b===0 ? a.client : '';
-cell.style.background = staff[a.staff].color;
-cell.onclick = ()=>openEdit(i);
-}
-}
-});
-}
-
-function openAdd() {
-editIndex=null;
-document.getElementById('appointmentModal').classList.remove('hidden');
-document.getElementById('aDate').value = calendarDate.value;
-fillSelects();
-}
-
-function openEdit(i) {
-editIndex=i;
-let a=appointments[i];
-openAdd();
-aStaff.value=a.staff;
-aTime.value=a.time;
-aDuration.value=a.duration;
-aClient.value=a.client;
-aNote.value=a.note;
-}
-
-function closeAppointment(){
-document.getElementById('appointmentModal').classList.add('hidden');
-}
-
-function fillSelects(){
-aStaff.innerHTML='';
-staff.forEach((s,i)=>aStaff.innerHTML+=`<option value="${i}">${s.name}</option>`);
-aTime.innerHTML='';
-timeSlots().forEach(t=>aTime.innerHTML+=`<option>${t}</option>`);
-}
-
-function saveAppointment(){
-let data={
-date: calendarDate.value,
-staff:+aStaff.value,
-time:aTime.value,
-duration:+aDuration.value,
-client:aClient.value,
-note:aNote.value
+const firebaseConfig = {
+apiKey: "AIzaSyC5BecKxYxQ9V5qbmXBNkTsvnIZBtK_dx8",
+authDomain: "rosesnails-calendar.firebaseapp.com",
+projectId: "rosesnails-calendar",
+storageBucket: "rosesnails-calendar.firebasestorage.app",
+messagingSenderId: "1000239390265",
+appId: "1:1000239390265:web:d2ed45be53b233cf40f7e8"
 };
 
-let conflict = appointments.some((a,i)=>{
-if (editIndex===i) return false;
-if (a.date!==data.date || a.staff!==data.staff) return false;
-let s1=timeSlots().indexOf(a.time);
-let e1=s1+a.duration/15;
-let s2=timeSlots().indexOf(data.time);
-let e2=s2+data.duration/15;
-return Math.max(s1,s2)<Math.min(e1,e2);
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const calendarBody = document.getElementById('calendarBody');
+const timeSelect = document.getElementById('apptTime');
+const currentDate = document.getElementById('currentDate');
+
+function buildTimes() {
+calendarBody.innerHTML = '';
+timeSelect.innerHTML = '';
+
+for (let h = 8; h <= 20; h++) {
+for (let m = 0; m < 60; m += 15) {
+if (h === 20 && m > 0) continue;
+
+let time24 = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+
+let h12 = h % 12 || 12;
+let ampm = h < 12 ? 'AM' : 'PM';
+let label = h12 + ':' + String(m).padStart(2,'0') + ' ' + ampm;
+
+timeSelect.innerHTML += `<option value="${time24}">${label}</option>`;
+
+let tr = document.createElement('tr');
+tr.innerHTML = `<td class="time">${label}</td>` +
+'<td class="slot"></td>'.repeat(10);
+calendarBody.appendChild(tr);
+}
+}
+}
+
+function openAddModal() {
+document.getElementById('addModal').style.display = 'flex';
+document.getElementById('apptDate').value = currentDate.value;
+}
+
+function closeAddModal() {
+document.getElementById('addModal').style.display = 'none';
+}
+
+async function saveAppointment() {
+await addDoc(collection(db, "appointments"), {
+date: document.getElementById('apptDate').value,
+staff: document.getElementById('apptStaff').value,
+time: document.getElementById('apptTime').value,
+duration: document.getElementById('apptDuration').value,
+client: document.getElementById('apptClient').value,
+notes: document.getElementById('apptNotes').value,
+createdAt: Date.now()
 });
-
-if (conflict) {
-document.getElementById('conflictModal').classList.remove('hidden');
-return;
+closeAddModal();
+alert("Saved");
 }
 
-if (editIndex!==null) appointments[editIndex]=data;
-else appointments.push(data);
-
-closeAppointment();
-renderCalendar();
-}
-
-function deleteAppointment(){
-if (editIndex!==null) appointments.splice(editIndex,1);
-closeAppointment();
-renderCalendar();
-}
-
-function openStaff(){
-document.getElementById('staffModal').classList.remove('hidden');
-renderStaff();
-}
-
-function closeStaff(){
-document.getElementById('staffModal').classList.add('hidden');
-}
-
-function renderStaff(){
-staffList.innerHTML='';
-staff.forEach((s,i)=>{
-staffList.innerHTML+=`
-<div class="staff-item">
-<span>${s.name}</span>
-<button onclick="removeStaff(${i})">Delete</button>
-</div>`;
-});
-}
-
-function addStaff(){
-if(!newStaffName.value) return;
-staff.push({name:newStaffName.value,color:newStaffColor.value});
-newStaffName.value='';
-renderStaff();
-renderCalendar();
-}
-
-function removeStaff(i){
-staff.splice(i,1);
-renderStaff();
-renderCalendar();
-}
-
-function closeConflict(){
-document.getElementById('conflictModal').classList.add('hidden');
-}
-
-renderCalendar();
+currentDate.valueAsDate = new Date();
+buildTimes();
 </script>
 
 </body>
