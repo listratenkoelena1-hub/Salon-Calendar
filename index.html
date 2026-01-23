@@ -7,7 +7,7 @@
 
 <style>
 body { font-family: Arial, sans-serif; margin: 10px; }
-header { display:flex; gap:12px; margin-bottom:15px; }
+header { display:flex; gap:12px; margin-bottom:15px; flex-wrap:wrap; }
 header input, header button { font-size:16px; padding:8px 12px; }
 
 table { border-collapse:collapse; width:100%; table-layout:fixed; }
@@ -20,10 +20,12 @@ th { background:#f5f5f5; }
 position:fixed; inset:0;
 background:rgba(0,0,0,.4);
 display:flex; align-items:center; justify-content:center;
+z-index:1000;
 }
 .hidden { display:none; }
 .modal-content {
-background:#fff; padding:15px; border-radius:10px; width:340px;
+background:#fff; padding:15px; border-radius:10px; width:360px;
+max-height:90vh; overflow:auto;
 }
 .modal-content label { display:block; margin-top:8px; font-size:12px; }
 .modal-content input, select, textarea { width:100%; }
@@ -34,6 +36,14 @@ display:flex; gap:5px; align-items:center; margin-bottom:6px;
 }
 .staff-row input[type="color"] { width:40px; padding:0; }
 .staff-row button { font-size:12px; }
+
+.search-item {
+border-bottom:1px solid #ddd;
+padding:6px 0;
+cursor:pointer;
+}
+.search-item:hover { background:#f5f5f5; }
+.search-date { font-size:11px; color:#666; }
 </style>
 </head>
 
@@ -42,6 +52,7 @@ display:flex; gap:5px; align-items:center; margin-bottom:6px;
 <header>
 <input type="date" id="calendarDate">
 <button onclick="openAdd()">Add appointment</button>
+<button onclick="openSearch()">Search</button>
 <button onclick="openStaff()">Staff</button>
 </header>
 
@@ -80,6 +91,17 @@ display:flex; gap:5px; align-items:center; margin-bottom:6px;
 <button onclick="saveAppointment()">Save</button>
 <button onclick="confirmDelete()">Delete</button>
 <button onclick="closeAppointment()">Close</button>
+</div>
+</div>
+
+<!-- SEARCH -->
+<div id="searchModal" class="modal hidden">
+<div class="modal-content">
+<h3>Search client</h3>
+<input id="searchInput" placeholder="Client name" oninput="runSearch()">
+<div id="searchResults"></div>
+<br>
+<button onclick="closeSearch()">Close</button>
 </div>
 </div>
 
@@ -212,12 +234,13 @@ aStaff.value=staff.findIndex(s=>s.id===a.staffId);
 aTime.value=a.start;
 aDuration.value=a.duration;
 aClient.value=a.client;
-aNote.value=a.note || '';
+aNote.value=a.note||'';
 };
 
 function fillSelects(){
 aStaff.innerHTML=staff.map((s,i)=>`<option value="${i}">${s.name}</option>`).join('');
-aTime.innerHTML=[...Array(SLOTS).keys()].map(i=>`<option value="${i}">${timeLabel(i)}</option>`).join('');
+aTime.innerHTML=[...Array(SLOTS).keys()]
+.map(i=>`<option value="${i}">${timeLabel(i)}</option>`).join('');
 }
 
 window.saveAppointment=async()=>{
@@ -252,6 +275,40 @@ editId=null;
 closeDelete();
 closeAppointment();
 };
+
+window.openSearch=()=>{
+searchInput.value='';
+searchResults.innerHTML='';
+searchModal.classList.remove('hidden');
+};
+
+window.runSearch=()=>{
+const q=searchInput.value.toLowerCase();
+searchResults.innerHTML='';
+if(!q) return;
+
+appointments
+.filter(a=>a.client && a.client.toLowerCase().includes(q))
+.sort((a,b)=>a.date<b.date?1:-1)
+.forEach(a=>{
+const s=staff.find(x=>x.id===a.staffId);
+searchResults.innerHTML+=`
+<div class="search-item" onclick="openFromSearch('${a.id}')">
+<div><b>${a.client}</b></div>
+<div class="search-date">${a.date} — ${timeLabel(a.start)} — ${s?.name||''}</div>
+</div>`;
+});
+};
+
+window.openFromSearch=id=>{
+closeSearch();
+const a=appointments.find(x=>x.id===id);
+calendarDate.value=a.date;
+renderCalendar();
+setTimeout(()=>openEdit(id),50);
+};
+
+window.closeSearch=()=>searchModal.classList.add('hidden');
 
 window.openStaff=()=>staffModal.classList.remove('hidden');
 window.closeStaff=()=>staffModal.classList.add('hidden');
