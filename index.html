@@ -7,39 +7,15 @@
 
 <style>
 body { font-family: Arial, sans-serif; margin: 10px; }
+header { display: flex; gap: 12px; align-items: center; margin-bottom: 15px; }
+header input, header button { font-size: 16px; padding: 8px 12px; }
 
-/* TOP BAR */
-header {
-display: flex;
-gap: 12px;
-align-items: center;
-margin-bottom: 15px;
-}
-header input,
-header button {
-font-size: 16px;
-padding: 8px 12px;
-}
-header input[type="date"] {
-height: 40px;
-}
-
-/* CALENDAR */
 table { border-collapse: collapse; width: 100%; table-layout: fixed; }
-th, td {
-border: 1px solid #ccc;
-height: 32px;
-text-align: center;
-font-size: 12px;
-}
+th, td { border: 1px solid #ccc; height: 32px; text-align: center; font-size: 12px; }
 th { background: #f5f5f5; }
 .time { width: 75px; background: #fafafa; }
 .slot { cursor: pointer; }
 
-/* BUTTONS */
-button { cursor: pointer; }
-
-/* MODALS */
 .modal {
 position: fixed;
 inset: 0;
@@ -56,24 +32,11 @@ padding: 15px;
 border-radius: 10px;
 width: 320px;
 }
-.modal-content h3 { margin-top: 0; }
-.modal-content label {
-display: block;
-margin-top: 8px;
-font-size: 12px;
-}
+.modal-content label { display: block; margin-top: 8px; font-size: 12px; }
 .modal-content input,
 .modal-content select,
-.modal-content textarea {
-width: 100%;
-}
-.modal-content textarea { resize: none; }
-
-.staff-item {
-display: flex;
-justify-content: space-between;
-margin: 6px 0;
-}
+.modal-content textarea { width: 100%; }
+.staff-item { display: flex; justify-content: space-between; margin: 6px 0; }
 </style>
 </head>
 
@@ -132,7 +95,7 @@ margin: 6px 0;
 <div id="deleteConfirmModal" class="modal hidden">
 <div class="modal-content">
 <h3>Delete appointment</h3>
-<p>Are you sure you want to delete this appointment?</p>
+<p>Are you sure?</p>
 <button onclick="deleteAppointment()">Yes</button>
 <button onclick="closeDeleteConfirm()">No</button>
 </div>
@@ -155,7 +118,6 @@ margin: 6px 0;
 <div id="conflictModal" class="modal hidden">
 <div class="modal-content">
 <h3>⚠️ Time conflict</h3>
-<p>This staff member is busy</p>
 <button onclick="closeConflict()">OK</button>
 </div>
 </div>
@@ -167,6 +129,7 @@ getFirestore,
 collection,
 addDoc,
 deleteDoc,
+updateDoc,
 doc,
 onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
@@ -180,8 +143,8 @@ messagingSenderId: "1000239390265",
 appId: "1:1000239390265:web:d2ed45be53b233cf40f7e8"
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+initializeApp(firebaseConfig);
+const db = getFirestore();
 
 let staff = [];
 let appointments = [];
@@ -192,16 +155,16 @@ const calendarDate = document.getElementById('calendarDate');
 calendarDate.valueAsDate = new Date();
 calendarDate.onchange = renderCalendar;
 
-function timeLabel(i) {
-const total = 8*60 + i*15;
-let h = Math.floor(total/60);
-let m = total%60;
-let am = h>=12 ? 'PM':'AM';
-h = h%12 || 12;
-return `${h}:${String(m).padStart(2,'0')} ${am}`;
-}
+const SLOTS = 49;
 
-const slots = 49;
+function timeLabel(i) {
+const t = 8*60 + i*15;
+let h = Math.floor(t/60);
+let m = t%60;
+let ap = h>=12?'PM':'AM';
+h = h%12 || 12;
+return `${h}:${String(m).padStart(2,'0')} ${ap}`;
+}
 
 onSnapshot(collection(db,"staff"), s=>{
 staff = s.docs.map(d=>({id:d.id,...d.data()}));
@@ -220,7 +183,7 @@ staff.forEach(s=>h+=`<th>${s.name}</th>`);
 h+='</tr>';
 calendar.innerHTML+=h;
 
-for(let i=0;i<slots;i++){
+for(let i=0;i<SLOTS;i++){
 let r=`<tr><td class="time">${timeLabel(i)}</td>`;
 staff.forEach((_,s)=>r+=`<td class="slot" data-slot="${i}" data-staff="${s}"></td>`);
 r+='</tr>';
@@ -232,9 +195,7 @@ drawAppointments();
 
 function drawAppointments(){
 document.querySelectorAll('.slot').forEach(c=>{
-c.innerHTML='';
-c.style.background='';
-c.onclick=null;
+c.innerHTML=''; c.style.background=''; c.onclick=null;
 });
 
 appointments.filter(a=>a.date===calendarDate.value).forEach(a=>{
@@ -254,9 +215,8 @@ window.openAdd=()=>{
 editId=null;
 aDate.value=calendarDate.value;
 aStaff.innerHTML=staff.map((s,i)=>`<option value="${i}">${s.name}</option>`).join('');
-aTime.innerHTML=[...Array(slots).keys()].map(i=>`<option value="${i}">${timeLabel(i)}</option>`).join('');
-aClient.value='';
-aNote.value='';
+aTime.innerHTML=[...Array(SLOTS).keys()].map(i=>`<option value="${i}">${timeLabel(i)}</option>`).join('');
+aClient.value=''; aNote.value='';
 appointmentModal.classList.remove('hidden');
 };
 
@@ -289,8 +249,12 @@ return Math.max(a.start,data.start)<Math.min(a.start+a.duration,data.start+data.
 
 if(conflict){ conflictModal.classList.remove('hidden'); return; }
 
-if(editId) await deleteDoc(doc(db,"appointments",editId));
+if(editId){
+await updateDoc(doc(db,"appointments",editId),data);
+} else {
 await addDoc(collection(db,"appointments"),data);
+}
+
 closeAppointment();
 };
 
