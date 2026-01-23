@@ -59,13 +59,15 @@ background: #ffb3b3;
 <script>
 for (let h = 8; h <= 20; h++) {
 for (let m = 0; m < 60; m += 15) {
-let time = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+
+let hour12 = h % 12 === 0 ? 12 : h % 12;
+let ampm = h < 12 ? 'AM' : 'PM';
+let time = hour12 + ':' + String(m).padStart(2,'0') + ' ' + ampm;
+
 document.write('<tr>');
 document.write('<td class="time">' + time + '</td>');
 for (let i = 0; i < 10; i++) {
 document.write('<td></td>');
-}
-document.write('</tr>');
 }
 }
 </script>
