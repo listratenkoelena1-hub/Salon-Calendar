@@ -42,7 +42,6 @@ margin-bottom:8px;
 }
 .staff-name { flex:1; font-weight:600; }
 .staff-actions { display:flex; gap:4px; }
-.staff-card button { font-size:12px; }
 
 .search-item {
 border-bottom:1px solid #ddd;
@@ -82,9 +81,15 @@ cursor:pointer;
 <select id="aDuration">
 <option value="1">15 min</option>
 <option value="2">30 min</option>
-<option value="4">1:00</option>
-<option value="6">1:30</option>
-<option value="8">2:00</option>
+<option value="3">45 min</option>
+<option value="4">01:00</option>
+<option value="5">01:15</option>
+<option value="6">01:30</option>
+<option value="7">01:45</option>
+<option value="8">02:00</option>
+<option value="10">02:30</option>
+<option value="12">03:00</option>
+<option value="14">03:30</option>
 </select>
 
 <label>Client</label>
@@ -146,7 +151,8 @@ cursor:pointer;
 <!-- CONFLICT -->
 <div id="conflictModal" class="modal hidden">
 <div class="modal-content">
-<p>⚠️ Time conflict</p>
+<h3>⚠️ TECH BUSY</h3>
+<p>Sorry, this staff member is busy.<br>Please choose another time.</p>
 <button onclick="closeConflict()">OK</button>
 </div>
 </div>
@@ -207,8 +213,11 @@ drawAppointments();
 
 function drawAppointments(){
 document.querySelectorAll('.slot').forEach(c=>{c.innerHTML='';c.style.background='';c.onclick=null;});
-appointments.filter(a=>a.date===calendarDate.value).forEach(a=>{
+appointments
+.filter(a=>a.date===calendarDate.value)
+.forEach(a=>{
 const si=staff.findIndex(s=>s.id===a.staffId);
+if(si===-1) return;
 for(let i=0;i<a.duration;i++){
 const cell=document.querySelector(`.slot[data-slot="${a.start+i}"][data-staff="${si}"]`);
 if(cell){
@@ -231,6 +240,7 @@ aNote.value='';
 
 window.openEdit=id=>{
 const a=appointments.find(x=>x.id===id);
+if(!a) return;
 editId=id;
 appointmentModal.classList.remove('hidden');
 fillSelects();
@@ -276,8 +286,7 @@ window.confirmDelete=()=>{if(editId) deleteModal.classList.remove('hidden');};
 window.deleteAppointment=async()=>{
 await deleteDoc(doc(db,"appointments",editId));
 editId=null;
-closeDelete();
-closeAppointment();
+closeDelete(); closeAppointment();
 };
 
 window.openSearch=()=>{
@@ -293,10 +302,11 @@ appointments
 .sort((a,b)=>a.date<b.date?1:-1)
 .forEach(a=>{
 const s=staff.find(x=>x.id===a.staffId);
+if(!s) return;
 searchResults.innerHTML+=`
 <div class="search-item" onclick="openFromSearch('${a.id}')">
 <b>${a.client}</b><br>
-${a.date} ${timeLabel(a.start)} — ${s?.name||''}
+${a.date} ${timeLabel(a.start)} — ${s.name}
 </div>`;
 });
 };
@@ -304,6 +314,7 @@ ${a.date} ${timeLabel(a.start)} — ${s?.name||''}
 window.openFromSearch=id=>{
 closeSearch();
 const a=appointments.find(x=>x.id===id);
+if(!a) return;
 calendarDate.value=a.date;
 renderCalendar();
 setTimeout(()=>openEdit(id),50);
@@ -343,20 +354,13 @@ window.updateStaffColor=(id,color)=>updateDoc(doc(db,"staff",id),{color});
 window.moveStaff=async(i,dir)=>{
 const j=i+dir;
 if(j<0||j>=staff.length) return;
-
 const a=staff[i], b=staff[j];
-
-// локально меняем
 [staff[i],staff[j]]=[staff[j],staff[i]];
-
-// сохраняем порядок
 await Promise.all([
 updateDoc(doc(db,"staff",a.id),{order:j}),
 updateDoc(doc(db,"staff",b.id),{order:i})
 ]);
-
-renderStaff();
-renderCalendar();
+renderStaff(); renderCalendar();
 };
 
 window.askStaffDelete=id=>{
