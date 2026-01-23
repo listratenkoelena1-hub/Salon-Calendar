@@ -6,15 +6,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body { font-family: Arial, sans-serif; margin: 10px; }
+body { font-family: Arial, sans-serif; margin:10px; }
 
-/* ===== HEADER ===== */
+/* HEADER */
 header {
 display:flex;
 justify-content:space-between;
 align-items:center;
-margin-bottom:15px;
-flex-wrap:wrap;
+margin-bottom:12px;
 }
 .header-left, .header-right {
 display:flex;
@@ -26,18 +25,29 @@ font-size:16px;
 padding:8px 12px;
 }
 
-/* ===== TABLE ===== */
+/* TABLE */
 table { border-collapse:collapse; width:100%; table-layout:fixed; }
-th, td {
-border:1px solid #ccc;
-height:32px;
-font-size:12px;
-text-align:center;
+th {
+height:38px;
+font-size:13px;
+font-weight:bold;
 }
-.time { width:60px; background:#fafafa; }
+td {
+height:26px;
+font-size:11px;
+}
+th, td { border:1px solid #ccc; text-align:center; }
+.time { width:58px; background:#fafafa; }
 .slot { cursor:pointer; }
 
-/* ===== MODALS ===== */
+/* APPOINTMENT */
+.appointment {
+font-size:11px;
+border-radius:4px;
+color:#000;
+}
+
+/* MODALS */
 .modal {
 position:fixed;
 inset:0;
@@ -72,21 +82,14 @@ gap:8px;
 margin-top:12px;
 }
 
-/* ===== STAFF ===== */
-.staff-item {
+/* STAFF */
+.staff-row {
 display:flex;
 align-items:center;
 gap:6px;
 margin:6px 0;
 }
-.staff-item span { flex:1; }
-
-/* appointment block */
-.appointment {
-font-size:11px;
-border-radius:4px;
-color:#000;
-}
+.staff-row span { flex:1; }
 </style>
 </head>
 
@@ -187,12 +190,7 @@ color:#000;
 </div>
 
 <script>
-let staff = [
-{name:'Anna', color:'#ffe0b2'},
-{name:'Maria', color:'#e1bee7'},
-{name:'Olga', color:'#c8e6c9'}
-];
-
+let staff = [];
 let appointments = [];
 let editIndex = null;
 
@@ -201,7 +199,8 @@ const calendarDate = document.getElementById('calendarDate');
 calendarDate.valueAsDate = new Date();
 calendarDate.onchange = renderCalendar;
 
-function timeSlots() {
+/* TIME SLOTS */
+function timeSlots(){
 let slots=[];
 for(let h=8;h<=20;h++){
 for(let m=0;m<60;m+=15){
@@ -214,6 +213,7 @@ slots.push(d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}));
 return slots;
 }
 
+/* CALENDAR */
 function renderCalendar(){
 calendar.innerHTML='';
 let head='<tr><th class="time">Time</th>';
@@ -228,15 +228,18 @@ calendar.innerHTML+=row+'</tr>';
 drawAppointments();
 }
 
+/* DRAW */
 function drawAppointments(){
-document.querySelectorAll('.slot').forEach(c=>c.innerHTML='');
-appointments.filter(a=>a.date===calendarDate.value).forEach((a,i)=>{
+document.querySelectorAll('.slot').forEach(c=>{c.innerHTML='';c.style.background='';});
+appointments
+.filter(a=>a.date===calendarDate.value)
+.forEach((a,i)=>{
 let start=timeSlots().indexOf(a.time);
 let blocks=a.duration/15;
 for(let b=0;b<blocks;b++){
 let cell=document.querySelector(`.slot[data-time="${timeSlots()[start+b]}"][data-staff="${a.staff}"]`);
 if(cell){
-cell.innerHTML=b===0?a.client:'';
+if(b===0) cell.innerHTML=a.client;
 cell.style.background=staff[a.staff].color;
 cell.onclick=()=>openEdit(i);
 }
@@ -244,13 +247,13 @@ cell.onclick=()=>openEdit(i);
 });
 }
 
+/* ADD / EDIT */
 function openAdd(){
 editIndex=null;
 appointmentModal.classList.remove('hidden');
 aDate.value=calendarDate.value;
 fillSelects();
 }
-
 function openEdit(i){
 editIndex=i;
 let a=appointments[i];
@@ -261,7 +264,6 @@ aDuration.value=a.duration;
 aClient.value=a.client;
 aNote.value=a.note;
 }
-
 function closeAppointment(){ appointmentModal.classList.add('hidden'); }
 
 function fillSelects(){
@@ -301,11 +303,14 @@ renderCalendar();
 }
 
 function deleteAppointment(){
-if(editIndex!==null) appointments.splice(editIndex,1);
+if(editIndex===null) return;
+if(!confirm('Delete this appointment?')) return;
+appointments.splice(editIndex,1);
 closeAppointment();
 renderCalendar();
 }
 
+/* STAFF */
 function openStaff(){ staffModal.classList.remove('hidden'); renderStaff(); }
 function closeStaff(){ staffModal.classList.add('hidden'); }
 
@@ -313,7 +318,9 @@ function renderStaff(){
 staffList.innerHTML='';
 staff.forEach((s,i)=>{
 staffList.innerHTML+=`
-<div class="staff-item">
+<div class="staff-row">
+<button onclick="moveStaff(${i},-1)">↑</button>
+<button onclick="moveStaff(${i},1)">↓</button>
 <span>${s.name}</span>
 <input type="color" value="${s.color}" onchange="staff[${i}].color=this.value;renderCalendar()">
 <button onclick="removeStaff(${i})">Delete</button>
@@ -328,20 +335,34 @@ newStaffName.value='';
 renderStaff(); renderCalendar();
 }
 
-function removeStaff(i){
-if(!confirm('Delete this staff member?')) return;
-staff.splice(i,1);
-appointments=appointments.filter(a=>a.staff!==i);
+function moveStaff(i,dir){
+let ni=i+dir;
+if(ni<0||ni>=staff.length) return;
+[staff[i],staff[ni]]=[staff[ni],staff[i]];
+appointments.forEach(a=>{
+if(a.staff===i) a.staff=ni;
+else if(a.staff===ni) a.staff=i;
+});
 renderStaff(); renderCalendar();
 }
 
+function removeStaff(i){
+if(!confirm('Delete this staff member and all their appointments?')) return;
+staff.splice(i,1);
+appointments=appointments.filter(a=>a.staff!==i)
+.map(a=>({ ...a, staff: a.staff>i ? a.staff-1 : a.staff }));
+renderStaff(); renderCalendar();
+}
+
+/* SEARCH */
 function openSearch(){ searchModal.classList.remove('hidden'); runSearch(); }
 function closeSearch(){ searchModal.classList.add('hidden'); }
-
 function runSearch(){
 let q=searchInput.value.toLowerCase();
 searchResults.innerHTML='';
-appointments.filter(a=>a.client.toLowerCase().includes(q)).forEach(a=>{
+appointments
+.filter(a=>a.client.toLowerCase().includes(q))
+.forEach(a=>{
 searchResults.innerHTML+=`<div>${a.date} ${a.time} – ${a.client}</div>`;
 });
 }
