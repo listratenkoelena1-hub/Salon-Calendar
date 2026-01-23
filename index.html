@@ -26,7 +26,7 @@ display:flex; align-items:center; justify-content:center;
 background:#fff; padding:15px; border-radius:10px; width:320px;
 }
 .modal-content label { display:block; margin-top:8px; font-size:12px; }
-.modal-content input, select, textarea { width:100%; }
+.modal-content input, select { width:100%; }
 </style>
 </head>
 
@@ -67,7 +67,7 @@ background:#fff; padding:15px; border-radius:10px; width:320px;
 
 <br>
 <button onclick="saveAppointment()">Save</button>
-<button onclick="askDelete()">Delete</button>
+<button onclick="confirmDelete()">Delete</button>
 <button onclick="closeAppointment()">Close</button>
 </div>
 </div>
@@ -75,7 +75,7 @@ background:#fff; padding:15px; border-radius:10px; width:320px;
 <!-- DELETE CONFIRM -->
 <div id="deleteModal" class="modal hidden">
 <div class="modal-content">
-<p>Delete appointment?</p>
+<p>Delete this appointment?</p>
 <button onclick="deleteAppointment()">Yes</button>
 <button onclick="closeDelete()">No</button>
 </div>
@@ -107,11 +107,12 @@ let staff = [];
 let appointments = [];
 let editId = null;
 
-const SLOTS = 49;
 const calendar = document.getElementById('calendar');
 const calendarDate = document.getElementById('calendarDate');
 calendarDate.valueAsDate = new Date();
 calendarDate.onchange = renderCalendar;
+
+const SLOTS = 49;
 
 function timeLabel(i){
 const t = 8*60 + i*15;
@@ -156,7 +157,9 @@ c.innerHTML=''; c.style.background=''; c.onclick=null;
 appointments.filter(a=>a.date===calendarDate.value).forEach(a=>{
 const si = staff.findIndex(s=>s.id===a.staffId);
 for(let i=0;i<a.duration;i++){
-const cell=document.querySelector(`.slot[data-slot="${a.start+i}"][data-staff="${si}"]`);
+const cell=document.querySelector(
+`.slot[data-slot="${a.start+i}"][data-staff="${si}"]`
+);
 if(cell){
 cell.style.background=staff[si].color;
 if(i===0) cell.innerHTML=a.client;
@@ -166,26 +169,33 @@ cell.onclick=()=>openEdit(a.id);
 });
 }
 
-window.openAdd=()=>{
-editId=null;
-aDate.value=calendarDate.value;
-aStaff.innerHTML=staff.map((s,i)=>`<option value="${i}">${s.name}</option>`).join('');
-aTime.innerHTML=[...Array(SLOTS).keys()].map(i=>`<option value="${i}">${timeLabel(i)}</option>`).join('');
-aClient.value='';
+window.openAdd = ()=>{
+editId = null;
 appointmentModal.classList.remove('hidden');
+aDate.value = calendarDate.value;
+fillSelects();
+aClient.value='';
 };
 
-window.openEdit=id=>{
-const a=appointments.find(x=>x.id===id);
-editId=id;
-openAdd();
-aStaff.value=staff.findIndex(s=>s.id===a.staffId);
-aTime.value=a.start;
-aDuration.value=a.duration;
-aClient.value=a.client;
+window.openEdit = id=>{
+editId = id;
+const a = appointments.find(x=>x.id===id);
+appointmentModal.classList.remove('hidden');
+fillSelects();
+aDate.value = a.date;
+aStaff.value = staff.findIndex(s=>s.id===a.staffId);
+aTime.value = a.start;
+aDuration.value = a.duration;
+aClient.value = a.client;
 };
 
-window.saveAppointment=async()=>{
+function fillSelects(){
+aStaff.innerHTML = staff.map((s,i)=>`<option value="${i}">${s.name}</option>`).join('');
+aTime.innerHTML = [...Array(SLOTS).keys()]
+.map(i=>`<option value="${i}">${timeLabel(i)}</option>`).join('');
+}
+
+window.saveAppointment = async ()=>{
 const data={
 date:calendarDate.value,
 staffId:staff[aStaff.value].id,
@@ -196,11 +206,14 @@ client:aClient.value
 
 const conflict = appointments.some(a=>{
 if(a.id===editId) return false;
-if(a.date!==data.date||a.staffId!==data.staffId) return false;
-return Math.max(a.start,data.start)<Math.min(a.start+a.duration,data.start+data.duration);
+if(a.date!==data.date || a.staffId!==data.staffId) return false;
+return Math.max(a.start,data.start) < Math.min(a.start+a.duration,data.start+data.duration);
 });
 
-if(conflict){ conflictModal.classList.remove('hidden'); return; }
+if(conflict){
+conflictModal.classList.remove('hidden');
+return;
+}
 
 if(editId){
 await updateDoc(doc(db,"appointments",editId), data);
@@ -211,18 +224,20 @@ await addDoc(collection(db,"appointments"), data);
 closeAppointment();
 };
 
-window.askDelete=()=>deleteModal.classList.remove('hidden');
-window.closeDelete=()=>deleteModal.classList.add('hidden');
+window.confirmDelete = ()=>{
+if(editId) deleteModal.classList.remove('hidden');
+};
 
-window.deleteAppointment=async()=>{
+window.deleteAppointment = async ()=>{
 await deleteDoc(doc(db,"appointments",editId));
-editId=null;
+editId = null;
 closeDelete();
 closeAppointment();
 };
 
-window.closeAppointment=()=>appointmentModal.classList.add('hidden');
-window.closeConflict=()=>conflictModal.classList.add('hidden');
+window.closeAppointment = ()=>appointmentModal.classList.add('hidden');
+window.closeDelete = ()=>deleteModal.classList.add('hidden');
+window.closeConflict = ()=>conflictModal.classList.add('hidden');
 
 renderCalendar();
 </script>
