@@ -23,10 +23,17 @@ display:flex; align-items:center; justify-content:center;
 }
 .hidden { display:none; }
 .modal-content {
-background:#fff; padding:15px; border-radius:10px; width:320px;
+background:#fff; padding:15px; border-radius:10px; width:340px;
 }
 .modal-content label { display:block; margin-top:8px; font-size:12px; }
-.modal-content input, select { width:100%; }
+.modal-content input, select, textarea { width:100%; }
+textarea { resize:none; }
+
+.staff-row {
+display:flex; gap:5px; align-items:center; margin-bottom:6px;
+}
+.staff-row input[type="color"] { width:40px; padding:0; }
+.staff-row button { font-size:12px; }
 </style>
 </head>
 
@@ -35,6 +42,7 @@ background:#fff; padding:15px; border-radius:10px; width:320px;
 <header>
 <input type="date" id="calendarDate">
 <button onclick="openAdd()">Add appointment</button>
+<button onclick="openStaff()">Staff</button>
 </header>
 
 <table id="calendar"></table>
@@ -65,6 +73,9 @@ background:#fff; padding:15px; border-radius:10px; width:320px;
 <label>Client</label>
 <input id="aClient">
 
+<label>Note</label>
+<textarea id="aNote"></textarea>
+
 <br>
 <button onclick="saveAppointment()">Save</button>
 <button onclick="confirmDelete()">Delete</button>
@@ -72,7 +83,21 @@ background:#fff; padding:15px; border-radius:10px; width:320px;
 </div>
 </div>
 
-<!-- DELETE CONFIRM -->
+<!-- STAFF -->
+<div id="staffModal" class="modal hidden">
+<div class="modal-content">
+<h3>Staff</h3>
+<div id="staffList"></div>
+<hr>
+<input id="newStaffName" placeholder="Name">
+<input type="color" id="newStaffColor" value="#cce5ff">
+<button onclick="addStaff()">Add</button>
+<br><br>
+<button onclick="closeStaff()">Close</button>
+</div>
+</div>
+
+<!-- DELETE -->
 <div id="deleteModal" class="modal hidden">
 <div class="modal-content">
 <p>Delete this appointment?</p>
@@ -125,6 +150,7 @@ return `${h}:${String(m).padStart(2,'0')} ${am}`;
 onSnapshot(collection(db,"staff"), s=>{
 staff = s.docs.map(d=>({id:d.id,...d.data()}));
 renderCalendar();
+renderStaff();
 });
 
 onSnapshot(collection(db,"appointments"), s=>{
@@ -157,9 +183,7 @@ c.innerHTML=''; c.style.background=''; c.onclick=null;
 appointments.filter(a=>a.date===calendarDate.value).forEach(a=>{
 const si = staff.findIndex(s=>s.id===a.staffId);
 for(let i=0;i<a.duration;i++){
-const cell=document.querySelector(
-`.slot[data-slot="${a.start+i}"][data-staff="${si}"]`
-);
+const cell=document.querySelector(`.slot[data-slot="${a.start+i}"][data-staff="${si}"]`);
 if(cell){
 cell.style.background=staff[si].color;
 if(i===0) cell.innerHTML=a.client;
@@ -169,75 +193,105 @@ cell.onclick=()=>openEdit(a.id);
 });
 }
 
-window.openAdd = ()=>{
-editId = null;
+window.openAdd=()=>{
+editId=null;
 appointmentModal.classList.remove('hidden');
-aDate.value = calendarDate.value;
+aDate.value=calendarDate.value;
 fillSelects();
 aClient.value='';
+aNote.value='';
 };
 
-window.openEdit = id=>{
-editId = id;
-const a = appointments.find(x=>x.id===id);
+window.openEdit=id=>{
+const a=appointments.find(x=>x.id===id);
+editId=id;
 appointmentModal.classList.remove('hidden');
 fillSelects();
-aDate.value = a.date;
-aStaff.value = staff.findIndex(s=>s.id===a.staffId);
-aTime.value = a.start;
-aDuration.value = a.duration;
-aClient.value = a.client;
+aDate.value=a.date;
+aStaff.value=staff.findIndex(s=>s.id===a.staffId);
+aTime.value=a.start;
+aDuration.value=a.duration;
+aClient.value=a.client;
+aNote.value=a.note || '';
 };
 
 function fillSelects(){
-aStaff.innerHTML = staff.map((s,i)=>`<option value="${i}">${s.name}</option>`).join('');
-aTime.innerHTML = [...Array(SLOTS).keys()]
-.map(i=>`<option value="${i}">${timeLabel(i)}</option>`).join('');
+aStaff.innerHTML=staff.map((s,i)=>`<option value="${i}">${s.name}</option>`).join('');
+aTime.innerHTML=[...Array(SLOTS).keys()].map(i=>`<option value="${i}">${timeLabel(i)}</option>`).join('');
 }
 
-window.saveAppointment = async ()=>{
+window.saveAppointment=async()=>{
 const data={
 date:calendarDate.value,
 staffId:staff[aStaff.value].id,
 start:+aTime.value,
 duration:+aDuration.value,
-client:aClient.value
+client:aClient.value,
+note:aNote.value
 };
 
-const conflict = appointments.some(a=>{
+const conflict=appointments.some(a=>{
 if(a.id===editId) return false;
-if(a.date!==data.date || a.staffId!==data.staffId) return false;
-return Math.max(a.start,data.start) < Math.min(a.start+a.duration,data.start+data.duration);
+if(a.date!==data.date||a.staffId!==data.staffId) return false;
+return Math.max(a.start,data.start)<Math.min(a.start+a.duration,data.start+data.duration);
 });
 
-if(conflict){
-conflictModal.classList.remove('hidden');
-return;
-}
+if(conflict){ conflictModal.classList.remove('hidden'); return; }
 
-if(editId){
-await updateDoc(doc(db,"appointments",editId), data);
-} else {
-await addDoc(collection(db,"appointments"), data);
-}
+editId
+? await updateDoc(doc(db,"appointments",editId),data)
+: await addDoc(collection(db,"appointments"),data);
 
 closeAppointment();
 };
 
-window.confirmDelete = ()=>{
-if(editId) deleteModal.classList.remove('hidden');
-};
-
-window.deleteAppointment = async ()=>{
+window.confirmDelete=()=>{ if(editId) deleteModal.classList.remove('hidden'); };
+window.deleteAppointment=async()=>{
 await deleteDoc(doc(db,"appointments",editId));
-editId = null;
+editId=null;
 closeDelete();
 closeAppointment();
 };
 
-window.closeAppointment = ()=>appointmentModal.classList.add('hidden');
-window.closeDelete = ()=>deleteModal.classList.add('hidden');
-window.closeConflict = ()=>conflictModal.classList.add('hidden');
+window.openStaff=()=>staffModal.classList.remove('hidden');
+window.closeStaff=()=>staffModal.classList.add('hidden');
+
+function renderStaff(){
+staffList.innerHTML='';
+staff.forEach((s,i)=>{
+staffList.innerHTML+=`
+<div class="staff-row">
+<span>${s.name}</span>
+<input type="color" value="${s.color}" onchange="updateStaffColor('${s.id}',this.value)">
+<button onclick="moveStaff(${i},-1)">↑</button>
+<button onclick="moveStaff(${i},1)">↓</button>
+<button onclick="removeStaff('${s.id}')">✕</button>
+</div>`;
+});
+}
+
+window.addStaff=async()=>{
+if(!newStaffName.value) return;
+await addDoc(collection(db,"staff"),{
+name:newStaffName.value,
+color:newStaffColor.value
+});
+newStaffName.value='';
+};
+
+window.removeStaff=id=>deleteDoc(doc(db,"staff",id));
+window.updateStaffColor=(id,color)=>updateDoc(doc(db,"staff",id),{color});
+
+window.moveStaff=(i,d)=>{
+const n=i+d;
+if(n<0||n>=staff.length) return;
+[staff[i],staff[n]]=[staff[n],staff[i]];
+renderCalendar();
+};
+
+window.closeAppointment=()=>appointmentModal.classList.add('hidden');
+window.closeDelete=()=>deleteModal.classList.add('hidden');
+window.closeConflict=()=>conflictModal.classList.add('hidden');
 
 renderCalendar();
 </script>
