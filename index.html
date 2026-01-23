@@ -2,12 +2,11 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Salon Schedule</title>
+<title>Salon Calendar</title>
 
 <style>
 body {
 font-family: Arial, sans-serif;
-margin: 0;
 padding: 10px;
 }
 
@@ -15,11 +14,7 @@ header {
 display: flex;
 gap: 10px;
 margin-bottom: 10px;
-}
-
-button {
-padding: 8px 12px;
-cursor: pointer;
+align-items: center;
 }
 
 table {
@@ -31,7 +26,7 @@ th, td {
 border: 1px solid #ccc;
 text-align: center;
 font-size: 12px;
-padding: 4px;
+height: 28px;
 }
 
 th {
@@ -41,15 +36,18 @@ top: 0;
 }
 
 .time {
-width: 70px;
+width: 80px;
 background: #fafafa;
 font-weight: bold;
 }
 
 .appointment {
-color: #000;
 font-size: 11px;
-padding: 4px;
+color: #000;
+}
+
+button {
+padding: 6px 10px;
 }
 
 .modal {
@@ -57,26 +55,14 @@ display: none;
 position: fixed;
 inset: 0;
 background: rgba(0,0,0,0.4);
-align-items: center;
 justify-content: center;
+align-items: center;
 }
 
 .modal-content {
 background: #fff;
 padding: 15px;
 width: 300px;
-max-height: 90vh;
-overflow-y: auto;
-}
-
-.staff-row {
-display: flex;
-gap: 5px;
-margin-bottom: 5px;
-}
-
-.staff-row input {
-flex: 1;
 }
 </style>
 </head>
@@ -84,13 +70,14 @@ flex: 1;
 <body>
 
 <header>
+<input type="date" id="currentDate">
 <button onclick="openAppointment()">Add appointment</button>
 <button onclick="openStaff()">Staff</button>
 </header>
 
 <table id="calendar">
 <thead>
-<tr>
+<tr id="headerRow">
 <th>Time</th>
 </tr>
 </thead>
@@ -102,9 +89,6 @@ flex: 1;
 <div class="modal-content">
 <h3>Add appointment</h3>
 
-<label>Date</label>
-<input type="date" id="appDate"><br><br>
-
 <label>Start time</label>
 <select id="appTime"></select><br><br>
 
@@ -113,24 +97,24 @@ flex: 1;
 
 <label>Duration</label>
 <select id="appDuration">
-<option value="15">15 min</option>
-<option value="30">30 min</option>
-<option value="45">45 min</option>
-<option value="60">1:00</option>
-<option value="75">1:15</option>
-<option value="90">1:30</option>
-<option value="105">1:45</option>
-<option value="120">2:00</option>
-<option value="150">2:30</option>
-<option value="180">3:00</option>
-<option value="195">3:15</option>
+<option value="15">00:15</option>
+<option value="30">00:30</option>
+<option value="45">00:45</option>
+<option value="60">01:00</option>
+<option value="75">01:15</option>
+<option value="90">01:30</option>
+<option value="105">01:45</option>
+<option value="120">02:00</option>
+<option value="150">02:30</option>
+<option value="180">03:00</option>
+<option value="210">03:30</option>
 </select><br><br>
 
 <label>Client</label>
-<input type="text" id="appClient"><br><br>
+<input id="appClient"><br><br>
 
 <label>Note</label>
-<input type="text" id="appNote"><br><br>
+<input id="appNote"><br><br>
 
 <button onclick="saveAppointment()">Save</button>
 <button onclick="closeModals()">Cancel</button>
@@ -142,13 +126,9 @@ flex: 1;
 <div class="modal-content">
 <h3>Staff</h3>
 <div id="staffList"></div>
-
-<hr>
-
 <input id="newStaffName" placeholder="Name">
-<input type="color" id="newStaffColor" value="#E6F0FF">
-<button onclick="addStaff()">Add staff</button>
-
+<input type="color" id="newStaffColor">
+<button onclick="addStaff()">Add</button>
 <br><br>
 <button onclick="closeModals()">Close</button>
 </div>
@@ -158,39 +138,31 @@ flex: 1;
 const TIMES = [];
 for (let h = 8; h < 20; h++) {
 for (let m = 0; m < 60; m += 15) {
-TIMES.push(formatTime(h, m));
+TIMES.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
 }
 }
-TIMES.push("08:00 PM");
 
 let staff = JSON.parse(localStorage.getItem("staff")) || [
-{id:1,name:"Anna",color:"#FFE4CC"},
-{id:2,name:"Maria",color:"#E6F0FF"}
+{id:1,name:"Anna",color:"#FFE4CC"}
 ];
 
 let appointments = JSON.parse(localStorage.getItem("appointments")) || [];
 
-function formatTime(h,m){
-const ampm = h >= 12 ? "PM" : "AM";
-const hh = h % 12 || 12;
-return `${String(hh).padStart(2,"0")}:${String(m).padStart(2,"0")} ${ampm}`;
-}
+currentDate.valueAsDate = new Date();
 
 function buildCalendar(){
-const head = document.querySelector("#calendar thead tr");
-head.innerHTML = "<th>Time</th>";
+headerRow.innerHTML = "<th>Time</th>";
 staff.forEach(s=>{
-const th=document.createElement("th");
-th.textContent=s.name;
-head.appendChild(th);
+headerRow.innerHTML += `<th>${s.name}</th>`;
 });
 
-const body=document.querySelector("#calendar tbody");
-body.innerHTML="";
-TIMES.forEach(time=>{
-const tr=document.createElement("tr");
-tr.innerHTML=`<td class="time">${time}</td>`;
-staff.forEach(()=>tr.innerHTML+="<td></td>");
+const body = document.querySelector("tbody");
+body.innerHTML = "";
+
+TIMES.forEach(t=>{
+const tr = document.createElement("tr");
+tr.innerHTML = `<td class="time">${t}</td>`;
+staff.forEach(()=> tr.innerHTML += "<td></td>");
 body.appendChild(tr);
 });
 
@@ -198,14 +170,9 @@ renderAppointments();
 }
 
 function openAppointment(){
-document.getElementById("appointmentModal").style.display="flex";
-document.getElementById("appTime").innerHTML=TIMES.map(t=>`<option>${t}</option>`).join("");
-document.getElementById("appStaff").innerHTML=staff.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
-}
-
-function openStaff(){
-document.getElementById("staffModal").style.display="flex";
-renderStaff();
+appointmentModal.style.display="flex";
+appTime.innerHTML = TIMES.map(t=>`<option>${t}</option>`).join("");
+appStaff.innerHTML = staff.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
 }
 
 function closeModals(){
@@ -213,24 +180,27 @@ document.querySelectorAll(".modal").forEach(m=>m.style.display="none");
 }
 
 function saveAppointment(){
-const data={
-date:appDate.value,
-time:appTime.value,
-staff:+appStaff.value,
-duration:+appDuration.value,
-client:appClient.value,
-note:appNote.value
+const data = {
+date: currentDate.value,
+time: appTime.value,
+staff: +appStaff.value,
+duration: +appDuration.value,
+client: appClient.value,
+note: appNote.value
 };
 
-const conflict = appointments.find(a =>
+const startIndex = TIMES.indexOf(data.time);
+const blocks = data.duration / 15;
+
+for (let i=0;i<blocks;i++){
+if (appointments.find(a =>
 a.date===data.date &&
 a.staff===data.staff &&
-overlap(a,data)
-);
-
-if(conflict){
-alert("Conflict: time overlap");
+TIMES.indexOf(a.time) === startIndex+i
+)) {
+alert("Time conflict");
 return;
+}
 }
 
 appointments.push(data);
@@ -239,37 +209,38 @@ closeModals();
 renderAppointments();
 }
 
-function overlap(a,b){
-const t=x=>parseInt(x.time.split(":")[0])*60+parseInt(x.time.split(":")[1]);
-return t(b)<t(a)+a.duration && t(a)<t(b)+b.duration;
+function renderAppointments(){
+document.querySelectorAll(".appointment").forEach(e=>e.remove());
+
+appointments
+.filter(a=>a.date===currentDate.value)
+.forEach(a=>{
+const col = staff.findIndex(s=>s.id===a.staff)+1;
+const start = TIMES.indexOf(a.time);
+const blocks = a.duration / 15;
+
+for (let i=0;i<blocks;i++){
+const cell = document.querySelector("tbody").rows[start+i].cells[col];
+cell.className = "appointment";
+cell.style.background = staff.find(s=>s.id===a.staff).color;
+cell.innerHTML = i===0 ? `<b>${a.client}</b>` : "";
+}
+});
 }
 
-function renderAppointments(){
-document.querySelectorAll(".appointment").forEach(a=>a.remove());
-appointments.forEach(a=>{
-const col=staff.findIndex(s=>s.id===a.staff)+1;
-const row=TIMES.indexOf(a.time);
-if(row<0||col<1)return;
-const cell=document.querySelector("#calendar tbody").rows[row].cells[col];
-const div=document.createElement("div");
-div.className="appointment";
-div.style.background=staff.find(s=>s.id===a.staff).color;
-div.style.height=(a.duration/15*28)+"px";
-div.innerHTML=`<b>${a.client}</b><br>${a.note||""}`;
-cell.appendChild(div);
-});
+function openStaff(){
+staffModal.style.display="flex";
+renderStaff();
 }
 
 function renderStaff(){
 staffList.innerHTML="";
 staff.forEach(s=>{
-const row=document.createElement("div");
-row.className="staff-row";
-row.innerHTML=`
+staffList.innerHTML += `
+<div>
 <input value="${s.name}" onchange="s.name=this.value;saveStaff()">
 <input type="color" value="${s.color}" onchange="s.color=this.value;saveStaff()">
-<button onclick="removeStaff(${s.id})">✕</button>`;
-staffList.appendChild(row);
+</div>`;
 });
 }
 
@@ -278,17 +249,12 @@ staff.push({id:Date.now(),name:newStaffName.value,color:newStaffColor.value});
 saveStaff();
 }
 
-function removeStaff(id){
-staff=staff.filter(s=>s.id!==id);
-saveStaff();
-}
-
 function saveStaff(){
 localStorage.setItem("staff",JSON.stringify(staff));
 buildCalendar();
-renderStaff();
 }
 
+currentDate.onchange = renderAppointments;
 buildCalendar();
 </script>
 
