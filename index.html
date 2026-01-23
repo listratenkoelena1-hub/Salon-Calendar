@@ -3,103 +3,188 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Календарь салона</title>
+<title>Salon Calendar</title>
 
 <style>
-body {
-font-family: Arial, sans-serif;
-margin: 10px;
+body { font-family: Arial, sans-serif; margin: 10px; }
+h3 { margin: 5px 0; }
+button { padding: 8px 12px; font-size: 14px; }
+
+table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+th, td { border: 1px solid #ccc; padding: 6px; text-align: center; font-size: 13px; }
+th { background: #f2f2f2; position: sticky; top: 0; }
+.time { background: #fafafa; font-weight: bold; position: sticky; left: 0; }
+
+.appointment {
+background: #b3d9ff;
+font-size: 12px;
 }
 
-h3 {
-margin-bottom: 10px;
+/* modal */
+.modal {
+display: none;
+position: fixed;
+inset: 0;
+background: rgba(0,0,0,0.4);
 }
-
-table {
-border-collapse: collapse;
-width: 100%;
+.modal-content {
+background: #fff;
+padding: 15px;
+max-width: 320px;
+margin: 10% auto;
 }
-
-th, td {
-border: 1px solid #ccc;
-padding: 6px;
-text-align: center;
-font-size: 13px;
-}
-
-th {
-background: #f2f2f2;
-position: sticky;
-top: 0;
-z-index: 2;
-}
-
-.time {
-background: #fafafa;
-font-weight: bold;
-position: sticky;
-left: 0;
-z-index: 1;
+.modal-content label {
+display: block;
+margin-top: 8px;
 }
 </style>
 </head>
 
 <body>
 
-<h3>Календарь записей</h3>
+<h3>Salon Calendar</h3>
 
 <label>
-Дата:
-<input type="date">
+Date:
+<input type="date" id="selectedDate">
 </label>
 
-<br><br>
+<button onclick="openForm()">➕ Add appointment</button>
 
 <table>
 <thead>
 <tr>
 <th>Time</th>
-<th>Master 1</th>
-<th>Master 2</th>
-<th>Master 3</th>
-<th>Master 4</th>
-<th>Master 5</th>
-<th>Master 6</th>
-<th>Master 7</th>
-<th>Master 8</th>
-<th>Master 9</th>
-<th>Anyone</th>
+<th>Master 1</th><th>Master 2</th><th>Master 3</th><th>Master 4</th>
+<th>Master 5</th><th>Master 6</th><th>Master 7</th><th>Master 8</th>
+<th>Master 9</th><th>Anyone</th>
 </tr>
 </thead>
-
 <tbody id="calendarBody"></tbody>
 </table>
 
+<!-- Modal -->
+<div class="modal" id="modal">
+<div class="modal-content">
+<h4>New appointment</h4>
+
+<label>Date
+<input type="date" id="formDate">
+</label>
+
+<label>Time
+<select id="formTime"></select>
+</label>
+
+<label>Master
+<select id="formMaster">
+<option value="0">Master 1</option><option value="1">Master 2</option>
+<option value="2">Master 3</option><option value="3">Master 4</option>
+<option value="4">Master 5</option><option value="5">Master 6</option>
+<option value="6">Master 7</option><option value="7">Master 8</option>
+<option value="8">Master 9</option><option value="9">Anyone</option>
+</select>
+</label>
+
+<label>Client
+<input type="text" id="formClient">
+</label>
+
+<label>Note
+<input type="text" id="formNote">
+</label>
+
+<br>
+<button onclick="saveAppointment()">Save</button>
+<button onclick="closeForm()">Cancel</button>
+</div>
+</div>
+
 <script>
-const tbody = document.getElementById('calendarBody');
+const body = document.getElementById('calendarBody');
+const times = [];
+const appointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+
+function buildCalendar() {
+body.innerHTML = '';
+times.length = 0;
 
 for (let h = 8; h <= 20; h++) {
 for (let m = 0; m < 60; m += 15) {
-
 let hour12 = h % 12 === 0 ? 12 : h % 12;
 let ampm = h < 12 ? 'AM' : 'PM';
-let timeLabel = hour12 + ':' + String(m).padStart(2, '0') + ' ' + ampm;
+let label = hour12 + ':' + String(m).padStart(2,'0') + ' ' + ampm;
+let key = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+times.push({label, key});
 
 const tr = document.createElement('tr');
+tr.dataset.time = key;
 
-const timeCell = document.createElement('td');
-timeCell.className = 'time';
-timeCell.textContent = timeLabel;
-tr.appendChild(timeCell);
+const tdTime = document.createElement('td');
+tdTime.className = 'time';
+tdTime.textContent = label;
+tr.appendChild(tdTime);
 
-for (let i = 0; i < 10; i++) {
+for (let i=0;i<10;i++) {
 const td = document.createElement('td');
+td.dataset.master = i;
 tr.appendChild(td);
 }
+body.appendChild(tr);
+}
+}
+}
 
-tbody.appendChild(tr);
+function fillTimeOptions() {
+const sel = document.getElementById('formTime');
+sel.innerHTML = '';
+times.forEach(t=>{
+const o=document.createElement('option');
+o.value=t.key;
+o.textContent=t.label;
+sel.appendChild(o);
+});
 }
+
+function openForm() {
+document.getElementById('modal').style.display='block';
 }
+
+function closeForm() {
+document.getElementById('modal').style.display='none';
+}
+
+function saveAppointment() {
+const appt = {
+date: document.getElementById('formDate').value,
+time: document.getElementById('formTime').value,
+master: document.getElementById('formMaster').value,
+client: document.getElementById('formClient').value,
+note: document.getElementById('formNote').value
+};
+appointments.push(appt);
+localStorage.setItem('appointments', JSON.stringify(appointments));
+closeForm();
+renderAppointments();
+}
+
+function renderAppointments() {
+document.querySelectorAll('.appointment').forEach(e=>e.remove());
+const d = document.getElementById('selectedDate').value;
+appointments.filter(a=>a.date===d).forEach(a=>{
+const row = document.querySelector(`tr[data-time="${a.time}"]`);
+if (!row) return;
+const cell = row.querySelector(`td[data-master="${a.master}"]`);
+if (!cell) return;
+cell.textContent = a.client;
+cell.className = 'appointment';
+});
+}
+
+document.getElementById('selectedDate').addEventListener('change', renderAppointments);
+
+buildCalendar();
+fillTimeOptions();
 </script>
 
 </body>
