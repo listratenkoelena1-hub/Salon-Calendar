@@ -13,7 +13,6 @@ th, td { border: 1px solid #ccc; height: 32px; text-align: center; font-size: 12
 th { background: #f5f5f5; }
 .time { width: 70px; background: #fafafa; }
 .slot { cursor: pointer; }
-
 button { padding: 6px 10px; }
 
 .modal {
@@ -36,6 +35,7 @@ width: 300px;
 .modal-content input,
 .modal-content select,
 .modal-content textarea { width: 100%; }
+
 .staff-item {
 display: flex;
 justify-content: space-between;
@@ -60,7 +60,7 @@ margin: 5px 0;
 <h3>Appointment</h3>
 
 <label>Date</label>
-<input type="date" id="aDate" readonly>
+<input type="date" id="aDate" readonly disabled>
 
 <label>Staff</label>
 <select id="aStaff"></select>
@@ -70,16 +70,16 @@ margin: 5px 0;
 
 <label>Duration</label>
 <select id="aDuration">
-<option value="15">15 min</option>
-<option value="30">30 min</option>
-<option value="45">45 min</option>
-<option value="60">1:00</option>
-<option value="75">1:15</option>
-<option value="90">1:30</option>
-<option value="105">1:45</option>
-<option value="120">2:00</option>
-<option value="150">2:30</option>
-<option value="180">3:00</option>
+<option value="1">15 min</option>
+<option value="2">30 min</option>
+<option value="3">45 min</option>
+<option value="4">1:00</option>
+<option value="5">1:15</option>
+<option value="6">1:30</option>
+<option value="7">1:45</option>
+<option value="8">2:00</option>
+<option value="10">2:30</option>
+<option value="12">3:00</option>
 </select>
 
 <label>Client</label>
@@ -90,6 +90,7 @@ margin: 5px 0;
 
 <br>
 <button onclick="saveAppointment()">Save</button>
+<button onclick="deleteAppointment()">Delete</button>
 <button onclick="closeAppointment()">Cancel</button>
 </div>
 </div>
@@ -117,7 +118,6 @@ margin: 5px 0;
 </div>
 
 <script type="module">
-/* ===== FIREBASE ===== */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
 import {
 getFirestore,
@@ -140,31 +140,28 @@ appId: "1:1000239390265:web:d2ed45be53b233cf40f7e8"
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/* ===== DATA ===== */
 let staff = [];
 let appointments = [];
+let editId = null;
 
-/* ===== DOM ===== */
 const calendar = document.getElementById('calendar');
 const calendarDate = document.getElementById('calendarDate');
 calendarDate.valueAsDate = new Date();
 calendarDate.onchange = renderCalendar;
 
-/* ===== TIME ===== */
-function timeSlots() {
-let slots = [];
-for (let h=8; h<=20; h++) {
-for (let m=0; m<60; m+=15) {
-if (h===20 && m>0) continue;
-let d = new Date();
-d.setHours(h,m,0,0);
-slots.push(d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}));
-}
-}
-return slots;
+function timeLabel(index) {
+const total = 8 * 60 + index * 15;
+let h = Math.floor(total / 60);
+let m = total % 60;
+let ampm = h >= 12 ? 'PM' : 'AM';
+h = h % 12 || 12;
+return `${h}:${String(m).padStart(2,'0')} ${ampm}`;
 }
 
-/* ===== FIRESTORE LISTENERS ===== */
+function slotCount() {
+return 49;
+}
+
 onSnapshot(collection(db,"staff"), snap=>{
 staff = snap.docs.map(d=>({id:d.id,...d.data()}));
 renderCalendar();
@@ -175,7 +172,6 @@ appointments = snap.docs.map(d=>({id:d.id,...d.data()}));
 renderCalendar();
 });
 
-/* ===== CALENDAR ===== */
 function renderCalendar() {
 calendar.innerHTML='';
 let header='<tr><th class="time">Time</th>';
@@ -183,73 +179,97 @@ staff.forEach(s=>header+=`<th>${s.name}</th>`);
 header+='</tr>';
 calendar.innerHTML+=header;
 
-timeSlots().forEach(t=>{
-let row=`<tr><td class="time">${t}</td>`;
-staff.forEach((_,i)=>row+=`<td class="slot" data-time="${t}" data-staff="${i}"></td>`);
+for(let i=0;i<slotCount();i++){
+let row=`<tr><td class="time">${timeLabel(i)}</td>`;
+staff.forEach((_,s)=>row+=`<td class="slot" data-slot="${i}" data-staff="${s}"></td>`);
 row+='</tr>';
 calendar.innerHTML+=row;
-});
+}
 
 drawAppointments();
 }
 
 function drawAppointments(){
-document.querySelectorAll('.slot').forEach(c=>{c.innerHTML='';c.style.background='';});
+document.querySelectorAll('.slot').forEach(c=>{
+c.innerHTML='';
+c.style.background='';
+c.onclick=null;
+});
+
 appointments.filter(a=>a.date===calendarDate.value).forEach(a=>{
-let si = timeSlots().indexOf(a.time);
-let blocks = a.duration/15;
-let staffIndex = staff.findIndex(s=>s.id===a.staffId);
-for(let i=0;i<blocks;i++){
-let cell=document.querySelector(`.slot[data-time="${timeSlots()[si+i]}"][data-staff="${staffIndex}"]`);
+const staffIndex = staff.findIndex(s=>s.id===a.staffId);
+for(let i=0;i<a.duration;i++){
+const cell=document.querySelector(`.slot[data-slot="${a.start+i}"][data-staff="${staffIndex}"]`);
 if(cell){
 cell.style.background=staff[staffIndex].color;
 if(i===0) cell.innerHTML=a.client;
+cell.onclick=()=>openEdit(a.id);
 }
 }
 });
 }
 
-/* ===== ACTIONS ===== */
-window.openAdd = ()=>{
-aDate.value = calendarDate.value;
-aStaff.innerHTML = staff.map((s,i)=>`<option value="${i}">${s.name}</option>`).join('');
-aTime.innerHTML = timeSlots().map(t=>`<option>${t}</option>`).join('');
+window.openAdd=()=>{
+editId=null;
+aDate.value=calendarDate.value;
+aStaff.innerHTML=staff.map((s,i)=>`<option value="${i}">${s.name}</option>`).join('');
+aTime.innerHTML=[...Array(slotCount()).keys()]
+.map(i=>`<option value="${i}">${timeLabel(i)}</option>`).join('');
+aClient.value='';
+aNote.value='';
 appointmentModal.classList.remove('hidden');
 };
 
-window.closeAppointment = ()=>appointmentModal.classList.add('hidden');
+window.openEdit=id=>{
+const a=appointments.find(x=>x.id===id);
+editId=id;
+openAdd();
+aStaff.value=staff.findIndex(s=>s.id===a.staffId);
+aTime.value=a.start;
+aDuration.value=a.duration;
+aClient.value=a.client;
+aNote.value=a.note;
+};
 
-window.saveAppointment = async ()=>{
-let data={
+window.saveAppointment=async()=>{
+const data={
 date:calendarDate.value,
 staffId:staff[aStaff.value].id,
-time:aTime.value,
+start:+aTime.value,
 duration:+aDuration.value,
 client:aClient.value,
 note:aNote.value
 };
 
-let conflict = appointments.some(a=>{
+const conflict=appointments.some(a=>{
+if(a.id===editId) return false;
 if(a.date!==data.date||a.staffId!==data.staffId) return false;
-let s1=timeSlots().indexOf(a.time);
-let e1=s1+a.duration/15;
-let s2=timeSlots().indexOf(data.time);
-let e2=s2+data.duration/15;
-return Math.max(s1,s2)<Math.min(e1,e2);
+return Math.max(a.start,data.start)<Math.min(a.start+a.duration,data.start+data.duration);
 });
 
 if(conflict){ conflictModal.classList.remove('hidden'); return; }
 
+if(editId){
+await deleteDoc(doc(db,"appointments",editId));
+}
 await addDoc(collection(db,"appointments"),data);
 closeAppointment();
 };
 
-window.openStaff=()=>{
-staffModal.classList.remove('hidden');
-staffList.innerHTML=staff.map((s,i)=>`<div class="staff-item">${s.name}<button onclick="removeStaff(${i})">Delete</button></div>`).join('');
+window.deleteAppointment=async()=>{
+if(editId) await deleteDoc(doc(db,"appointments",editId));
+closeAppointment();
 };
 
-window.closeStaff=()=>staffModal.classList.add('hidden');
+window.closeAppointment=()=>appointmentModal.classList.add('hidden');
+window.closeConflict=()=>conflictModal.classList.add('hidden');
+
+window.openStaff=()=>{
+staffModal.classList.remove('hidden');
+staffList.innerHTML=staff.map((s,i)=>
+`<div class="staff-item">${s.name}<button onclick="removeStaff(${i})">Delete</button></div>`
+).join('');
+};
 
 window.addStaff=async()=>{
 if(!newStaffName.value) return;
@@ -261,7 +281,7 @@ window.removeStaff=async i=>{
 await deleteDoc(doc(db,"staff",staff[i].id));
 };
 
-window.closeConflict=()=>conflictModal.classList.add('hidden');
+window.closeStaff=()=>staffModal.classList.add('hidden');
 
 renderCalendar();
 </script>
