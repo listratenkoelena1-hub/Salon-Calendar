@@ -15,9 +15,15 @@ align-items:center;
 justify-content:space-between;
 margin-bottom:15px;
 }
-.header-left { display:flex; align-items:center; gap:10px; }
-.header-right { display:flex; gap:10px; }
-
+.header-left {
+display:flex;
+align-items:center;
+gap:10px;
+}
+.header-right {
+display:flex;
+gap:10px;
+}
 #calendarDate {
 font-size:18px;
 padding:10px 14px;
@@ -29,17 +35,16 @@ border-radius:20px;
 cursor:pointer;
 }
 
-/* TABLE WRAPPER (horizontal scroll on phones) */
-.table-wrap {
+/* CALENDAR SCROLL */
+#calendar-wrapper {
 overflow-x:auto;
--webkit-overflow-scrolling:touch;
 }
 
 /* TABLE */
 table {
 border-collapse:collapse;
+min-width:max-content;
 table-layout:fixed;
-min-width:600px;
 }
 th, td {
 border:1px solid #ccc;
@@ -48,42 +53,47 @@ text-align:center;
 }
 th {
 background:#f5f5f5;
-height:40px;
+height:44px;
 font-weight:600;
 color:#000;
-}
-td { height:26px; } /* ↓ уменьшенная высота */
-.time { width:75px; background:#fafafa; }
-.slot { cursor:pointer; border:none; }
-
-/* фиксированная ширина колонок мастеров */
-th:not(.time), td.slot {
 width:120px;
+max-width:120px;
+white-space:nowrap;
+overflow:hidden;
+text-overflow:ellipsis;
+}
+td {
+height:32px;
+width:120px;
+max-width:120px;
+overflow:hidden;
+}
+.time {
+width:75px !important;
+min-width:75px;
+background:#fafafa;
+}
+.slot {
+cursor:pointer;
 }
 
-/* appointment blocks (outer border only) */
-.appt-start {
-border-top:1px solid #333 !important;
-border-left:1px solid #333 !important;
-border-right:1px solid #333 !important;
-border-radius:6px 6px 0 0;
-}
-.appt-mid {
-border-left:1px solid #333 !important;
-border-right:1px solid #333 !important;
-}
-.appt-end {
-border-bottom:1px solid #333 !important;
-border-left:1px solid #333 !important;
-border-right:1px solid #333 !important;
-border-radius:0 0 6px 6px;
+/* APPOINTMENT BLOCK */
+.slot.busy {
+border:1px solid rgba(0,0,0,0.4);
+border-radius:8px;
+font-weight:600;
+padding:2px 4px;
+box-sizing:border-box;
 }
 
 /* MODALS */
 .modal {
-position:fixed; inset:0;
+position:fixed;
+inset:0;
 background:rgba(0,0,0,.4);
-display:flex; align-items:center; justify-content:center;
+display:flex;
+align-items:center;
+justify-content:center;
 z-index:1000;
 }
 .hidden { display:none; }
@@ -102,7 +112,9 @@ margin-top:8px;
 }
 .modal-content input,
 .modal-content select,
-.modal-content textarea { width:100%; }
+.modal-content textarea {
+width:100%;
+}
 textarea { resize:none; }
 .modal-actions {
 display:flex;
@@ -147,11 +159,10 @@ cursor:pointer;
 </div>
 </header>
 
-<div class="table-wrap">
+<div id="calendar-wrapper">
 <table id="calendar"></table>
 </div>
 
-<!-- APPOINTMENT -->
 <div id="appointmentModal" class="modal hidden">
 <div class="modal-content">
 <h3>Appointment</h3>
@@ -194,7 +205,6 @@ cursor:pointer;
 </div>
 </div>
 
-<!-- SEARCH -->
 <div id="searchModal" class="modal hidden">
 <div class="modal-content">
 <h3>Search client</h3>
@@ -206,7 +216,6 @@ cursor:pointer;
 </div>
 </div>
 
-<!-- STAFF -->
 <div id="staffModal" class="modal hidden">
 <div class="modal-content">
 <h3>Staff</h3>
@@ -221,7 +230,6 @@ cursor:pointer;
 </div>
 </div>
 
-<!-- DELETE -->
 <div id="deleteModal" class="modal hidden">
 <div class="modal-content">
 <p>Delete this appointment?</p>
@@ -232,7 +240,6 @@ cursor:pointer;
 </div>
 </div>
 
-<!-- STAFF DELETE -->
 <div id="staffDeleteModal" class="modal hidden">
 <div class="modal-content">
 <p>Delete staff member and all appointments?</p>
@@ -243,7 +250,6 @@ cursor:pointer;
 </div>
 </div>
 
-<!-- CONFLICT -->
 <div id="conflictModal" class="modal hidden">
 <div class="modal-content">
 <h3>⚠️ TECH BUSY</h3>
@@ -307,38 +313,27 @@ calendar.innerHTML+=h;
 for(let i=0;i<SLOTS;i++){
 let r=`<tr><td class="time">${timeLabel(i)}</td>`;
 staff.forEach((_,s)=>r+=`<td class="slot" data-slot="${i}" data-staff="${s}"></td>`);
-r+='</tr>';
-calendar.innerHTML+=r;
+r+='</tr>'; calendar.innerHTML+=r;
 }
 drawAppointments();
 }
 
 function drawAppointments(){
 document.querySelectorAll('.slot').forEach(c=>{
-c.innerHTML=''; c.style.background=''; c.onclick=null;
-c.classList.remove('appt-start','appt-mid','appt-end');
+c.innerHTML='';
+c.style.background='';
+c.classList.remove('busy');
+c.onclick=null;
 });
-
-appointments
-.filter(a=>a.date===calendarDate.value)
-.forEach(a=>{
+appointments.filter(a=>a.date===calendarDate.value).forEach(a=>{
 const si=staff.findIndex(s=>s.id===a.staffId);
 if(si===-1) return;
-const len=a.duration||1;
-for(let i=0;i<len;i++){
-const cell=document.querySelector(
-`.slot[data-slot="${a.start+i}"][data-staff="${si}"]`
-);
+for(let i=0;i<(a.duration||1);i++){
+const cell=document.querySelector(`.slot[data-slot="${a.start+i}"][data-staff="${si}"]`);
 if(cell){
 cell.style.background=staff[si].color;
-if(i===0) {
-cell.innerHTML=a.client;
-cell.classList.add('appt-start');
-} else if(i===len-1){
-cell.classList.add('appt-end');
-} else {
-cell.classList.add('appt-mid');
-}
+cell.classList.add('busy');
+if(i===0) cell.innerHTML=a.client;
 cell.onclick=()=>openEdit(a.id);
 }
 }
@@ -371,15 +366,14 @@ handleAnyone();
 
 function fillSelects(){
 aStaff.innerHTML=staff.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-aTime.innerHTML=[...Array(SLOTS).keys()]
-.map(i=>`<option value="${i}">${timeLabel(i)}</option>`).join('');
+aTime.innerHTML=[...Array(SLOTS).keys()].map(i=>`<option value="${i}">${timeLabel(i)}</option>`).join('');
 }
 
 window.handleAnyone=()=>{
 if(aStaff.value===ANYONE_ID){
 aDuration.value=1;
 aDuration.disabled=true;
-} else {
+}else{
 aDuration.disabled=false;
 }
 };
@@ -424,17 +418,12 @@ searchModal.classList.remove('hidden');
 window.runSearch=()=>{
 const q=searchInput.value.toLowerCase();
 searchResults.innerHTML='';
-appointments
-.filter(a=>a.client && a.client.toLowerCase().includes(q))
+appointments.filter(a=>a.client && a.client.toLowerCase().includes(q))
 .sort((a,b)=>a.date<b.date?1:-1)
 .forEach(a=>{
 const s=staff.find(x=>x.id===a.staffId);
 if(!s) return;
-searchResults.innerHTML+=`
-<div class="search-item" onclick="openFromSearch('${a.id}')">
-<b>${a.client}</b><br>
-${a.date} ${timeLabel(a.start)} — ${s.name}
-</div>`;
+searchResults.innerHTML+=`<div class="search-item" onclick="openFromSearch('${a.id}')"><b>${a.client}</b><br>${a.date} ${timeLabel(a.start)} — ${s.name}</div>`;
 });
 };
 
@@ -453,16 +442,7 @@ window.closeStaff=()=>staffModal.classList.add('hidden');
 function renderStaff(){
 staffList.innerHTML='';
 staff.filter(s=>s.id!==ANYONE_ID).forEach((s,i)=>{
-staffList.innerHTML+=`
-<div class="staff-card">
-<span class="staff-name">${s.name}</span>
-<input type="color" value="${s.color}" onchange="updateStaffColor('${s.id}',this.value)">
-<div class="staff-actions">
-<button onclick="moveStaff(${i},-1)">↑</button>
-<button onclick="moveStaff(${i},1)">↓</button>
-<button onclick="askStaffDelete('${s.id}')">✕</button>
-</div>
-</div>`;
+staffList.innerHTML+=`<div class="staff-card"><span class="staff-name">${s.name}</span><input type="color" value="${s.color}" onchange="updateStaffColor('${s.id}',this.value)"><div class="staff-actions"><button onclick="moveStaff(${i},-1)">↑</button><button onclick="moveStaff(${i},1)">↓</button><button onclick="askStaffDelete('${s.id}')">✕</button></div></div>`;
 });
 }
 
