@@ -36,38 +36,87 @@ cursor:pointer;
 }
 
 /* CALENDAR SCROLL */
-.calendar-scroll {
-width:100%;
+#calendar {
+display:block;
 overflow-x:auto;
--webkit-overflow-scrolling: touch;
+white-space:nowrap;
 }
 
 /* TABLE */
 table {
 border-collapse:collapse;
+min-width:max-content;
 table-layout:fixed;
-min-width:900px;
 }
-th, td { border:1px solid #ccc; font-size:12px; text-align:center; }
-th { background:#f5f5f5; height:44px; font-weight:600; color:#000; }
-td { height:32px; }
-.time { width:75px; background:#fafafa; }
-.slot { cursor:pointer; }
+th, td {
+border:1px solid #ccc;
+font-size:12px;
+text-align:center;
+}
+th {
+background:#f5f5f5;
+height:44px;
+font-weight:600;
+color:#000;
+width:130px;
+max-width:130px;
+white-space:nowrap;
+overflow:hidden;
+text-overflow:ellipsis;
+}
+td {
+height:32px;
+width:130px;
+max-width:130px;
+overflow:hidden;
+}
+.time {
+width:75px !important;
+min-width:75px;
+background:#fafafa;
+}
+.slot {
+cursor:pointer;
+}
+
+/* APPOINTMENT BLOCK */
+.slot:not(:empty) {
+border:1px solid rgba(0,0,0,0.35);
+border-radius:8px;
+font-weight:600;
+padding:2px 4px;
+box-sizing:border-box;
+}
 
 /* MODALS */
 .modal {
-position:fixed; inset:0;
+position:fixed;
+inset:0;
 background:rgba(0,0,0,.4);
-display:flex; align-items:center; justify-content:center;
+display:flex;
+align-items:center;
+justify-content:center;
 z-index:1000;
 }
 .hidden { display:none; }
 .modal-content {
-background:#fff; padding:15px; border-radius:12px;
-width:380px; max-height:90vh; overflow:auto;
+background:#fff;
+padding:15px;
+border-radius:12px;
+width:380px;
+max-height:90vh;
+overflow:auto;
 }
-.modal-content label { font-size:12px; display:block; margin-top:8px; }
-.modal-content input, select, textarea { width:100%; }
+.modal-content label {
+font-size:12px;
+display:block;
+margin-top:8px;
+}
+.modal-content input,
+.modal-content select,
+.modal-content textarea {
+width:100%;
+}
 textarea { resize:none; }
 .modal-actions {
 display:flex;
@@ -112,7 +161,7 @@ cursor:pointer;
 </div>
 </header>
 
-<div class="calendar-scroll">
+<div id="calendar-wrapper">
 <table id="calendar"></table>
 </div>
 
@@ -266,8 +315,7 @@ calendar.innerHTML+=h;
 for(let i=0;i<SLOTS;i++){
 let r=`<tr><td class="time">${timeLabel(i)}</td>`;
 staff.forEach((_,s)=>r+=`<td class="slot" data-slot="${i}" data-staff="${s}"></td>`);
-r+='</tr>';
-calendar.innerHTML+=r;
+r+='</tr>'; calendar.innerHTML+=r;
 }
 drawAppointments();
 }
@@ -276,9 +324,7 @@ function drawAppointments(){
 document.querySelectorAll('.slot').forEach(c=>{
 c.innerHTML=''; c.style.background=''; c.onclick=null;
 });
-appointments
-.filter(a=>a.date===calendarDate.value)
-.forEach(a=>{
+appointments.filter(a=>a.date===calendarDate.value).forEach(a=>{
 const si=staff.findIndex(s=>s.id===a.staffId);
 if(si===-1) return;
 for(let i=0;i<(a.duration||1);i++){
@@ -325,7 +371,7 @@ window.handleAnyone=()=>{
 if(aStaff.value===ANYONE_ID){
 aDuration.value=1;
 aDuration.disabled=true;
-} else {
+}else{
 aDuration.disabled=false;
 }
 };
@@ -370,17 +416,12 @@ searchModal.classList.remove('hidden');
 window.runSearch=()=>{
 const q=searchInput.value.toLowerCase();
 searchResults.innerHTML='';
-appointments
-.filter(a=>a.client && a.client.toLowerCase().includes(q))
+appointments.filter(a=>a.client && a.client.toLowerCase().includes(q))
 .sort((a,b)=>a.date<b.date?1:-1)
 .forEach(a=>{
 const s=staff.find(x=>x.id===a.staffId);
 if(!s) return;
-searchResults.innerHTML+=`
-<div class="search-item" onclick="openFromSearch('${a.id}')">
-<b>${a.client}</b><br>
-${a.date} ${timeLabel(a.start)} — ${s.name}
-</div>`;
+searchResults.innerHTML+=`<div class="search-item" onclick="openFromSearch('${a.id}')"><b>${a.client}</b><br>${a.date} ${timeLabel(a.start)} — ${s.name}</div>`;
 });
 };
 
@@ -399,16 +440,7 @@ window.closeStaff=()=>staffModal.classList.add('hidden');
 function renderStaff(){
 staffList.innerHTML='';
 staff.filter(s=>s.id!==ANYONE_ID).forEach((s,i)=>{
-staffList.innerHTML+=`
-<div class="staff-card">
-<span class="staff-name">${s.name}</span>
-<input type="color" value="${s.color}" onchange="updateStaffColor('${s.id}',this.value)">
-<div class="staff-actions">
-<button onclick="moveStaff(${i},-1)">↑</button>
-<button onclick="moveStaff(${i},1)">↓</button>
-<button onclick="askStaffDelete('${s.id}')">✕</button>
-</div>
-</div>`;
+staffList.innerHTML+=`<div class="staff-card"><span class="staff-name">${s.name}</span><input type="color" value="${s.color}" onchange="updateStaffColor('${s.id}',this.value)"><div class="staff-actions"><button onclick="moveStaff(${i},-1)">↑</button><button onclick="moveStaff(${i},1)">↓</button><button onclick="askStaffDelete('${s.id}')">✕</button></div></div>`;
 });
 }
 
