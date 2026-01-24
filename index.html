@@ -35,8 +35,19 @@ border-radius:20px;
 cursor:pointer;
 }
 
+/* CALENDAR SCROLL */
+.calendar-scroll {
+width:100%;
+overflow-x:auto;
+-webkit-overflow-scrolling: touch;
+}
+
 /* TABLE */
-table { border-collapse:collapse; width:100%; table-layout:fixed; }
+table {
+border-collapse:collapse;
+table-layout:fixed;
+min-width:900px;
+}
 th, td { border:1px solid #ccc; font-size:12px; text-align:center; }
 th { background:#f5f5f5; height:44px; font-weight:600; color:#000; }
 td { height:32px; }
@@ -101,9 +112,10 @@ cursor:pointer;
 </div>
 </header>
 
+<div class="calendar-scroll">
 <table id="calendar"></table>
+</div>
 
-<!-- APPOINTMENT -->
 <div id="appointmentModal" class="modal hidden">
 <div class="modal-content">
 <h3>Appointment</h3>
@@ -146,7 +158,6 @@ cursor:pointer;
 </div>
 </div>
 
-<!-- SEARCH -->
 <div id="searchModal" class="modal hidden">
 <div class="modal-content">
 <h3>Search client</h3>
@@ -158,7 +169,6 @@ cursor:pointer;
 </div>
 </div>
 
-<!-- STAFF -->
 <div id="staffModal" class="modal hidden">
 <div class="modal-content">
 <h3>Staff</h3>
@@ -173,7 +183,6 @@ cursor:pointer;
 </div>
 </div>
 
-<!-- DELETE -->
 <div id="deleteModal" class="modal hidden">
 <div class="modal-content">
 <p>Delete this appointment?</p>
@@ -184,7 +193,6 @@ cursor:pointer;
 </div>
 </div>
 
-<!-- STAFF DELETE -->
 <div id="staffDeleteModal" class="modal hidden">
 <div class="modal-content">
 <p>Delete staff member and all appointments?</p>
@@ -195,7 +203,6 @@ cursor:pointer;
 </div>
 </div>
 
-<!-- CONFLICT -->
 <div id="conflictModal" class="modal hidden">
 <div class="modal-content">
 <h3>⚠️ TECH BUSY</h3>
@@ -259,7 +266,8 @@ calendar.innerHTML+=h;
 for(let i=0;i<SLOTS;i++){
 let r=`<tr><td class="time">${timeLabel(i)}</td>`;
 staff.forEach((_,s)=>r+=`<td class="slot" data-slot="${i}" data-staff="${s}"></td>`);
-r+='</tr>'; calendar.innerHTML+=r;
+r+='</tr>';
+calendar.innerHTML+=r;
 }
 drawAppointments();
 }
@@ -310,8 +318,7 @@ handleAnyone();
 
 function fillSelects(){
 aStaff.innerHTML=staff.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-aTime.innerHTML=[...Array(SLOTS).keys()]
-.map(i=>`<option value="${i}">${timeLabel(i)}</option>`).join('');
+aTime.innerHTML=[...Array(SLOTS).keys()].map(i=>`<option value="${i}">${timeLabel(i)}</option>`).join('');
 }
 
 window.handleAnyone=()=>{
