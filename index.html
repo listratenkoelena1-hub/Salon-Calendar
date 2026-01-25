@@ -8,7 +8,6 @@
 <style>
 body { font-family: Arial, sans-serif; margin: 10px; }
 
-/* HEADER */
 header {
 display:flex;
 align-items:center;
@@ -35,12 +34,8 @@ border-radius:20px;
 cursor:pointer;
 }
 
-/* CALENDAR SCROLL */
-#calendar-wrapper {
-overflow-x:auto;
-}
+#calendar-wrapper { overflow-x:auto; }
 
-/* TABLE */
 table {
 border-collapse:collapse;
 min-width:max-content;
@@ -74,20 +69,10 @@ min-width:75px;
 background:#fafafa;
 }
 
-/* APPOINTMENT BLOCK */
-.slot {
-cursor:pointer;
-}
-.slot.busy {
-border-radius:8px;
-box-sizing:border-box;
-}
-.slot.busy.start {
-border:1px solid rgba(0,0,0,0.4);
-font-weight:600;
-}
+.slot { cursor:pointer; }
+.slot.busy { border-radius:8px; box-sizing:border-box; }
+.slot.busy.start { border:1px solid rgba(0,0,0,0.4); font-weight:600; }
 
-/* DAY OFF */
 .dayoff {
 background:#eee !important;
 color:#555;
@@ -98,7 +83,6 @@ font-size:11px;
 font-weight:600;
 }
 
-/* MODALS */
 .modal {
 position:fixed;
 inset:0;
@@ -135,7 +119,6 @@ gap:8px;
 margin-top:12px;
 }
 
-/* STAFF */
 .staff-card {
 display:flex;
 align-items:center;
@@ -148,7 +131,6 @@ margin-bottom:8px;
 .staff-name { flex:1; font-weight:600; }
 .staff-actions { display:flex; gap:4px; }
 
-/* SEARCH */
 .search-item {
 border-bottom:1px solid #ddd;
 padding:6px;
@@ -184,7 +166,7 @@ cursor:pointer;
 <input id="aDate" type="date" readonly disabled>
 
 <label>Staff</label>
-<select id="aStaff" onchange="handleAnyone()"></select>
+<select id="aStaff"></select>
 
 <label>Start time</label>
 <select id="aTime"></select>
@@ -212,7 +194,6 @@ cursor:pointer;
 
 <div class="modal-actions">
 <button onclick="saveAppointment()">Save</button>
-<button onclick="confirmDelete()">Delete</button>
 <button onclick="closeAppointment()">Close</button>
 </div>
 </div>
@@ -226,11 +207,22 @@ cursor:pointer;
 <input id="dDate" type="date" readonly disabled>
 
 <label>Staff</label>
-<select id="dStaff"></select>
+<select id="dStaff" onchange="updateRemoveButton()"></select>
 
 <div class="modal-actions">
 <button onclick="saveDayOff()">Save</button>
+<button id="removeDayOffBtn" onclick="askRemoveDayOff()" disabled>Remove day off</button>
 <button onclick="closeDayOff()">Close</button>
+</div>
+</div>
+</div>
+
+<div id="confirmRemoveDayOff" class="modal hidden">
+<div class="modal-content">
+<p>Remove day off for this staff?</p>
+<div class="modal-actions">
+<button onclick="removeDayOff()">Yes</button>
+<button onclick="closeConfirmRemove()">Cancel</button>
 </div>
 </div>
 </div>
@@ -260,16 +252,6 @@ cursor:pointer;
 </div>
 </div>
 
-<div id="deleteModal" class="modal hidden">
-<div class="modal-content">
-<p>Delete this appointment?</p>
-<div class="modal-actions">
-<button onclick="deleteAppointment()">Yes</button>
-<button onclick="closeDelete()">No</button>
-</div>
-</div>
-</div>
-
 <div id="conflictModal" class="modal hidden">
 <div class="modal-content">
 <h3>⚠️ STAFF DAY OFF</h3>
@@ -295,8 +277,7 @@ projectId:"rosesnails-calendar"
 
 const db = getFirestore();
 
-let staff=[], appointments=[], dayoffs=[];
-let editId=null;
+let staff=[], appointments=[], dayoffs=[], removeTarget=null;
 
 const calendar=document.getElementById('calendar');
 const calendarDate=document.getElementById('calendarDate');
@@ -330,7 +311,7 @@ renderCalendar();
 });
 
 function isDayOff(staffId,date){
-return dayoffs.some(d=>d.staffId===staffId && d.date===date);
+return dayoffs.find(d=>d.staffId===staffId && d.date===date);
 }
 
 function renderCalendar(){
@@ -343,8 +324,7 @@ calendar.innerHTML+=h;
 for(let i=0;i<SLOTS;i++){
 let r=`<tr><td class="time">${timeLabel(i)}</td>`;
 staff.forEach(s=>{
-let cls='';
-if(isDayOff(s.id,calendarDate.value)) cls='dayoff';
+let cls=isDayOff(s.id,calendarDate.value)?'dayoff':'';
 r+=`<td class="slot ${cls}" data-slot="${i}" data-staff="${s.id}"></td>`;
 });
 r+='</tr>';
@@ -355,12 +335,10 @@ drawDayOffLabels();
 }
 
 function drawDayOffLabels(){
-staff.forEach((s,idx)=>{
+staff.forEach(s=>{
 if(isDayOff(s.id,calendarDate.value)){
 const cell=document.querySelector(`.slot[data-slot="0"][data-staff="${s.id}"]`);
-if(cell){
-cell.innerHTML='<div class="dayoff-label">DAY OFF</div>';
-}
+if(cell) cell.innerHTML='<div class="dayoff-label">DAY OFF</div>';
 }
 });
 }
@@ -382,45 +360,20 @@ const cell=document.querySelector(`.slot[data-slot="${a.start+i}"][data-staff="$
 if(cell){
 cell.style.background=si.color;
 cell.classList.add('busy');
-if(i===0){
-cell.classList.add('start');
-cell.innerHTML=a.client;
-}
-cell.onclick=()=>openEdit(a.id);
+if(i===0){ cell.classList.add('start'); cell.innerHTML=a.client; }
+cell.onclick=()=>{};
 }
 }
 });
 }
 
 window.openAdd=()=>{
-editId=null;
 appointmentModal.classList.remove('hidden');
 aDate.value=calendarDate.value;
-fillSelects();
-aClient.value='';
-aNote.value='';
-};
-
-window.openEdit=id=>{
-const a=appointments.find(x=>x.id===id);
-if(!a) return;
-editId=id;
-appointmentModal.classList.remove('hidden');
-fillSelects();
-aDate.value=a.date;
-aStaff.value=a.staffId;
-aTime.value=a.start;
-aDuration.value=a.duration||1;
-aClient.value=a.client;
-aNote.value=a.note||'';
-};
-
-function fillSelects(){
 aStaff.innerHTML=staff.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
 aTime.innerHTML=[...Array(SLOTS).keys()].map(i=>`<option value="${i}">${timeLabel(i)}</option>`).join('');
-}
-
-window.handleAnyone=()=>{};
+aClient.value=''; aNote.value='';
+};
 
 window.saveAppointment=async()=>{
 const data={
@@ -431,16 +384,8 @@ duration:+aDuration.value,
 client:aClient.value,
 note:aNote.value
 };
-
-if(isDayOff(data.staffId,data.date)){
-conflictModal.classList.remove('hidden');
-return;
-}
-
-editId
-? await updateDoc(doc(db,"appointments",editId),data)
-: await addDoc(collection(db,"appointments"),data);
-
+if(isDayOff(data.staffId,data.date)){ conflictModal.classList.remove('hidden'); return; }
+await addDoc(collection(db,"appointments"),data);
 closeAppointment();
 };
 
@@ -448,26 +393,36 @@ window.openDayOff=()=>{
 dayOffModal.classList.remove('hidden');
 dDate.value=calendarDate.value;
 dStaff.innerHTML=staff.filter(s=>s.id!==ANYONE_ID).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+updateRemoveButton();
 };
 
+function updateRemoveButton(){
+const off=isDayOff(dStaff.value,dDate.value);
+removeDayOffBtn.disabled=!off;
+removeTarget=off||null;
+}
+
 window.saveDayOff=async()=>{
-await addDoc(collection(db,"dayoffs"),{
-date:dDate.value,
-staffId:dStaff.value
-});
+await addDoc(collection(db,"dayoffs"),{ date:dDate.value, staffId:dStaff.value });
 closeDayOff();
 };
 
-window.closeDayOff=()=>dayOffModal.classList.add('hidden');
+window.askRemoveDayOff=()=>{
+confirmRemoveDayOff.classList.remove('hidden');
+};
 
-window.confirmDelete=()=>{};
-window.deleteAppointment=async()=>{};
+window.removeDayOff=async()=>{
+if(removeTarget) await deleteDoc(doc(db,"dayoffs",removeTarget.id));
+closeConfirmRemove(); closeDayOff();
+};
+
+window.closeConfirmRemove=()=>confirmRemoveDayOff.classList.add('hidden');
+window.closeDayOff=()=>dayOffModal.classList.add('hidden');
 window.openSearch=()=>searchModal.classList.remove('hidden');
 window.closeSearch=()=>searchModal.classList.add('hidden');
 window.openStaff=()=>staffModal.classList.remove('hidden');
 window.closeStaff=()=>staffModal.classList.add('hidden');
 window.closeAppointment=()=>appointmentModal.classList.add('hidden');
-window.closeDelete=()=>deleteModal.classList.add('hidden');
 window.closeConflict=()=>conflictModal.classList.add('hidden');
 
 renderCalendar();
