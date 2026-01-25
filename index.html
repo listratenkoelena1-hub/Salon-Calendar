@@ -8,6 +8,7 @@
 <style>
 body { font-family: Arial, sans-serif; margin: 10px; }
 
+/* HEADER */
 header {
 display:flex;
 align-items:center;
@@ -34,8 +35,12 @@ border-radius:20px;
 cursor:pointer;
 }
 
-#calendar-wrapper { overflow-x:auto; }
+/* CALENDAR SCROLL */
+#calendar-wrapper {
+overflow-x:auto;
+}
 
+/* TABLE */
 table {
 border-collapse:collapse;
 min-width:max-content;
@@ -68,8 +73,11 @@ width:75px !important;
 min-width:75px;
 background:#fafafa;
 }
-.slot { cursor:pointer; }
+.slot {
+cursor:pointer;
+}
 
+/* APPOINTMENT BLOCK */
 .slot.busy {
 border:1px solid rgba(0,0,0,0.4);
 border-radius:8px;
@@ -78,16 +86,7 @@ padding:2px 4px;
 box-sizing:border-box;
 }
 
-.dayoff {
-background:#eee !important;
-pointer-events:none;
-}
-.dayoff-label {
-font-size:11px;
-font-weight:600;
-color:#555;
-}
-
+/* MODALS */
 .modal {
 position:fixed;
 inset:0;
@@ -124,6 +123,7 @@ gap:8px;
 margin-top:12px;
 }
 
+/* STAFF */
 .staff-card {
 display:flex;
 align-items:center;
@@ -136,6 +136,7 @@ margin-bottom:8px;
 .staff-name { flex:1; font-weight:600; }
 .staff-actions { display:flex; gap:4px; }
 
+/* SEARCH */
 .search-item {
 border-bottom:1px solid #ddd;
 padding:6px;
@@ -153,7 +154,6 @@ cursor:pointer;
 <button onclick="openAdd()">Add appointment</button>
 </div>
 <div class="header-right">
-<button onclick="openDayOff()">Day off</button>
 <button onclick="openSearch()">Search</button>
 <button onclick="openStaff()">Staff</button>
 </div>
@@ -171,7 +171,7 @@ cursor:pointer;
 <input id="aDate" type="date" readonly disabled>
 
 <label>Staff</label>
-<select id="aStaff"></select>
+<select id="aStaff" onchange="handleAnyone()"></select>
 
 <label>Start time</label>
 <select id="aTime"></select>
@@ -201,24 +201,6 @@ cursor:pointer;
 <button onclick="saveAppointment()">Save</button>
 <button onclick="confirmDelete()">Delete</button>
 <button onclick="closeAppointment()">Close</button>
-</div>
-</div>
-</div>
-
-<div id="dayOffModal" class="modal hidden">
-<div class="modal-content">
-<h3>Day off</h3>
-
-<label>Date</label>
-<input id="dDate" type="date" readonly disabled>
-
-<label>Staff</label>
-<select id="dStaff" onchange="updateRemoveBtn()"></select>
-
-<div class="modal-actions">
-<button onclick="saveDayOff()">Save</button>
-<button id="removeDayOffBtn" onclick="removeDayOff()" disabled>Remove</button>
-<button onclick="closeDayOff()">Close</button>
 </div>
 </div>
 </div>
@@ -258,22 +240,22 @@ cursor:pointer;
 </div>
 </div>
 
-<div id="conflictModal" class="modal hidden">
+<div id="staffDeleteModal" class="modal hidden">
 <div class="modal-content">
-<h3>⚠️ STAFF DAY OFF</h3>
-<p>Sorry, this staff member is on day off.</p>
+<p>Delete staff member and all appointments?</p>
 <div class="modal-actions">
-<button onclick="closeConflict()">OK</button>
+<button onclick="confirmStaffDelete()">Yes</button>
+<button onclick="cancelStaffDelete()">Cancel</button>
 </div>
 </div>
 </div>
 
-<div id="confirmRemoveDayOffModal" class="modal hidden">
+<div id="conflictModal" class="modal hidden">
 <div class="modal-content">
-<p>Remove day off?</p>
+<h3>⚠️ TECH BUSY</h3>
+<p>Sorry, this staff member is busy.<br>Please choose another time.</p>
 <div class="modal-actions">
-<button onclick="confirmRemoveDayOff()">Yes</button>
-<button onclick="closeConfirmRemove()">Cancel</button>
+<button onclick="closeConflict()">OK</button>
 </div>
 </div>
 </div>
@@ -293,9 +275,7 @@ projectId:"rosesnails-calendar"
 
 const db = getFirestore();
 
-let staff=[], appointments=[], dayoffs=[];
-let editId=null;
-
+let staff=[], appointments=[], editId=null, staffToDelete=null;
 const calendar=document.getElementById('calendar');
 const calendarDate=document.getElementById('calendarDate');
 calendarDate.valueAsDate=new Date();
@@ -308,28 +288,20 @@ function timeLabel(i){
 const t=8*60+i*15;
 let h=Math.floor(t/60),m=t%60;
 let am=h>=12?'PM':'AM'; h=h%12||12;
-return `${h}:${String(m).padStart(2,'0')} ${ampm}`;
+return `${h}:${String(m).padStart(2,'0')} ${am}`;
 }
 
 onSnapshot(collection(db,"staff"),s=>{
-const real=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>a.order-b.order);
-staff=[...real,{id:ANYONE_ID,name:"Anyone",color:"#eaeaea"}];
-renderCalendar();
+const realStaff=s.docs.map(d=>({id:d.id,...d.data()}))
+.sort((a,b)=>a.order-b.order);
+staff=[...realStaff,{id:ANYONE_ID,name:"Anyone",color:"#eaeaea"}];
+renderStaff(); renderCalendar();
 });
 
 onSnapshot(collection(db,"appointments"),s=>{
 appointments=s.docs.map(d=>({id:d.id,...d.data()}));
 renderCalendar();
 });
-
-onSnapshot(collection(db,"dayoffs"),s=>{
-dayoffs=s.docs.map(d=>({id:d.id,...d.data()}));
-renderCalendar();
-});
-
-function isDayOff(staffId,date){
-return dayoffs.some(d=>d.staffId===staffId && d.date===date);
-}
 
 function renderCalendar(){
 calendar.innerHTML='';
@@ -340,24 +312,10 @@ calendar.innerHTML+=h;
 
 for(let i=0;i<SLOTS;i++){
 let r=`<tr><td class="time">${timeLabel(i)}</td>`;
-staff.forEach(s=>{
-let cls=isDayOff(s.id,calendarDate.value)?'dayoff':'';
-r+=`<td class="slot ${cls}" data-slot="${i}" data-staff="${s.id}"></td>`;
-});
-r+='</tr>';
-calendar.innerHTML+=r;
+staff.forEach((_,s)=>r+=`<td class="slot" data-slot="${i}" data-staff="${s}"></td>`);
+r+='</tr>'; calendar.innerHTML+=r;
 }
 drawAppointments();
-drawDayOffLabels();
-}
-
-function drawDayOffLabels(){
-staff.forEach(s=>{
-if(isDayOff(s.id,calendarDate.value)){
-const cell=document.querySelector(`.slot[data-slot="0"][data-staff="${s.id}"]`);
-if(cell) cell.innerHTML='<div class="dayoff-label">DAY OFF</div>';
-}
-});
 }
 
 function drawAppointments(){
@@ -368,11 +326,10 @@ c.classList.remove('busy');
 c.onclick=null;
 });
 appointments.filter(a=>a.date===calendarDate.value).forEach(a=>{
-if(isDayOff(a.staffId,a.date)) return;
 const si=staff.findIndex(s=>s.id===a.staffId);
 if(si===-1) return;
-for(let i=0;i<a.duration;i++){
-const cell=document.querySelector(`.slot[data-slot="${a.start+i}"][data-staff="${staff[si].id}"]`);
+for(let i=0;i<(a.duration||1);i++){
+const cell=document.querySelector(`.slot[data-slot="${a.start+i}"][data-staff="${si}"]`);
 if(cell){
 cell.style.background=staff[si].color;
 cell.classList.add('busy');
@@ -383,44 +340,11 @@ cell.onclick=()=>openEdit(a.id);
 });
 }
 
-window.openDayOff=()=>{
-dayOffModal.classList.remove('hidden');
-dDate.value=calendarDate.value;
-dStaff.innerHTML=staff.filter(s=>s.id!==ANYONE_ID).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-updateRemoveBtn();
-};
-
-window.updateRemoveBtn=()=>{
-removeDayOffBtn.disabled=!isDayOff(dStaff.value,dDate.value);
-};
-
-window.saveDayOff=async()=>{
-if(isDayOff(dStaff.value,dDate.value)) return;
-await addDoc(collection(db,"dayoffs"),{date:dDate.value,staffId:dStaff.value});
-closeDayOff();
-};
-
-window.removeDayOff=()=>{
-confirmRemoveDayOffModal.classList.remove('hidden');
-};
-
-window.confirmRemoveDayOff=async()=>{
-const q=query(collection(db,"dayoffs"),where("staffId","==",dStaff.value),where("date","==",dDate.value));
-const snap=await getDocs(q);
-await Promise.all(snap.docs.map(d=>deleteDoc(d.ref)));
-closeConfirmRemove();
-closeDayOff();
-};
-
-window.closeConfirmRemove=()=>confirmRemoveDayOffModal.classList.add('hidden');
-window.closeDayOff=()=>dayOffModal.classList.add('hidden');
-
 window.openAdd=()=>{
 editId=null;
 appointmentModal.classList.remove('hidden');
 aDate.value=calendarDate.value;
-aStaff.innerHTML=staff.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-aTime.innerHTML=[...Array(SLOTS).keys()].map(i=>`<option value="${i}">${timeLabel(i)}</option>`).join('');
+fillSelects();
 aClient.value='';
 aNote.value='';
 };
@@ -430,12 +354,28 @@ const a=appointments.find(x=>x.id===id);
 if(!a) return;
 editId=id;
 appointmentModal.classList.remove('hidden');
+fillSelects();
 aDate.value=a.date;
 aStaff.value=a.staffId;
 aTime.value=a.start;
-aDuration.value=a.duration;
+aDuration.value=a.duration||1;
 aClient.value=a.client;
 aNote.value=a.note||'';
+handleAnyone();
+};
+
+function fillSelects(){
+aStaff.innerHTML=staff.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+aTime.innerHTML=[...Array(SLOTS).keys()].map(i=>`<option value="${i}">${timeLabel(i)}</option>`).join('');
+}
+
+window.handleAnyone=()=>{
+if(aStaff.value===ANYONE_ID){
+aDuration.value=1;
+aDuration.disabled=true;
+}else{
+aDuration.disabled=false;
+}
 };
 
 window.saveAppointment=async()=>{
@@ -443,34 +383,115 @@ const data={
 date:calendarDate.value,
 staffId:aStaff.value,
 start:+aTime.value,
-duration:+aDuration.value,
+duration:aStaff.value===ANYONE_ID?1:+aDuration.value,
 client:aClient.value,
 note:aNote.value
 };
-if(isDayOff(data.staffId,data.date)){
-conflictModal.classList.remove('hidden');
-return;
-}
+
+const conflict=data.staffId!==ANYONE_ID && appointments.some(a=>{
+if(a.id===editId) return false;
+if(a.date!==data.date||a.staffId!==data.staffId) return false;
+return Math.max(a.start,data.start)<Math.min(a.start+a.duration,data.start+data.duration);
+});
+
+if(conflict){ conflictModal.classList.remove('hidden'); return; }
+
 editId
 ? await updateDoc(doc(db,"appointments",editId),data)
 : await addDoc(collection(db,"appointments"),data);
+
 closeAppointment();
 };
 
-window.confirmDelete=()=>deleteModal.classList.remove('hidden');
+window.confirmDelete=()=>{ if(editId) deleteModal.classList.remove('hidden'); };
 window.deleteAppointment=async()=>{
 await deleteDoc(doc(db,"appointments",editId));
 editId=null;
 closeDelete(); closeAppointment();
 };
 
-window.openSearch=()=>searchModal.classList.remove('hidden');
-window.closeSearch=()=>searchModal.classList.add('hidden');
+window.openSearch=()=>{
+searchInput.value=''; searchResults.innerHTML='';
+searchModal.classList.remove('hidden');
+};
+
+window.runSearch=()=>{
+const q=searchInput.value.toLowerCase();
+searchResults.innerHTML='';
+appointments.filter(a=>a.client && a.client.toLowerCase().includes(q))
+.sort((a,b)=>a.date<b.date?1:-1)
+.forEach(a=>{
+const s=staff.find(x=>x.id===a.staffId);
+if(!s) return;
+searchResults.innerHTML+=`<div class="search-item" onclick="openFromSearch('${a.id}')"><b>${a.client}</b><br>${a.date} ${timeLabel(a.start)} — ${s.name}</div>`;
+});
+};
+
+window.openFromSearch=id=>{
+closeSearch();
+const a=appointments.find(x=>x.id===id);
+if(!a) return;
+calendarDate.value=a.date;
+renderCalendar();
+setTimeout(()=>openEdit(id),50);
+};
+
 window.openStaff=()=>staffModal.classList.remove('hidden');
 window.closeStaff=()=>staffModal.classList.add('hidden');
+
+function renderStaff(){
+staffList.innerHTML='';
+staff.filter(s=>s.id!==ANYONE_ID).forEach((s,i)=>{
+staffList.innerHTML+=`<div class="staff-card"><span class="staff-name">${s.name}</span><input type="color" value="${s.color}" onchange="updateStaffColor('${s.id}',this.value)"><div class="staff-actions"><button onclick="moveStaff(${i},-1)">↑</button><button onclick="moveStaff(${i},1)">↓</button><button onclick="askStaffDelete('${s.id}')">✕</button></div></div>`;
+});
+}
+
+window.addStaff=async()=>{
+if(!newStaffName.value.trim()) return;
+await addDoc(collection(db,"staff"),{
+name:newStaffName.value.trim(),
+color:newStaffColor.value,
+order:staff.filter(s=>s.id!==ANYONE_ID).length
+});
+newStaffName.value='';
+};
+
+window.updateStaffColor=(id,color)=>updateDoc(doc(db,"staff",id),{color});
+
+window.moveStaff=async(i,dir)=>{
+const real=staff.filter(s=>s.id!==ANYONE_ID);
+const j=i+dir;
+if(j<0||j>=real.length) return;
+const a=real[i], b=real[j];
+await Promise.all([
+updateDoc(doc(db,"staff",a.id),{order:j}),
+updateDoc(doc(db,"staff",b.id),{order:i})
+]);
+};
+
+window.askStaffDelete=id=>{
+staffToDelete=id;
+staffDeleteModal.classList.remove('hidden');
+};
+
+window.cancelStaffDelete=()=>{
+staffToDelete=null;
+staffDeleteModal.classList.add('hidden');
+};
+
+window.confirmStaffDelete=async()=>{
+const q=query(collection(db,"appointments"),where("staffId","==",staffToDelete));
+const snap=await getDocs(q);
+await Promise.all(snap.docs.map(d=>deleteDoc(d.ref)));
+await deleteDoc(doc(db,"staff",staffToDelete));
+staffToDelete=null;
+staffDeleteModal.classList.add('hidden');
+};
+
 window.closeAppointment=()=>appointmentModal.classList.add('hidden');
 window.closeDelete=()=>deleteModal.classList.add('hidden');
 window.closeConflict=()=>conflictModal.classList.add('hidden');
+window.closeSearch=()=>searchModal.classList.add('hidden');
 
 renderCalendar();
 </script>
