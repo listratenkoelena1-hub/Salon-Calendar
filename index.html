@@ -674,15 +674,29 @@ return `${h}:${String(m).padStart(2,'0')} ${am}`;
 
 
 
-onSnapshot(collection(db,"staff"),s=>{
+onSnapshot(collection(db,"staff"), s => {
 
-const realStaff=s.docs.map(d=>({id:d.id,...d.data()}))
+  const realStaff = s.docs
 
-.sort((a,b)=>a.order-b.order);
+    .map(d => ({ id: d.id, ...d.data() }))
 
-staff=[...realStaff,{id:ANYONE_ID,name:"Anyone",color:"#eaeaea"}];
+    .sort((a, b) => a.order - b.order);
 
-renderStaff(); renderCalendar();
+
+
+  staff = [
+
+    { id: ANYONE_ID, name: "Anyone", color: "#eaeaea" },
+
+    ...realStaff
+
+  ];
+
+
+
+  renderStaff();
+
+  renderCalendar();
 
 });
 
