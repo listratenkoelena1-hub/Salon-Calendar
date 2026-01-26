@@ -154,7 +154,6 @@ cursor:pointer;
 <button onclick="openAdd()">Add appointment</button>
 </div>
 <div class="header-right">
-<button onclick="openDayOff()">Day off</button>
 <button onclick="openSearch()">Search</button>
 <button onclick="openStaff()">Staff</button>
 </div>
@@ -202,24 +201,6 @@ cursor:pointer;
 <button onclick="saveAppointment()">Save</button>
 <button onclick="confirmDelete()">Delete</button>
 <button onclick="closeAppointment()">Close</button>
-</div>
-</div>
-</div>
-
-<div id="dayOffModal" class="modal hidden">
-<div class="modal-content">
-<h3>Day off</h3>
-
-<label>Date</label>
-<input id="dDate" type="date" readonly disabled>
-
-<label>Staff</label>
-<select id="dStaff"></select>
-
-<div class="modal-actions">
-<button>Save</button>
-<button disabled>Remove</button>
-<button onclick="closeDayOff()">Close</button>
 </div>
 </div>
 </div>
@@ -506,14 +487,6 @@ await deleteDoc(doc(db,"staff",staffToDelete));
 staffToDelete=null;
 staffDeleteModal.classList.add('hidden');
 };
-
-window.openDayOff=()=>{
-dayOffModal.classList.remove('hidden');
-dDate.value=calendarDate.value;
-dStaff.innerHTML=staff.filter(s=>s.id!==ANYONE_ID).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-};
-
-window.closeDayOff=()=>dayOffModal.classList.add('hidden');
 
 window.closeAppointment=()=>appointmentModal.classList.add('hidden');
 window.closeDelete=()=>deleteModal.classList.add('hidden');
