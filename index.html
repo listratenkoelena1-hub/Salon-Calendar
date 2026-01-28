@@ -740,6 +740,54 @@ table {
 
 
 
+/* === SOLID BLOCKS FOR STAFF ONLY === */
+
+
+
+.slot.busy {
+
+  border: none;
+
+}
+
+
+
+.slot.busy.block-start {
+
+  border-top-left-radius: 10px;
+
+  border-top-right-radius: 10px;
+
+  box-shadow: 0 -1px 0 rgba(0,0,0,0.12),
+
+              0 0 6px rgba(0,0,0,0.18);
+
+}
+
+
+
+.slot.busy.block-middle {
+
+  border-radius: 0;
+
+}
+
+
+
+.slot.busy.block-end {
+
+  border-bottom-left-radius: 10px;
+
+  border-bottom-right-radius: 10px;
+
+  box-shadow: 0 1px 0 rgba(0,0,0,0.12),
+
+              0 4px 8px rgba(0,0,0,0.22);
+
+}
+
+
+
 </style>
 
 
@@ -1984,15 +2032,43 @@ dayAppointments
 
       if (cell) {
 
-        cell.style.background = staff[si].color;
+  cell.style.background = staff[si].color;
 
-        cell.classList.add('busy');
+  cell.classList.add('busy');
 
-        if (i === 0) cell.innerHTML = a.client;
 
-        cell.onclick = () => openEdit(a.id);
 
-      }
+  const last = (a.duration || 1) - 1;
+
+
+
+if (i === 0 && i === last) {
+
+  cell.classList.add('block-start', 'block-end');
+
+  cell.innerHTML = a.client;
+
+} else if (i === 0) {
+
+  cell.classList.add('block-start');
+
+  cell.innerHTML = a.client;
+
+} else if (i === last) {
+
+  cell.classList.add('block-end');
+
+} else {
+
+  cell.classList.add('block-middle');
+
+}
+
+
+
+  cell.onclick = () => openEdit(a.id);
+
+}
 
     }
 
