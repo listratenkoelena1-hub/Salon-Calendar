@@ -778,7 +778,7 @@ let offWork = [];
 
 
 
-onSnapshot(collection(db, "offWork"), s => {
+onSnapshot(collection(db, "OffWork"), s => {
 
   offWork = s.docs.map(d => ({ id: d.id, ...d.data() }));
 
@@ -1454,7 +1454,7 @@ window.saveOffWork = async () => {
 
 
 
-  await addDoc(collection(db, "offWork"), data);
+  await addDoc(collection(db, "OffWork"), data);
 
 
 
@@ -1490,7 +1490,7 @@ window.removeOffWork = async () => {
 
 
 
-  await deleteDoc(doc(db, "offWork", record.id));
+  await deleteDoc(doc(db, "OffWork", record.id));
 
   closeOffWork();
 
@@ -1513,4 +1513,3 @@ renderCalendar();
 </body>
 
 </html>
-
