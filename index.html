@@ -348,24 +348,6 @@ table {
 
 
 
-/* === ANYONE COUNT BADGE === */
-
-
-
-.anyone-count {
-
-  margin-top: 2px;
-
-  font-size: 18px;
-
-  font-weight: 800;
-
-  color: #d90000;
-
-}
-
-
-
 </style>
 
 </head>
@@ -930,117 +912,45 @@ function drawAppointments(){
 
 
 
-// 3. APPOINTMENTS (with multi Anyone support)
+  // 3. APPOINTMENTS
+
+  appointments
+
+    .filter(a => a.date === calendarDate.value)
+
+    .forEach(a=>{
+
+      const si = staff.findIndex(s=>s.id===a.staffId);
+
+      if(si === -1) return;
 
 
 
-const dayAppointments = appointments.filter(
+      for(let i=0;i<(a.duration||1);i++){
 
-  a => a.date === calendarDate.value
+        const cell = document.querySelector(
 
-);
+          `.slot[data-slot="${a.start+i}"][data-staff="${si}"]`
 
+        );
 
+        if(cell){
 
-// группируем по ячейке: staff + start
+          cell.style.background = staff[si].color;
 
-const grouped = {};
+          cell.classList.add('busy');
 
+          if(i===0) cell.innerHTML = a.client;
 
+          cell.onclick = () => openEdit(a.id);
 
-dayAppointments.forEach(a => {
+        }
 
-  const key = `${a.staffId}_${a.start}`;
+      }
 
-  if (!grouped[key]) grouped[key] = [];
-
-  grouped[key].push(a);
-
-});
-
-
-
-Object.values(grouped).forEach(group => {
-
-  const a0 = group[0];
-
-  const si = staff.findIndex(s => s.id === a0.staffId);
-
-  if (si === -1) return;
-
-
-
-// === ANYONE ===
-
-if (a0.staffId === ANYONE_ID) {
-
-  const cell = document.querySelector(
-
-    `.slot[data-slot="${a0.start}"][data-staff="${si}"]`
-
-  );
-
-  if (!cell) return;
-
-
-
-  cell.classList.add('busy');
-
-  cell.style.background = staff[si].color;
-
-
-
-  const firstName = a0.client || "—";
-
-  const extraCount = group.length - 1;
-
-
-
-  cell.innerHTML = `
-
-    <div>${firstName}</div>
-
-    ${extraCount > 0 ? `<div class="anyone-count">+${extraCount}</div>` : ""}
-
-  `;
-
-
-
-  cell.onclick = () => openAnyoneList(group);
-
-
-
-  return;
+    });
 
 }
-
-
-
-  // === ОБЫЧНЫЕ МАСТЕРА (как было) ===
-
-  for (let i = 0; i < (a0.duration || 1); i++) {
-
-    const cell = document.querySelector(
-
-      `.slot[data-slot="${a0.start + i}"][data-staff="${si}"]`
-
-    );
-
-    if (cell) {
-
-      cell.style.background = staff[si].color;
-
-      cell.classList.add('busy');
-
-      if (i === 0) cell.innerHTML = a0.client;
-
-      cell.onclick = () => openEdit(a0.id);
-
-    }
-
-  }
-
-});
 
 
 
@@ -1596,83 +1506,7 @@ offRemoveBtn.onclick = removeOffWork;
 
 renderCalendar();
 
-
-
-const anyoneListModal = document.getElementById('anyoneListModal');
-
-const anyoneList = document.getElementById('anyoneList');
-
-
-
-window.openAnyoneList = (group) => {
-
-  anyoneList.innerHTML = '';
-
-
-
-  group.forEach(a => {
-
-    anyoneList.innerHTML += `
-
-      <div class="search-item" onclick="openAnyoneEdit('${a.id}')">
-
-        <b>${a.client || '—'}</b><br>
-
-        ${timeLabel(a.start)}
-
-      </div>
-
-    `;
-
-  });
-
-
-
-  anyoneListModal.classList.remove('hidden');
-
-};
-
-
-
-window.openAnyoneEdit = (id) => {
-
-  anyoneListModal.classList.add('hidden');
-
-  openEdit(id);
-
-};
-
-
-
-window.closeAnyoneList = () => {
-
-  anyoneListModal.classList.add('hidden');
-
-};
-
-
-
 </script>
-
-
-
-<div id="anyoneListModal" class="modal hidden">
-
-  <div class="modal-content">
-
-    <h3>Anyone appointments</h3>
-
-    <div id="anyoneList"></div>
-
-    <div class="modal-actions">
-
-      <button onclick="closeAnyoneList()">Close</button>
-
-    </div>
-
-  </div>
-
-</div>
 
 
 
