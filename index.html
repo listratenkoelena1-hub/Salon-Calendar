@@ -1480,15 +1480,13 @@ const anyonePopupList = document.getElementById('anyonePopupList');
 
 
 
-const START_MINUTES = 10 * 60; // 10:00 AM
+const START_MINUTES = 8 * 60; // 08:00
+
+
 
 const END_MINUTES = 20 * 60; // 8:00 PM
 
 const SLOT_MINUTES = 15;
-
-
-
-const LEGACY_OFFSET = 8; // старые слоты 08:00–10:00
 
 
 
@@ -1497,8 +1495,6 @@ const LEGACY_OFFSET = 8; // старые слоты 08:00–10:00
 const SLOTS = Math.floor((END_MINUTES - START_MINUTES) / SLOT_MINUTES) + 1;
 
 
-
-const LAST_START_SLOT = SLOTS - 3;
 
 
 
@@ -1750,13 +1746,7 @@ function drawAppointments(){
 
   // ❌ запрет старта после 7:30 (7:45 и 8:00)
 
-  if (slot > LAST_START_SLOT) {
-
-    c.onclick = null;
-
-    return;
-
-  }
+ 
 
 
 
@@ -1942,7 +1932,7 @@ if (!o.allDay) {
 
     .forEach(a => {
 
-      const key = a.start - LEGACY_OFFSET;
+      const key = a.start;
 
       if (!anyoneGroups[key]) anyoneGroups[key] = [];
 
@@ -2062,7 +2052,7 @@ dayAppointments
 
       const cell = document.querySelector(
 
-        `.slot[data-slot="${(a.start - LEGACY_OFFSET) + i}"][data-staff="${si}"]`
+        `.slot[data-slot="${a.start  + i}"][data-staff="${si}"]`
 
       );
 
@@ -2286,7 +2276,7 @@ aStaff.value=a.staffId;
 
 
 
-aTime.value = a.start === -1 ? -1 : a.start - LEGACY_OFFSET;
+aTime.value = a.start === -1 ? -1 : a.start;
 
 
 
@@ -2400,7 +2390,7 @@ start:
 
     ? -1
 
-    : +aTime.value + LEGACY_OFFSET,
+    : +aTime.value,
 
 
 
