@@ -2286,7 +2286,7 @@ aStaff.value=a.staffId;
 
 
 
-aTime.value=a.start;
+aTime.value = a.start === -1 ? -1 : a.start - LEGACY_OFFSET;
 
 
 
@@ -2394,7 +2394,13 @@ staffId:aStaff.value,
 
 
 
-start: +aTime.value + LEGACY_OFFSET,
+start:
+
+  +aTime.value === -1
+
+    ? -1
+
+    : +aTime.value + LEGACY_OFFSET,
 
 
 
@@ -3365,3 +3371,4 @@ renderCalendar();
 
 
 </html>
+
