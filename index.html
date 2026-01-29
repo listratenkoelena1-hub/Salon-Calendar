@@ -1488,6 +1488,10 @@ const SLOT_MINUTES = 15;
 
 
 
+const LEGACY_OFFSET = 8; // старые слоты 08:00–10:00
+
+
+
 // считаем количество слотов с 10:00 до 7:30
 
 const SLOTS = Math.floor((END_MINUTES - START_MINUTES) / SLOT_MINUTES) + 1;
@@ -1938,7 +1942,7 @@ if (!o.allDay) {
 
     .forEach(a => {
 
-      const key = a.start;
+      const key = a.start - LEGACY_OFFSET;
 
       if (!anyoneGroups[key]) anyoneGroups[key] = [];
 
@@ -2058,7 +2062,7 @@ dayAppointments
 
       const cell = document.querySelector(
 
-        `.slot[data-slot="${a.start + i}"][data-staff="${si}"]`
+        `.slot[data-slot="${(a.start - LEGACY_OFFSET) + i}"][data-staff="${si}"]`
 
       );
 
@@ -2390,7 +2394,7 @@ staffId:aStaff.value,
 
 
 
-start:+aTime.value,
+start: +aTime.value + LEGACY_OFFSET,
 
 
 
@@ -3361,4 +3365,3 @@ renderCalendar();
 
 
 </html>
-
