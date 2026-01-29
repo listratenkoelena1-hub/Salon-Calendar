@@ -1482,7 +1482,7 @@ const anyonePopupList = document.getElementById('anyonePopupList');
 
 const START_MINUTES = 10 * 60; // 10:00 AM
 
-const END_MINUTES = 19 * 60 + 30; // 7:30 PM
+const END_MINUTES = 20 * 60; // 8:00 PM
 
 const SLOT_MINUTES = 15;
 
@@ -1491,6 +1491,10 @@ const SLOT_MINUTES = 15;
 // считаем количество слотов с 10:00 до 7:30
 
 const SLOTS = Math.floor((END_MINUTES - START_MINUTES) / SLOT_MINUTES) + 1;
+
+
+
+const LAST_START_SLOT = SLOTS - 3;
 
 
 
@@ -1724,31 +1728,39 @@ function drawAppointments(){
 
 
 
-  // 1. ОЧИСТКА ВСЕХ СЛОТОВ
+  document.querySelectorAll('.slot').forEach(c => {
 
 
 
-  document.querySelectorAll('.slot').forEach(c=>{
+  c.innerHTML = '';
+
+  c.style.background = '';
+
+  c.classList.remove('busy');
 
 
 
-    c.innerHTML='';
+  const slot = +c.dataset.slot;
 
 
 
-    c.style.background='';
+  // ❌ запрет старта после 7:30 (7:45 и 8:00)
+
+  if (slot > LAST_START_SLOT) {
+
+    c.onclick = null;
+
+    return;
+
+  }
 
 
 
-    c.classList.remove('busy');
+  // ✅ разрешённый старт
 
+  c.onclick = () => openAddFromCell(c);
 
-
-    c.onclick=null;
-
-
-
-  });
+});
 
 
 
@@ -2194,7 +2206,47 @@ aNote.value='';
 
 
 
+function openAddFromCell(cell) {
 
+  editId = null;
+
+  appointmentModal.classList.remove('hidden');
+
+
+
+  aDate.value = calendarDate.value;
+
+  fillSelects();
+
+
+
+  const staffIndex = +cell.dataset.staff;
+
+  const slotIndex = +cell.dataset.slot;
+
+
+
+  if (staff[staffIndex]) {
+
+    aStaff.value = staff[staffIndex].id;
+
+  }
+
+
+
+  aTime.value = slotIndex;
+
+
+
+  aClient.value = '';
+
+  aNote.value = '';
+
+
+
+  handleAnyone();
+
+}
 
 
 
@@ -3158,7 +3210,13 @@ window.saveOffWork = async () => {
 
 
 
+if (!data.allDay && data.end <= data.start) {
 
+  alert('End time must be later than start time');
+
+  return;
+
+}
 
 
 
