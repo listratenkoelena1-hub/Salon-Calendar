@@ -162,8 +162,6 @@ cursor:pointer;
 
 #calendar-wrapper {
 
-  width: fit-content;
-
   max-width: 100vw;
 
   overflow-x: auto;
@@ -714,17 +712,19 @@ th.time {
 
 #calendar-container {
 
-  display: inline-block;
-
-  width: fit-content;
+  display: block;
 
 }
 
-#calendar {
 
-  transform: scale(0.85);
 
-  transform-origin: top left;
+@media (max-width: 1200px) {
+
+  #calendar-container {
+
+    zoom: 0.85;
+
+  }
 
 }
 
