@@ -1496,6 +1496,10 @@ const SLOTS = Math.floor((END_MINUTES - START_MINUTES) / SLOT_MINUTES) + 1;
 
 
 
+const MORNING_SLOTS = 8; // 08:00–09:45 (8 слотов по 15 мин)
+
+let morningExpanded = false; // утро всегда свернуто при загрузке
+
 
 
 const ANYONE_ID="anyone";
@@ -1670,9 +1674,13 @@ calendar.innerHTML += h;
 
 // === MORNING ROW ===
 
-let morningRow = `<tr class="morning-row">
 
-  <td class="time morning">Morning</td>`;
+
+let morningRow = `<tr class="morning-row" onclick="toggleMorning()">
+
+  <td class="time morning">Morning ▸</td>`;
+
+
 
 staff.forEach((_, s) =>
 
@@ -1686,19 +1694,29 @@ calendar.innerHTML += morningRow;
 
 
 
-// === MAIN WORKING HOURS ===
+for (let i = 0; i < SLOTS; i++) {
 
-for(let i = 0; i < SLOTS; i++){
+
+
+  // ⛔ утро скрыто
+
+  if (!morningExpanded && i < MORNING_SLOTS) continue;
+
+
 
   let r = `<tr>
 
     <td class="time">${timeLabel(i)}</td>`;
+
+
 
   staff.forEach((_, s) =>
 
     r += `<td class="slot" data-slot="${i}" data-staff="${s}"></td>`
 
   );
+
+
 
   r += '</tr>';
 
@@ -1730,8 +1748,6 @@ function drawAppointments(){
 
   document.querySelectorAll('.slot').forEach(c => {
 
-
-
   c.innerHTML = '';
 
   c.style.background = '';
@@ -1744,19 +1760,35 @@ function drawAppointments(){
 
 
 
-  // ❌ запрет старта после 7:30 (7:45 и 8:00)
+// ❌ никогда не создаём запись кликом по Morning-строке
 
- 
+if (slot === -1) {
+
+  c.onclick = null;
+
+  return;
+
+}
 
 
 
-  // ✅ разрешённый старт
+  // ⛔ утренние слоты недоступны, пока утро свернуто
+
+  if (!morningExpanded && slot >= 0 && slot < MORNING_SLOTS) {
+
+    c.onclick = null;
+
+    return;
+
+  }
+
+
+
+  // ✅ во всех остальных случаях можно создавать запись
 
   c.onclick = () => openAddFromCell(c);
 
 });
-
-
 
 
 
@@ -2313,8 +2345,6 @@ aStaff.innerHTML=staff.map(s=>`<option value="${s.id}">${s.name}</option>`).join
 
 
 aTime.innerHTML =
-
-  `<option value="-1">Morning</option>` +
 
   [...Array(SLOTS).keys()]
 
@@ -3108,8 +3138,6 @@ offStaff.onchange = () => {
 
   offStart.innerHTML =
 
-  `<option value="-1">Morning</option>` +
-
   [...Array(SLOTS).keys()]
 
     .map(i => `<option value="${i}">${timeLabel(i)}</option>`)
@@ -3318,6 +3346,14 @@ offRemoveBtn.onclick = removeOffWork;
 
 
 
+window.toggleMorning = () => {
+
+  morningExpanded = !morningExpanded;
+
+  renderCalendar();
+
+};
+
 
 
 renderCalendar();
@@ -3361,4 +3397,3 @@ renderCalendar();
 
 
 </html>
-
