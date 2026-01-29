@@ -730,6 +730,28 @@ th.time {
 
 
 
+.morning-row td {
+
+  height: 18px;
+
+  font-size: 10px;
+
+  color: #666;
+
+  background: #fafafa;
+
+}
+
+
+
+.morning {
+
+  font-style: italic;
+
+}
+
+
+
 </style>
 
 
@@ -1458,7 +1480,17 @@ const anyonePopupList = document.getElementById('anyonePopupList');
 
 
 
-const SLOTS=49;
+const START_MINUTES = 10 * 60; // 10:00 AM
+
+const END_MINUTES = 19 * 60 + 30; // 7:30 PM
+
+const SLOT_MINUTES = 15;
+
+
+
+// считаем количество слотов с 10:00 до 7:30
+
+const SLOTS = Math.floor((END_MINUTES - START_MINUTES) / SLOT_MINUTES) + 1;
 
 
 
@@ -1472,23 +1504,25 @@ const ANYONE_ID="anyone";
 
 function timeLabel(i){
 
-
-
-const t=8*60+i*15;
-
-
-
-let h=Math.floor(t/60),m=t%60;
+  if (i === -1) return 'Morning';
 
 
 
-let am=h>=12?'PM':'AM'; h=h%12||12;
+  const t = START_MINUTES + i * SLOT_MINUTES;
+
+  let h = Math.floor(t / 60);
+
+  let m = t % 60;
 
 
 
-return `${h}:${String(m).padStart(2,'0')} ${am}`;
+  let am = h >= 12 ? 'PM' : 'AM';
+
+  h = h % 12 || 12;
 
 
+
+  return `${h}:${String(m).padStart(2,'0')} ${am}`;
 
 }
 
@@ -1626,29 +1660,45 @@ h+='</tr>';
 
 
 
-calendar.innerHTML+=h;
+calendar.innerHTML += h;
 
 
 
+// === MORNING ROW ===
+
+let morningRow = `<tr class="morning-row">
+
+  <td class="time morning">Morning</td>`;
+
+staff.forEach((_, s) =>
+
+  morningRow += `<td class="slot morning" data-slot="-1" data-staff="${s}"></td>`
+
+);
+
+morningRow += '</tr>';
+
+calendar.innerHTML += morningRow;
 
 
 
+// === MAIN WORKING HOURS ===
 
-for(let i=0;i<SLOTS;i++){
+for(let i = 0; i < SLOTS; i++){
 
+  let r = `<tr>
 
+    <td class="time">${timeLabel(i)}</td>`;
 
-let r=`<tr><td class="time">${timeLabel(i)}</td>`;
+  staff.forEach((_, s) =>
 
+    r += `<td class="slot" data-slot="${i}" data-staff="${s}"></td>`
 
+  );
 
-staff.forEach((_,s)=>r+=`<td class="slot" data-slot="${i}" data-staff="${s}"></td>`);
+  r += '</tr>';
 
-
-
-r+='</tr>'; calendar.innerHTML+=r;
-
-
+  calendar.innerHTML += r;
 
 }
 
@@ -1786,63 +1836,67 @@ function drawAppointments(){
 
 
 
-    // PARTIAL DAY OFF
+  // PARTIAL DAY OFF (WITH MORNING)
+
+if (!o.allDay) {
 
 
 
-    if (!o.allDay) {
+  // Morning block
 
+  if (o.start === -1) {
 
+    const cell = document.querySelector(
 
-      for (let i = o.start; i < o.end; i++) {
+      `.slot[data-slot="-1"][data-staff="${staffIndex}"]`
 
+    );
 
+    if (cell) {
 
-        const cell = document.querySelector(
+      cell.style.background = '#e0e0e0';
 
+      cell.onclick = () =>
 
+        document
 
-          `.slot[data-slot="${i}"][data-staff="${staffIndex}"]`
+          .getElementById('offWorkConflictModal')
 
-
-
-        );
-
-
-
-        if (cell) {
-
-
-
-          cell.style.background = '#e0e0e0';
-
-
-
-          cell.onclick = () =>
-
-
-
-  document
-
-
-
-    .getElementById('offWorkConflictModal')
-
-
-
-    .classList.remove('hidden');
-
-
-
-        }
-
-
-
-      }
-
-
+          .classList.remove('hidden');
 
     }
+
+  }
+
+
+
+  // Normal hours
+
+  for (let i = Math.max(o.start, 0); i < o.end; i++) {
+
+    const cell = document.querySelector(
+
+      `.slot[data-slot="${i}"][data-staff="${staffIndex}"]`
+
+    );
+
+    if (cell) {
+
+      cell.style.background = '#e0e0e0';
+
+      cell.onclick = () =>
+
+        document
+
+          .getElementById('offWorkConflictModal')
+
+          .classList.remove('hidden');
+
+    }
+
+  }
+
+}
 
 
 
@@ -1942,7 +1996,7 @@ Object.entries(anyoneGroups).forEach(([start, group]) => {
 
 
 
-// --- NORMAL STAFF ---
+// --- NORMAL STAFF (WITH MORNING SUPPORT) ---
 
 dayAppointments
 
@@ -1950,11 +2004,43 @@ dayAppointments
 
   .forEach(a => {
 
+
+
     const si = staff.findIndex(s => s.id === a.staffId);
 
     if (si === -1) return;
 
 
+
+    // === MORNING APPOINTMENT ===
+
+    if (a.start === -1) {
+
+      const cell = document.querySelector(
+
+        `.slot[data-slot="-1"][data-staff="${si}"]`
+
+      );
+
+      if (!cell) return;
+
+
+
+      cell.style.background = staff[si].color;
+
+      cell.classList.add('busy', 'block-start', 'block-end');
+
+      cell.innerHTML = a.client;
+
+      cell.onclick = () => openEdit(a.id);
+
+      return;
+
+    }
+
+
+
+    // === NORMAL TIME APPOINTMENTS ===
 
     for (let i = 0; i < (a.duration || 1); i++) {
 
@@ -1964,45 +2050,45 @@ dayAppointments
 
       );
 
-      if (cell) {
-
-  cell.style.background = staff[si].color;
-
-  cell.classList.add('busy');
+      if (!cell) continue;
 
 
 
-  const last = (a.duration || 1) - 1;
+      cell.style.background = staff[si].color;
+
+      cell.classList.add('busy');
 
 
 
-if (i === 0 && i === last) {
-
-  cell.classList.add('block-start', 'block-end');
-
-  cell.innerHTML = a.client;
-
-} else if (i === 0) {
-
-  cell.classList.add('block-start');
-
-  cell.innerHTML = a.client;
-
-} else if (i === last) {
-
-  cell.classList.add('block-end');
-
-} else {
-
-  cell.classList.add('block-middle');
-
-}
+      const last = (a.duration || 1) - 1;
 
 
 
-  cell.onclick = () => openEdit(a.id);
+      if (i === 0 && i === last) {
 
-}
+        cell.classList.add('block-start', 'block-end');
+
+        cell.innerHTML = a.client;
+
+      } else if (i === 0) {
+
+        cell.classList.add('block-start');
+
+        cell.innerHTML = a.client;
+
+      } else if (i === last) {
+
+        cell.classList.add('block-end');
+
+      } else {
+
+        cell.classList.add('block-middle');
+
+      }
+
+
+
+      cell.onclick = () => openEdit(a.id);
 
     }
 
@@ -2180,7 +2266,15 @@ aStaff.innerHTML=staff.map(s=>`<option value="${s.id}">${s.name}</option>`).join
 
 
 
-aTime.innerHTML=[...Array(SLOTS).keys()].map(i=>`<option value="${i}">${timeLabel(i)}</option>`).join('');
+aTime.innerHTML =
+
+  `<option value="-1">Morning</option>` +
+
+  [...Array(SLOTS).keys()]
+
+    .map(i => `<option value="${i}">${timeLabel(i)}</option>`)
+
+    .join('');
 
 
 
@@ -2294,21 +2388,9 @@ return Math.max(a.start,data.start)<Math.min(a.start+a.duration,data.start+data.
 
 const offConflict = data.staffId !== ANYONE_ID && offWork.some(o => {
 
-
-
   if (o.date !== data.date) return false;
 
-
-
   if (o.staffId !== data.staffId) return false;
-
-
-
-
-
-
-
-  // весь день выходной
 
 
 
@@ -2316,21 +2398,25 @@ const offConflict = data.staffId !== ANYONE_ID && offWork.some(o => {
 
 
 
+  // Morning conflict
+
+  if (data.start === -1 && o.start === -1) return true;
 
 
 
+  // Normal hours conflict
 
-  // пересечение по времени
+  if (data.start >= 0 && o.start >= 0) {
+
+    return Math.max(o.start, data.start) <
+
+           Math.min(o.end, data.start + data.duration);
+
+  }
 
 
 
-  return Math.max(o.start, data.start) <
-
-
-
-         Math.min(o.end, data.start + data.duration);
-
-
+  return false;
 
 });
 
@@ -2968,13 +3054,13 @@ offStaff.onchange = () => {
 
 
 
-  offStart.innerHTML = [...Array(SLOTS).keys()]
+  offStart.innerHTML =
 
+  `<option value="-1">Morning</option>` +
 
+  [...Array(SLOTS).keys()]
 
     .map(i => `<option value="${i}">${timeLabel(i)}</option>`)
-
-
 
     .join('');
 
@@ -3217,3 +3303,4 @@ renderCalendar();
 
 
 </html>
+
