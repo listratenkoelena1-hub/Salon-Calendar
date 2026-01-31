@@ -41,19 +41,12 @@ body {
 
 
 header {
-
-
-
-display:flex;
-
-align-items:center;
-
-justify-content:space-between;
-
-margin-bottom:15px;
-
-
-
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:15px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 
@@ -473,9 +466,8 @@ th.time {
 
 
 #calendar-container {
-
-  display: block;
-
+  width: 100vw;
+  overflow: hidden;
 }
 
 
@@ -2460,4 +2452,3 @@ renderCalendar();
 
 
 </html>
-
