@@ -47,6 +47,8 @@ header {
   margin-bottom:15px;
   width: 100%;
   box-sizing: border-box;
+  position: relative;
+  z-index: 2000;
 }
 
 
@@ -63,18 +65,13 @@ gap:10px;
 
 }
 
-
-
 .header-right {
-
-display:flex;
-
-gap:10px;
-
-
+  display: flex;
+  gap: 10px;
+  position: relative;
+z-index: 3001;
 
 }
-
 
 
 #calendarDate {
@@ -524,6 +521,41 @@ th.time {
   font-weight: 600;
   white-space: nowrap;
 }
+
+.menu-btn {
+  font-size: 22px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  background: #eee;
+  color: #555;
+  cursor: pointer;
+}
+
+.top-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.15);
+  overflow: hidden;
+  z-index: 3000;
+  min-width: 160px;
+}
+
+.top-menu div {
+  padding: 12px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.top-menu div:hover {
+  background: #f5f5f5;
+}
+
 </style>
 
 
@@ -560,21 +592,13 @@ th.time {
 
 
 <div class="header-right">
+  <button class="menu-btn" onclick="toggleMenu()">☰</button>
 
-
-
-<button onclick="openOffWork()">Off work</button>
-
-
-
-<button onclick="openSearch()">Search</button>
-
-
-
-<button onclick="openStaff()">Staff</button>
-
-
-
+  <div id="topMenu" class="top-menu hidden">
+    <div onclick="openOffWork(); closeMenu()">Off work</div>
+    <div onclick="openSearch(); closeMenu()">Search</div>
+    <div onclick="openStaff(); closeMenu()">Staff</div>
+  </div>
 </div>
 
 
@@ -1124,11 +1148,6 @@ const calendarDate=document.getElementById('calendarDate');
 
 
 calendarDate.valueAsDate=new Date();
-
-
-
-calendarDate.onchange=renderCalendar;
-
 
 
 const anyonePopup = document.getElementById('anyonePopup');
@@ -2412,6 +2431,23 @@ calendarDate.onchange = () => {
 };
 
 updateDateLabel();
+
+window.toggleMenu = () => {
+  document.getElementById('topMenu').classList.toggle('hidden');
+};
+
+window.closeMenu = () => {
+  document.getElementById('topMenu').classList.add('hidden');
+};
+
+document.addEventListener('click', e => {
+  const menu = document.getElementById('topMenu');
+  const btn = document.querySelector('.menu-btn');
+  if (!menu || menu.classList.contains('hidden')) return;
+  if (!menu.contains(e.target) && !btn.contains(e.target)) {
+    closeMenu();
+  }
+});
 
 renderCalendar();
 
