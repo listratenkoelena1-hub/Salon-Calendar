@@ -2415,7 +2415,7 @@ window.toggleMorning = () => {
 const dateLabel = document.getElementById('dateLabel');
 
 function updateDateLabel() {
-  const d = new Date(calendarDate.value);
+  const d = new Date(calendarDate.value + 'T00:00:00');
   const text = d.toLocaleDateString(undefined, {
     weekday: 'long',
     month: 'short',
