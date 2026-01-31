@@ -513,7 +513,25 @@ th.time {
   align-items: center;
   justify-content: center;
 }
+.date-wrapper {
+  position: relative;
+}
 
+#calendarDate {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+#dateLabel {
+  padding: 10px 14px;
+  border-radius: 20px;
+  background: #eee;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
 </style>
 
 
@@ -534,7 +552,10 @@ th.time {
 
 
 
-<input type="date" id="calendarDate">
+<div class="date-wrapper">
+  <div id="dateLabel"></div>
+  <input type="date" id="calendarDate">
+</div>
 
 
 
@@ -2380,7 +2401,25 @@ window.toggleMorning = () => {
 
 };
 
+const dateLabel = document.getElementById('dateLabel');
 
+function updateDateLabel() {
+  const d = new Date(calendarDate.value);
+  const text = d.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  });
+  dateLabel.textContent = text;
+}
+
+calendarDate.onchange = () => {
+  updateDateLabel();
+  renderCalendar();
+};
+
+updateDateLabel();
 
 renderCalendar();
 
