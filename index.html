@@ -2297,7 +2297,9 @@ offStaff.onchange = () => {
 
   offEnd.innerHTML = offStart.innerHTML;
 
-
+// default off-work time: 8:00 AM – 8:00 PM
+offStart.value = 0;            // 8:00 AM
+offEnd.value = SLOTS - 1;      // 8:00 PM
 
 };
 
