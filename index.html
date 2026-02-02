@@ -1164,7 +1164,9 @@ const calendarDate=document.getElementById('calendarDate');
 
 
 
-calendarDate.valueAsDate=new Date();
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+calendarDate.valueAsDate = today;
 
 
 const anyonePopup = document.getElementById('anyonePopup');
