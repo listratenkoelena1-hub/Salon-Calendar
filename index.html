@@ -814,7 +814,10 @@ th.time {
 
 </label>
 
-
+<label>
+  <input type="checkbox" id="offWeekly">
+  Repeat weekly
+</label>
 
 <div id="offTimeRange" style="display:none">
 
@@ -850,7 +853,7 @@ th.time {
 
 <button disabled id="offRemoveBtn">Remove</button>
 
-
+<button id="offRemoveWeeklyBtn" class="hidden">Remove weekly</button>
 
 <button onclick="closeOffWork()">Close</button>
 
@@ -1310,6 +1313,12 @@ let offWork = [];
 
 let editingOffWorkId = null;
 
+let editingOffWorkIsWeekly = false;
+
+let offWorkWeekly = [];
+
+let offWorkWeeklyExceptions = [];
+
 onSnapshot(collection(db, "OffWork"), s => {
 
   offWork = s.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1322,7 +1331,15 @@ onSnapshot(collection(db, "OffWork"), s => {
 
 });
 
+onSnapshot(collection(db, "OffWorkWeekly"), s => {
+  offWorkWeekly = s.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderCalendar();
+});
 
+onSnapshot(collection(db, "OffWorkWeeklyExceptions"), s => {
+  offWorkWeeklyExceptions = s.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderCalendar();
+});
 
 function renderCalendar(){
 
@@ -1428,6 +1445,21 @@ if (slot === -1) {
 
   const todayOff = offWork.filter(o => o.date === calendarDate.value);
 
+const dateObj = getLocalDateFromInput(calendarDate.value);
+const weekday = dateObj.getDay();
+
+const todayWeeklyOff = offWorkWeekly.filter(w => {
+  if (w.weekday !== weekday) return false;
+  if (getLocalDateFromInput(w.startDate) > dateObj) return false;
+
+  const hasException = offWorkWeeklyExceptions.some(ex =>
+    ex.weeklyId === w.id &&
+    ex.date === calendarDate.value
+  );
+
+  return !hasException;
+});
+
   todayOff.forEach(o => {
 
     const staffIndex = staff.findIndex(s => s.id=== o.staffId);
@@ -1506,6 +1538,28 @@ if (!o.allDay) {
   });
 
 
+todayWeeklyOff.forEach(w => {
+  const staffIndex = staff.findIndex(s => s.id === w.staffId);
+  if (staffIndex === -1) return;
+
+  if (w.allDay) {
+  document
+    .querySelectorAll(`.slot[data-staff="${staffIndex}"]`)
+    .forEach(cell => {
+      cell.style.background = '#d0d0d0';
+      cell.onclick = () => openOffWorkEdit(w, true);
+    });
+} else {
+    for (let i = w.start; i < w.end; i++) {
+      const cell = document.querySelector(
+        `.slot[data-slot="${i}"][data-staff="${staffIndex}"]`
+      );
+      if (!cell) continue;
+      cell.style.background = '#d0d0d0';
+      cell.onclick = () => openOffWorkEdit(w, true);
+    }
+  }
+});
 
   const dayAppointments = appointments.filter(
 
@@ -1932,14 +1986,34 @@ const offConflict = data.staffId !== ANYONE_ID && offWork.some(o => {
   }
 
 
-
   return false;
 
 });
 
+const dateObj2 = getLocalDateFromInput(data.date);
+const weekday2 = dateObj2.getDay();
+
+const weeklyOffConflict =
+  data.staffId !== ANYONE_ID &&
+  offWorkWeekly.some(w => {
+    if (w.staffId !== data.staffId) return false;
+    if (w.weekday !== weekday2) return false;
+    if (dateObj2 < getLocalDateFromInput(w.startDate)) return false;
+
+    const hasException = offWorkWeeklyExceptions.some(ex =>
+      ex.weeklyId === w.id &&
+      ex.date === data.date
+    );
+    if (hasException) return false;
+
+    if (w.allDay) return true;
+
+    return Math.max(w.start, data.start) <
+           Math.min(w.end, data.start + data.duration);
+  });
 
 
-if (offConflict) {
+if (offConflict || weeklyOffConflict) {
 
   document
 
@@ -2235,6 +2309,8 @@ const offStaff = document.getElementById('offStaff');
 
 const offAllDay = document.getElementById('offAllDay');
 
+const offWeekly = document.getElementById('offWeekly');
+
 const offTimeRange = document.getElementById('offTimeRange');
 
 const offStart = document.getElementById('offStart');
@@ -2246,6 +2322,23 @@ const offSaveBtn = document.getElementById('offSaveBtn');
 
 
 const offRemoveBtn = document.getElementById('offRemoveBtn');
+
+const offRemoveWeeklyBtn = document.getElementById('offRemoveWeeklyBtn');
+
+offRemoveWeeklyBtn.onclick = async () => {
+  if (!editingOffWorkId) return;
+
+  await deleteDoc(doc(db, "OffWorkWeekly", editingOffWorkId));
+
+  const q = query(
+    collection(db, "OffWorkWeeklyExceptions"),
+    where("weeklyId", "==", editingOffWorkId)
+  );
+  const snap = await getDocs(q);
+  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+
+  closeOffWork();
+};
 
 offStart.onchange = () => {
   offSaveBtn.disabled = false;
@@ -2280,9 +2373,16 @@ window.openOffWork = () => {
 
 
   offAllDay.checked = true;
+
+offWeekly.checked = false;
+
+offWeekly.disabled = false;
+
 offTimeRange.style.display = 'none';
 
 editingOffWorkId = null;
+editingOffWorkIsWeekly = false;
+
 offSaveBtn.disabled = true;
 
   const exists = offWork.some(o =>
@@ -2329,12 +2429,23 @@ offEnd.value = SLOTS - 1;      // 8:00 PM
 
 };
 
-function openOffWorkEdit(record) {
+function openOffWorkEdit(record, isWeekly = false) {
+
+editingOffWorkIsWeekly = isWeekly;
+
+offWeekly.checked = isWeekly;
+
+offWeekly.disabled = true;
+
+offRemoveBtn.textContent = isWeekly ? "Remove this day" : "Remove";
+
+editingOffWorkIsWeekly = isWeekly;
+
   editingOffWorkId = record.id;
 
   offWorkModal.classList.remove('hidden');
 
-  offDate.value = record.date;
+  offDate.value = isWeekly ? calendarDate.value : record.date;
 
   offStaff.innerHTML = staff
     .filter(s => s.id !== ANYONE_ID)
@@ -2359,16 +2470,17 @@ function openOffWorkEdit(record) {
     offEnd.value = record.end;
   }
 
-  offSaveBtn.disabled = false;
+  offSaveBtn.disabled = isWeekly;
   offRemoveBtn.disabled = false;
+
+offRemoveBtn.disabled = false;
+offRemoveWeeklyBtn.classList.toggle('hidden', !isWeekly);
 }
 
 window.closeOffWork = () => {
-
   offWorkModal.classList.add('hidden');
-
-
-
+  editingOffWorkId = null;
+  editingOffWorkIsWeekly = false;
 };
 
 
@@ -2400,7 +2512,21 @@ window.saveOffWork = async () => {
 
   };
 
+if (offWeekly.checked) {
+  const d = getLocalDateFromInput(offDate.value);
 
+  await addDoc(collection(db, "OffWorkWeekly"), {
+    staffId: offStaff.value,
+    weekday: d.getDay(),
+    allDay: offAllDay.checked,
+    start: offAllDay.checked ? null : +offStart.value,
+    end: offAllDay.checked ? null : +offEnd.value,
+    startDate: offDate.value
+  });
+
+  closeOffWork();
+  return;
+}
 
 if (!data.allDay && data.end <= data.start) {
 
@@ -2435,9 +2561,19 @@ offSaveBtn.onclick = saveOffWork;
 window.removeOffWork = async () => {
   if (!editingOffWorkId) return;
 
+  // WEEKLY → remove this day (exception)
+ if (editingOffWorkIsWeekly) {
+    await addDoc(collection(db, "OffWorkWeeklyExceptions"), {
+      weeklyId: editingOffWorkId,
+      date: calendarDate.value
+    });
+    closeOffWork();
+    return;
+  }
+
+  // SINGLE off
   await deleteDoc(doc(db, "OffWork", editingOffWorkId));
   editingOffWorkId = null;
-
   closeOffWork();
 };
 
