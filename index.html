@@ -1163,10 +1163,8 @@ const calendar=document.getElementById('calendar');
 const calendarDate=document.getElementById('calendarDate');
 
 
-
 const today = new Date();
-today.setHours(0, 0, 0, 0);
-calendarDate.valueAsDate = today;
+calendarDate.value = today.toISOString().slice(0, 10);
 
 
 const anyonePopup = document.getElementById('anyonePopup');
@@ -1189,7 +1187,7 @@ function highlightCurrentTimeRow() {
     .querySelectorAll('.current-time-row')
     .forEach(r => r.classList.remove('current-time-row'));
 
-  const selected = new Date(calendarDate.value);
+  const selected = getLocalDateFromInput(calendarDate.value);
   const now = new Date();
 
   // только если выбран сегодняшний день
@@ -1227,7 +1225,10 @@ let morningExpanded = false;
 
 const ANYONE_ID="anyone";
 
-
+function getLocalDateFromInput(value) {
+  const [y, m, d] = value.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
 
 function timeLabel(i){
 
@@ -2468,7 +2469,7 @@ window.toggleMorning = () => {
 const dateLabel = document.getElementById('dateLabel');
 
 function updateDateLabel() {
-  const d = new Date(calendarDate.value);
+  const d = getLocalDateFromInput(calendarDate.value);
   const today = new Date();
 
   const isToday =
