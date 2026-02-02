@@ -1308,7 +1308,7 @@ renderCalendar();
 
 let offWork = [];
 
-
+let editingOffWorkId = null;
 
 onSnapshot(collection(db, "OffWork"), s => {
 
@@ -1446,14 +1446,7 @@ if (slot === -1) {
 
           cell.style.background = '#e0e0e0';
 
-          cell.onclick = () =>
-
-  document
-
- .getElementById('offWorkConflictModal')
-
-    .classList.remove('hidden');
-
+          cell.onclick = () => openOffWorkEdit(o);
 
 
         });
@@ -1480,13 +1473,7 @@ if (!o.allDay) {
 
       cell.style.background = '#e0e0e0';
 
-      cell.onclick = () =>
-
-        document
-
-          .getElementById('offWorkConflictModal')
-
-          .classList.remove('hidden');
+      cell.onclick = () => openOffWorkEdit(o);
 
     }
 
@@ -1506,13 +1493,7 @@ if (!o.allDay) {
 
       cell.style.background = '#e0e0e0';
 
-      cell.onclick = () =>
-
-        document
-
-          .getElementById('offWorkConflictModal')
-
-          .classList.remove('hidden');
+      cell.onclick = () => openOffWorkEdit(o);
 
     }
 
@@ -2266,7 +2247,13 @@ const offSaveBtn = document.getElementById('offSaveBtn');
 
 const offRemoveBtn = document.getElementById('offRemoveBtn');
 
+offStart.onchange = () => {
+  offSaveBtn.disabled = false;
+};
 
+offEnd.onchange = () => {
+  offSaveBtn.disabled = false;
+};
 
 window.openOffWork = () => {
 
@@ -2293,14 +2280,10 @@ window.openOffWork = () => {
 
 
   offAllDay.checked = true;
+offTimeRange.style.display = 'none';
 
-
-
-  offTimeRange.style.display = 'none';
-
-
-
-  offSaveBtn.disabled = false;
+editingOffWorkId = null;
+offSaveBtn.disabled = true;
 
   const exists = offWork.some(o =>
 
@@ -2319,22 +2302,14 @@ offRemoveBtn.disabled = !exists;
 
 
 offStaff.onchange = () => {
-
   const exists = offWork.some(o =>
-
     o.date === offDate.value &&
-
     o.staffId === offStaff.value
-
   );
 
   offRemoveBtn.disabled = !exists;
-
-
-
+  offSaveBtn.disabled = false;
 };
-
-
 
   offStart.innerHTML =
 
@@ -2354,7 +2329,39 @@ offEnd.value = SLOTS - 1;      // 8:00 PM
 
 };
 
+function openOffWorkEdit(record) {
+  editingOffWorkId = record.id;
 
+  offWorkModal.classList.remove('hidden');
+
+  offDate.value = record.date;
+
+  offStaff.innerHTML = staff
+    .filter(s => s.id !== ANYONE_ID)
+    .map(s => `<option value="${s.id}">${s.name}</option>`)
+    .join('');
+
+  offStaff.value = record.staffId;
+
+  offAllDay.checked = record.allDay;
+
+  offTimeRange.style.display = record.allDay ? 'none' : 'block';
+
+  offStart.innerHTML =
+    [...Array(SLOTS).keys()]
+      .map(i => `<option value="${i}">${timeLabel(i)}</option>`)
+      .join('');
+
+  offEnd.innerHTML = offStart.innerHTML;
+
+  if (!record.allDay) {
+    offStart.value = record.start;
+    offEnd.value = record.end;
+  }
+
+  offSaveBtn.disabled = false;
+  offRemoveBtn.disabled = false;
+}
 
 window.closeOffWork = () => {
 
@@ -2367,11 +2374,8 @@ window.closeOffWork = () => {
 
 
 offAllDay.onchange = () => {
-
   offTimeRange.style.display = offAllDay.checked ? 'none' : 'block';
-
-
-
+  offSaveBtn.disabled = false;
 };
 
 
@@ -2408,9 +2412,13 @@ if (!data.allDay && data.end <= data.start) {
 
 
 
+  if (editingOffWorkId) {
+  await updateDoc(doc(db, "OffWork", editingOffWorkId), data);
+} else {
   await addDoc(collection(db, "OffWork"), data);
+}
 
-
+editingOffWorkId = null;
 
   closeOffWork();
 
@@ -2425,31 +2433,12 @@ offSaveBtn.onclick = saveOffWork;
 
 
 window.removeOffWork = async () => {
+  if (!editingOffWorkId) return;
 
-  const record = offWork.find(o =>
-
-    o.date === offDate.value &&
-
-    o.staffId === offStaff.value
-
-
-
-  );
-
-
-
-  if (!record) return;
-
-
-
-  await deleteDoc(doc(db, "OffWork", record.id));
-
-
+  await deleteDoc(doc(db, "OffWork", editingOffWorkId));
+  editingOffWorkId = null;
 
   closeOffWork();
-
-
-
 };
 
 
