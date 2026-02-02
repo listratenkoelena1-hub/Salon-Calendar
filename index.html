@@ -560,6 +560,19 @@ th.time {
   outline: 1.5px solid rgba(255, 0, 0, 0.35);
   outline-offset: 2px;
 }
+  .current-time-row td,
+.current-time-row th {
+  border-top: 1px solid rgba(255, 0, 0, 0.35);
+  border-bottom: 1px solid rgba(255, 0, 0, 0.35);
+}
+
+.current-time-row td:first-child {
+  border-left: 1px solid rgba(255, 0, 0, 0.35);
+}
+
+.current-time-row td:last-child {
+  border-right: 1px solid rgba(255, 0, 0, 0.35);
+}
 </style>
 
 
@@ -1168,7 +1181,39 @@ const END_MINUTES = 20 * 60; // 8:00 PM
 
 const SLOT_MINUTES = 15;
 
+function highlightCurrentTimeRow() {
+  // убрать старую подсветку
+  document
+    .querySelectorAll('.current-time-row')
+    .forEach(r => r.classList.remove('current-time-row'));
 
+  const selected = new Date(calendarDate.value);
+  const now = new Date();
+
+  // только если выбран сегодняшний день
+  if (
+    selected.getFullYear() !== now.getFullYear() ||
+    selected.getMonth() !== now.getMonth() ||
+    selected.getDate() !== now.getDate()
+  ) return;
+
+  const minutesNow = now.getHours() * 60 + now.getMinutes();
+
+  if (minutesNow < START_MINUTES || minutesNow > END_MINUTES) return;
+
+  const slotIndex = Math.floor(
+    (minutesNow - START_MINUTES) / SLOT_MINUTES
+  );
+
+  const cell = document.querySelector(
+    `.slot[data-slot="${slotIndex}"]`
+  );
+
+  if (!cell) return;
+
+  const row = cell.parentElement;
+  if (row) row.classList.add('current-time-row');
+}
 
 const SLOTS = Math.floor((END_MINUTES - START_MINUTES) / SLOT_MINUTES) + 1;
 
@@ -1634,7 +1679,7 @@ dayAppointments
 
   });
 
-
+highlightCurrentTimeRow();
 
 }
 
@@ -2467,7 +2512,9 @@ document.addEventListener('click', e => {
 
 renderCalendar();
 
-
+setInterval(() => {
+  highlightCurrentTimeRow();
+}, 15 * 60 * 1000);
 
 </script>
 
