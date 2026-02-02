@@ -556,7 +556,10 @@ th.time {
 .top-menu div:hover {
   background: #f5f5f5;
 }
-
+.date-today {
+  outline: 1.5px solid rgba(255, 0, 0, 0.35);
+  outline-offset: 2px;
+}
 </style>
 
 
@@ -2418,14 +2421,24 @@ window.toggleMorning = () => {
 const dateLabel = document.getElementById('dateLabel');
 
 function updateDateLabel() {
-  const d = new Date(calendarDate.value + 'T00:00:00');
+  const d = new Date(calendarDate.value);
+  const today = new Date();
+
+  const isToday =
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate();
+
   const text = d.toLocaleDateString(undefined, {
     weekday: 'long',
     month: 'short',
     day: 'numeric',
     year: 'numeric'
   });
+
   dateLabel.textContent = text;
+
+  dateLabel.classList.toggle('date-today', isToday);
 }
 
 calendarDate.onchange = () => {
