@@ -1432,7 +1432,14 @@ if (slot === -1) {
 
 
 
-  c.onclick = () => openAddFromCell(c);
+  c.onclick = () => {
+  if (c.dataset.weeklyOff === '1') {
+    openOffWork();
+    return;
+  }
+  openAddFromCell(c);
+};
+
 
 });
 
@@ -1458,6 +1465,8 @@ weeklyOff
         .forEach(cell => {
           if (!cell.classList.contains('busy')) {
             cell.style.background = '#e0e0e0';
+            cell.dataset.weeklyOff = '1';
+
           }
         });
       return;
@@ -1469,6 +1478,8 @@ weeklyOff
       );
       if (cell && !cell.classList.contains('busy')) {
         cell.style.background = '#e0e0e0';
+        cell.dataset.weeklyOff = '1';
+
       }
     }
   });
@@ -1490,7 +1501,7 @@ weeklyOff
         .forEach(cell => {
 
           cell.style.background = '#e0e0e0';
-
+cell.dataset.weeklyOff = '1';
           cell.onclick = () => openOffWorkEdit(o);
 
 
