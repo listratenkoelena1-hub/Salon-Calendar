@@ -1309,6 +1309,14 @@ renderCalendar();
 let offWork = [];
 
 let editingOffWorkId = null;
+// ===== WEEKLY OFF =====
+let weeklyOff = [];
+
+onSnapshot(collection(db, "WeeklyOff"), s => {
+  weeklyOff = s.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(w => w.enabled !== false);
+});
 
 onSnapshot(collection(db, "OffWork"), s => {
 
