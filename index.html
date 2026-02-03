@@ -806,6 +806,10 @@ th.time {
 
 <input type="checkbox" id="offAllDay" checked>
 
+<label>
+  <input type="checkbox" id="offWeekly">
+  Weekly
+</label>
 
 
  All day
@@ -2275,6 +2279,7 @@ const offDate = document.getElementById('offDate');
 const offStaff = document.getElementById('offStaff');
 
 const offAllDay = document.getElementById('offAllDay');
+const offWeekly = document.getElementById('offWeekly');
 
 const offTimeRange = document.getElementById('offTimeRange');
 
@@ -2321,6 +2326,8 @@ window.openOffWork = () => {
 
 
   offAllDay.checked = true;
+  offWeekly.checked = false;
+
 offTimeRange.style.display = 'none';
 
 editingOffWorkId = null;
@@ -2423,6 +2430,25 @@ offAllDay.onchange = () => {
 
 window.saveOffWork = async () => {
 
+// ===== WEEKLY OFF SAVE (TEMP FOR TEST) =====
+if (offWeekly.checked) {
+  const selectedDate = getLocalDateFromInput(offDate.value);
+  const weekday = selectedDate.getDay();
+
+  const weeklyData = {
+    staffId: offStaff.value,
+    weekday: weekday,
+    allDay: offAllDay.checked,
+    start: offAllDay.checked ? null : +offStart.value,
+    end: offAllDay.checked ? null : +offEnd.value,
+    enabled: true
+  };
+
+  await addDoc(collection(db, "WeeklyOff"), weeklyData);
+
+  closeOffWork();
+  return;
+}
 
 
   const data = {
