@@ -2320,9 +2320,35 @@ offEnd.onchange = () => {
 };
 
 window.openOffWork = () => {
-// TEMP: show weekly remove buttons for test
-removeWeeklyDayBtn.classList.remove('hidden');
-removeWeeklyAllBtn.classList.remove('hidden');
+  // RESET (default state)
+  offSaveBtn.style.display = '';
+  offStaff.disabled = false;
+  offAllDay.disabled = false;
+  offWeekly.disabled = false;
+  offStart.disabled = false;
+  offEnd.disabled = false;
+
+  removeWeeklyDayBtn.classList.add('hidden');
+  removeWeeklyAllBtn.classList.add('hidden');
+
+  // WEEKLY READONLY MODE
+  if (event && event.target && event.target.dataset.weeklyOff === '1') {
+    offSaveBtn.style.display = 'none';
+
+    offStaff.disabled = true;
+    offAllDay.disabled = true;
+    offWeekly.disabled = true;
+    offStart.disabled = true;
+    offEnd.disabled = true;
+
+    removeWeeklyDayBtn.classList.remove('hidden');
+    removeWeeklyAllBtn.classList.remove('hidden');
+  }
+
+  offWorkModal.classList.remove('hidden');
+};
+
+
 
 
 
