@@ -1435,6 +1435,39 @@ if (slot === -1) {
 
 
   const todayOff = offWork.filter(o => o.date === calendarDate.value);
+// ===== WEEKLY OFF VISUAL =====
+const selectedDate = getLocalDateFromInput(calendarDate.value);
+const weekday = selectedDate.getDay();
+
+weeklyOff
+  .filter(w =>
+    w.weekday === weekday &&
+    w.enabled !== false
+  )
+  .forEach(w => {
+    const staffIndex = staff.findIndex(s => s.id === w.staffId);
+    if (staffIndex === -1) return;
+
+    if (w.allDay) {
+      document
+        .querySelectorAll(`.slot[data-staff="${staffIndex}"]`)
+        .forEach(cell => {
+          if (!cell.classList.contains('busy')) {
+            cell.style.background = '#e0e0e0';
+          }
+        });
+      return;
+    }
+
+    for (let i = w.start; i < w.end; i++) {
+      const cell = document.querySelector(
+        `.slot[data-slot="${i}"][data-staff="${staffIndex}"]`
+      );
+      if (cell && !cell.classList.contains('busy')) {
+        cell.style.background = '#e0e0e0';
+      }
+    }
+  });
 
   todayOff.forEach(o => {
 
