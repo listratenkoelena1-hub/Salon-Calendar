@@ -2536,6 +2536,41 @@ window.removeOffWork = async () => {
 
 
 offRemoveBtn.onclick = removeOffWork;
+removeWeeklyAllBtn.onclick = async () => {
+  const weeklyId = offWorkModal.dataset.weeklyId;
+  if (!weeklyId) return;
+
+  const ok = confirm('Delete all weekly off days?');
+  if (!ok) return;
+
+  await updateDoc(doc(db, 'WeeklyOff', weeklyId), {
+    enabled: false
+  });
+
+  closeOffWork();
+};
+
+removeWeeklyDayBtn.onclick = async () => {
+  const weeklyId = offWorkModal.dataset.weeklyId;
+  if (!weeklyId) return;
+
+  const ok = confirm('Remove this day only?');
+  if (!ok) return;
+
+  const data = {
+    date: offDate.value,
+    staffId: offStaff.value,
+    allDay: true,
+    start: null,
+    end: null,
+    weeklyException: true,
+    weeklyId: weeklyId
+  };
+
+  await addDoc(collection(db, 'OffWork'), data);
+
+  closeOffWork();
+};
 
 
 
