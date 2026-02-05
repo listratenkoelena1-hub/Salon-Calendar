@@ -822,6 +822,11 @@ th.time {
     <input type="checkbox" id="offWeekly">
     <span>Weekly Off</span>
   </label>
+  <label class="off-checkbox">
+  <input type="checkbox" id="offVacation">
+  <span>Vacation</span>
+</label>
+
 </div>
 
 
@@ -2328,6 +2333,7 @@ const offStaff = document.getElementById('offStaff');
 
 const offAllDay = document.getElementById('offAllDay');
 const offWeekly = document.getElementById('offWeekly');
+const offVacation = document.getElementById('offVacation');
 
 const offTimeRange = document.getElementById('offTimeRange');
 
@@ -2358,6 +2364,9 @@ window.openOffWork = () => {
   removeWeeklyAllBtn.classList.add('hidden');
   offWeekly.checked = false;
   offWeekly.disabled = false;
+  offVacation.checked = false;
+offVacation.disabled = false;
+
 
   offStaff.disabled = false;
   offAllDay.disabled = false;
@@ -2502,6 +2511,8 @@ window.closeOffWork = () => {
   offEnd.disabled = false;
 
   offWeekly.checked = false;
+  offVacation.checked = false;
+
 
   offSaveBtn.style.display = '';
   offRemoveBtn.style.display = '';
@@ -2517,6 +2528,21 @@ window.closeOffWork = () => {
 
 offAllDay.onchange = () => {
   offTimeRange.style.display = offAllDay.checked ? 'none' : 'block';
+  offSaveBtn.disabled = false;
+};
+offVacation.onchange = () => {
+  if (offVacation.checked) {
+    // Vacation выключает weekly
+    offWeekly.checked = false;
+    offWeekly.disabled = true;
+
+    // Vacation всегда all day
+    offAllDay.checked = true;
+    offTimeRange.style.display = 'none';
+  } else {
+    offWeekly.disabled = false;
+  }
+
   offSaveBtn.disabled = false;
 };
 
