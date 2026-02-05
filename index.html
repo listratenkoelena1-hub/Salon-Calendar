@@ -1334,6 +1334,8 @@ onSnapshot(collection(db, "WeeklyOff"), s => {
   weeklyOff = s.docs
     .map(d => ({ id: d.id, ...d.data() }))
     .filter(w => w.enabled !== false);
+    renderCalendar();
+
 });
 
 onSnapshot(collection(db, "OffWork"), s => {
@@ -1532,7 +1534,6 @@ cell.dataset.weeklyStaffId = w.staffId;
         .forEach(cell => {
 
           cell.style.background = '#e0e0e0';
-cell.dataset.weeklyOff = '1';
           cell.onclick = () => openOffWorkEdit(o);
 
 
@@ -2373,7 +2374,8 @@ window.openOffWork = () => {
 
 
   editingOffWorkId = null;
-  offSaveBtn.disabled = true;
+  offSaveBtn.disabled = false;
+
 
   const exists = offWork.some(o =>
     o.date === offDate.value &&
@@ -2595,6 +2597,7 @@ window.removeOffWork = async () => {
 
 
 offRemoveBtn.onclick = removeOffWork;
+
 removeWeeklyAllBtn.onclick = async () => {
   const weeklyId = offWorkModal.dataset.weeklyId;
   if (!weeklyId) return;
@@ -2602,12 +2605,24 @@ removeWeeklyAllBtn.onclick = async () => {
   const ok = confirm('Delete all weekly off days?');
   if (!ok) return;
 
+  // 1. Отключаем weekly правило
   await updateDoc(doc(db, 'WeeklyOff', weeklyId), {
     enabled: false
   });
 
+  // 2. Удаляем ВСЕ weeklyException, связанные с этим правилом
+  const q = query(
+    collection(db, 'OffWork'),
+    where('weeklyId', '==', weeklyId)
+  );
+  const snap = await getDocs(q);
+  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+
+  // 3. Закрываем и перерисовываем
   closeOffWork();
   renderCalendar();
+};
+
 };
 
 removeWeeklyDayBtn.onclick = async () => {
