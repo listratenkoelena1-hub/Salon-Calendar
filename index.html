@@ -1439,11 +1439,12 @@ if (slot === -1) {
 
   c.onclick = () => {
   if (c.dataset.weeklyOff === '1') {
-    openOffWork();
+    openWeeklyOffFromCell(c);
     return;
   }
   openAddFromCell(c);
 };
+
 
 
 });
@@ -1471,6 +1472,8 @@ weeklyOff
           if (!cell.classList.contains('busy')) {
             cell.style.background = '#e0e0e0';
             cell.dataset.weeklyOff = '1';
+            cell.dataset.weeklyId = w.id;
+cell.dataset.weeklyStaffId = w.staffId;
 
           }
         });
@@ -1484,6 +1487,8 @@ weeklyOff
       if (cell && !cell.classList.contains('busy')) {
         cell.style.background = '#e0e0e0';
         cell.dataset.weeklyOff = '1';
+        cell.dataset.weeklyId = w.id;
+cell.dataset.weeklyStaffId = w.staffId;
 
       }
     }
@@ -2394,6 +2399,38 @@ function openOffWorkEdit(record) {
 
   offSaveBtn.disabled = false;
   offRemoveBtn.disabled = false;
+}
+function openWeeklyOffFromCell(cell) {
+  const staffId = cell.dataset.weeklyStaffId;
+  const weeklyId = cell.dataset.weeklyId;
+
+  offWorkModal.classList.remove('hidden');
+
+  offDate.value = calendarDate.value;
+
+  offStaff.innerHTML = staff
+    .filter(s => s.id !== ANYONE_ID)
+    .map(s => `<option value="${s.id}">${s.name}</option>`)
+    .join('');
+
+  offStaff.value = staffId;
+
+  offWeekly.checked = true;
+
+  // read-only режим
+  offStaff.disabled = true;
+  offAllDay.disabled = true;
+  offWeekly.disabled = true;
+  offStart.disabled = true;
+  offEnd.disabled = true;
+  offSaveBtn.style.display = 'none';
+
+  // показать кнопки удаления weekly
+  removeWeeklyDayBtn.classList.remove('hidden');
+  removeWeeklyAllBtn.classList.remove('hidden');
+
+  // сохранить контекст
+  offWorkModal.dataset.weeklyId = weeklyId;
 }
 
 window.closeOffWork = () => {
