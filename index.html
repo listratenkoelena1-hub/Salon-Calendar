@@ -2428,6 +2428,8 @@ function openWeeklyOffFromCell(cell) {
   // показать кнопки удаления weekly
   removeWeeklyDayBtn.classList.remove('hidden');
   removeWeeklyAllBtn.classList.remove('hidden');
+  offRemoveBtn.classList.add('hidden');
+
 
   // сохранить контекст
   offWorkModal.dataset.weeklyId = weeklyId;
