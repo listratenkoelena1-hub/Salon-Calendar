@@ -1462,6 +1462,14 @@ weeklyOff
     w.enabled !== false
   )
   .forEach(w => {
+    const hasException = offWork.some(o =>
+  o.weeklyException === true &&
+  o.weeklyId === w.id &&
+  o.date === calendarDate.value
+);
+
+if (hasException) return;
+
     const staffIndex = staff.findIndex(s => s.id === w.staffId);
     if (staffIndex === -1) return;
 
@@ -2368,6 +2376,14 @@ window.openOffWork = () => {
 
 
 function openOffWorkEdit(record) {
+  // reset weekly UI
+removeWeeklyDayBtn.classList.add('hidden');
+removeWeeklyAllBtn.classList.add('hidden');
+offWeekly.checked = false;
+offWeekly.disabled = false;
+offSaveBtn.style.display = '';
+offRemoveBtn.style.display = '';
+
   editingOffWorkId = record.id;
 
   offWorkModal.classList.remove('hidden');
