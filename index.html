@@ -17,6 +17,8 @@
 
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
 
 
@@ -587,6 +589,9 @@ th.time {
 
 </style>
 
+<!-- Flatpickr (Vacation calendar) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
 
 </head>
@@ -842,12 +847,7 @@ th.time {
 
 <div id="vacationRange" style="display:none; margin-top:12px;">
   <label>Vacation dates</label>
-
-  <label>From</label>
-  <input type="date" id="vacationStart">
-
-  <label>To</label>
-  <input type="date" id="vacationEnd">
+  <input id="vacationPicker" placeholder="Select vacation period">
 </div>
 
 
@@ -2330,8 +2330,12 @@ const offAllDay = document.getElementById('offAllDay');
 const offWeekly = document.getElementById('offWeekly');
 const offVacation = document.getElementById('offVacation');
 const vacationRange = document.getElementById('vacationRange');
-const vacationStart = document.getElementById('vacationStart');
-const vacationEnd = document.getElementById('vacationEnd');
+const vacationPickerInput = document.getElementById('vacationPicker');
+
+let vacationPicker = null;
+let vacationFrom = null;
+let vacationTo = null;
+
 const offTimeRange = document.getElementById('offTimeRange');
 
 const offStart = document.getElementById('offStart');
@@ -2356,6 +2360,25 @@ offEnd.onchange = () => {
 };
 
 window.openOffWork = () => {
+  function initVacationPicker() {
+  if (vacationPicker) {
+    vacationPicker.destroy();
+  }
+
+  vacationPicker = flatpickr(vacationPickerInput, {
+    mode: "range",
+    dateFormat: "Y-m-d",
+    inline: true,
+    onChange: (selectedDates) => {
+      if (selectedDates.length === 2) {
+        vacationFrom = selectedDates[0];
+        vacationTo = selectedDates[1];
+        offSaveBtn.disabled = false;
+      }
+    }
+  });
+}
+
     // reset weekly UI (IMPORTANT)
   removeWeeklyDayBtn.classList.add('hidden');
   removeWeeklyAllBtn.classList.add('hidden');
@@ -2518,6 +2541,18 @@ window.closeOffWork = () => {
   removeWeeklyAllBtn.classList.add('hidden');
 
   offWorkModal.dataset.weeklyId = '';
+  vacationRange.style.display = 'none';
+offVacation.checked = false;
+offVacation.disabled = false;
+
+vacationFrom = null;
+vacationTo = null;
+
+if (vacationPicker) {
+  vacationPicker.destroy();
+  vacationPicker = null;
+}
+
 };
 
 
@@ -2529,33 +2564,74 @@ offAllDay.onchange = () => {
 };
 offVacation.onchange = () => {
   if (offVacation.checked) {
-    // выключаем weekly
+    // выключаем остальные режимы
     offWeekly.checked = false;
     offWeekly.disabled = true;
 
-    // выключаем all day (но оставляем true)
     offAllDay.checked = true;
     offAllDay.disabled = true;
 
-    // скрываем время
     offTimeRange.style.display = 'none';
 
-    // показываем календарь vacation
     vacationRange.style.display = 'block';
+    initVacationPicker();
+
+    vacationFrom = null;
+    vacationTo = null;
+
+    offSaveBtn.disabled = true;
   } else {
     offWeekly.disabled = false;
     offAllDay.disabled = false;
 
     vacationRange.style.display = 'none';
-  }
 
-  offSaveBtn.disabled = false;
+    if (vacationPicker) {
+      vacationPicker.destroy();
+      vacationPicker = null;
+    }
+  }
 };
 
 
 
 
+
 window.saveOffWork = async () => {
+  // ===== VACATION SAVE =====
+if (offVacation.checked) {
+  if (!vacationFrom || !vacationTo) {
+    alert('Select vacation dates');
+    return;
+  }
+
+  const start = new Date(vacationFrom);
+  const end = new Date(vacationTo);
+
+  const days = [];
+  let d = new Date(start);
+
+  while (d <= end) {
+    days.push(new Date(d));
+    d.setDate(d.getDate() + 1);
+  }
+
+  await Promise.all(days.map(day => {
+    const dateStr = day.toISOString().slice(0, 10);
+
+    return addDoc(collection(db, 'OffWork'), {
+      date: dateStr,
+      staffId: offStaff.value,
+      allDay: true,
+      vacation: true
+    });
+  }));
+
+  closeOffWork();
+  renderCalendar();
+  return;
+}
+
 
 // ===== WEEKLY OFF SAVE (TEMP FOR TEST) =====
 if (offWeekly.checked) {
