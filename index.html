@@ -1451,7 +1451,11 @@ if (slot === -1) {
 
 
 
-  const todayOff = offWork.filter(o => o.date === calendarDate.value);
+  const todayOff = offWork.filter(o =>
+  o.date === calendarDate.value &&
+  o.weeklyException !== true
+);
+
 // ===== WEEKLY OFF VISUAL =====
 const selectedDate = getLocalDateFromInput(calendarDate.value);
 const weekday = selectedDate.getDay();
@@ -2331,6 +2335,20 @@ offEnd.onchange = () => {
 };
 
 window.openOffWork = () => {
+    // reset weekly UI (IMPORTANT)
+  removeWeeklyDayBtn.classList.add('hidden');
+  removeWeeklyAllBtn.classList.add('hidden');
+  offWeekly.checked = false;
+  offWeekly.disabled = false;
+
+  offStaff.disabled = false;
+  offAllDay.disabled = false;
+  offStart.disabled = false;
+  offEnd.disabled = false;
+
+  offSaveBtn.style.display = '';
+  offRemoveBtn.style.display = '';
+
   offWorkModal.classList.remove('hidden');
 
   offDate.value = calendarDate.value;
