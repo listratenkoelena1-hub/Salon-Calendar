@@ -571,6 +571,20 @@ th.time {
 .current-time-row td:last-child {
   border-right: 1px solid rgba(255, 0, 0, 0.35);
 }
+  .off-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 24px; /* расстояние между All day и Weekly */
+  margin-top: 8px;
+}
+
+.off-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
 </style>
 
 
@@ -798,23 +812,18 @@ th.time {
 
 
 
-<label>
+<div class="off-checkbox-row">
+  <label class="off-checkbox">
+    <input type="checkbox" id="offAllDay" checked>
+    <span>All day</span>
+  </label>
 
+  <label class="off-checkbox">
+    <input type="checkbox" id="offWeekly">
+    <span>Weekly Off</span>
+  </label>
+</div>
 
-
-<input type="checkbox" id="offAllDay" checked>
-
-<label>
-  <input type="checkbox" id="offWeekly">
-  Weekly
-</label>
-
-
- All day
-
-
-
-</label>
 
 
 
@@ -2360,6 +2369,8 @@ window.openOffWork = () => {
 
   offAllDay.checked = true;
   offTimeRange.style.display = 'none';
+  offSaveBtn.disabled = false;
+
 
   editingOffWorkId = null;
   offSaveBtn.disabled = true;
