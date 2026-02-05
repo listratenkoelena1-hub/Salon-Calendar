@@ -833,6 +833,15 @@ th.time {
 
 
 <div id="offTimeRange" style="display:none">
+<div id="vacationRange" style="display:none; margin-top:12px;">
+  <label>Vacation dates</label>
+
+  <label>From</label>
+  <input type="date" id="vacationStart">
+
+  <label>To</label>
+  <input type="date" id="vacationEnd">
+</div>
 
 
 
@@ -2334,7 +2343,9 @@ const offStaff = document.getElementById('offStaff');
 const offAllDay = document.getElementById('offAllDay');
 const offWeekly = document.getElementById('offWeekly');
 const offVacation = document.getElementById('offVacation');
-
+const vacationRange = document.getElementById('vacationRange');
+const vacationStart = document.getElementById('vacationStart');
+const vacationEnd = document.getElementById('vacationEnd');
 const offTimeRange = document.getElementById('offTimeRange');
 
 const offStart = document.getElementById('offStart');
@@ -2532,19 +2543,29 @@ offAllDay.onchange = () => {
 };
 offVacation.onchange = () => {
   if (offVacation.checked) {
-    // Vacation выключает weekly
+    // выключаем weekly
     offWeekly.checked = false;
     offWeekly.disabled = true;
 
-    // Vacation всегда all day
+    // выключаем all day (но оставляем true)
     offAllDay.checked = true;
+    offAllDay.disabled = true;
+
+    // скрываем время
     offTimeRange.style.display = 'none';
+
+    // показываем календарь vacation
+    vacationRange.style.display = 'block';
   } else {
     offWeekly.disabled = false;
+    offAllDay.disabled = false;
+
+    vacationRange.style.display = 'none';
   }
 
   offSaveBtn.disabled = false;
 };
+
 
 
 
