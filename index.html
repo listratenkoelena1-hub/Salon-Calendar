@@ -2453,12 +2453,26 @@ function openWeeklyOffFromCell(cell) {
 }
 
 window.closeOffWork = () => {
-
   offWorkModal.classList.add('hidden');
 
+  // reset weekly UI
+  offStaff.disabled = false;
+  offAllDay.disabled = false;
+  offWeekly.disabled = false;
+  offStart.disabled = false;
+  offEnd.disabled = false;
 
+  offWeekly.checked = false;
 
+  offSaveBtn.style.display = '';
+  offRemoveBtn.style.display = '';
+
+  removeWeeklyDayBtn.classList.add('hidden');
+  removeWeeklyAllBtn.classList.add('hidden');
+
+  offWorkModal.dataset.weeklyId = '';
 };
+
 
 
 
@@ -2564,6 +2578,7 @@ removeWeeklyAllBtn.onclick = async () => {
   });
 
   closeOffWork();
+  renderCalendar();
 };
 
 removeWeeklyDayBtn.onclick = async () => {
@@ -2586,6 +2601,7 @@ removeWeeklyDayBtn.onclick = async () => {
   await addDoc(collection(db, 'OffWork'), data);
 
   closeOffWork();
+  renderCalendar();
 };
 
 
