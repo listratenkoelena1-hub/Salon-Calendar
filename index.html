@@ -861,13 +861,14 @@ th.time {
 
 <button disabled id="offRemoveBtn">Remove</button>
 
-<button id="removeWeeklyDayBtn">
+<button id="removeWeeklyDayBtn" class="hidden">
   Remove this day
 </button>
 
-<button id="removeWeeklyAllBtn">
+<button id="removeWeeklyAllBtn" class="hidden">
   Remove weekly
 </button>
+
 
 
 <button onclick="closeOffWork()">Close</button>
@@ -1425,6 +1426,10 @@ document.querySelectorAll('.slot').forEach(c => {
   c.style.background = '';
 
   c.classList.remove('busy');
+  delete c.dataset.weeklyOff;
+delete c.dataset.weeklyId;
+delete c.dataset.weeklyStaffId;
+
 
   const slot = +c.dataset.slot;
 
@@ -2335,6 +2340,9 @@ const offSaveBtn = document.getElementById('offSaveBtn');
 
 
 const offRemoveBtn = document.getElementById('offRemoveBtn');
+  const removeWeeklyDayBtn = document.getElementById('removeWeeklyDayBtn');
+const removeWeeklyAllBtn = document.getElementById('removeWeeklyAllBtn');
+
 
 offStart.onchange = () => {
   offSaveBtn.disabled = false;
@@ -2703,7 +2711,6 @@ document.addEventListener('click', e => {
   }
 });
 
-renderCalendar();
 
 setInterval(() => {
   highlightCurrentTimeRow();
