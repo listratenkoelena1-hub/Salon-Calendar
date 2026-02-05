@@ -2335,6 +2335,24 @@ const vacationPickerInput = document.getElementById('vacationPicker');
 let vacationPicker = null;
 let vacationFrom = null;
 let vacationTo = null;
+function initVacationPicker() {
+  if (vacationPicker) {
+    vacationPicker.destroy();
+  }
+
+  vacationPicker = flatpickr(vacationPickerInput, {
+    mode: "range",
+    dateFormat: "Y-m-d",
+    inline: true,
+    onChange: (selectedDates) => {
+      if (selectedDates.length === 2) {
+        vacationFrom = selectedDates[0];
+        vacationTo = selectedDates[1];
+        offSaveBtn.disabled = false;
+      }
+    }
+  });
+}
 
 const offTimeRange = document.getElementById('offTimeRange');
 
@@ -2360,24 +2378,7 @@ offEnd.onchange = () => {
 };
 
 window.openOffWork = () => {
-  function initVacationPicker() {
-  if (vacationPicker) {
-    vacationPicker.destroy();
-  }
-
-  vacationPicker = flatpickr(vacationPickerInput, {
-    mode: "range",
-    dateFormat: "Y-m-d",
-    inline: true,
-    onChange: (selectedDates) => {
-      if (selectedDates.length === 2) {
-        vacationFrom = selectedDates[0];
-        vacationTo = selectedDates[1];
-        offSaveBtn.disabled = false;
-      }
-    }
-  });
-}
+  
 
     // reset weekly UI (IMPORTANT)
   removeWeeklyDayBtn.classList.add('hidden');
