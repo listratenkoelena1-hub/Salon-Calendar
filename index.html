@@ -869,6 +869,9 @@ th.time {
   Remove weekly
 </button>
 
+<button id="removeVacationBtn" class="hidden">
+  Remove vacation
+</button>
 
 
 <button onclick="closeOffWork()">Close</button>
@@ -2335,7 +2338,7 @@ const vacationPickerInput = document.getElementById('vacationPicker');
 let vacationPicker = null;
 let vacationFrom = null;
 let vacationTo = null;
-  let currentVacationId = null;
+  
 
 function initVacationPicker() {
   if (vacationPicker) {
@@ -2369,6 +2372,7 @@ const offSaveBtn = document.getElementById('offSaveBtn');
 const offRemoveBtn = document.getElementById('offRemoveBtn');
   const removeWeeklyDayBtn = document.getElementById('removeWeeklyDayBtn');
 const removeWeeklyAllBtn = document.getElementById('removeWeeklyAllBtn');
+const removeVacationBtn = document.getElementById('removeVacationBtn');
 
 
 offStart.onchange = () => {
@@ -2414,7 +2418,7 @@ offVacation.disabled = false;
 
 
   editingOffWorkId = null;
-  offSaveBtn.disabled = false;
+  
 
 
   const exists = offWork.some(o =>
@@ -2472,10 +2476,13 @@ function openOffWorkEdit(record) {
 
   offSaveBtn.style.display = 'none';
   offRemoveBtn.style.display = 'none';
+    offRemoveBtn.disabled = true;
+
   removeWeeklyDayBtn.classList.add('hidden');
   removeWeeklyAllBtn.classList.add('hidden');
-
+removeVacationBtn.classList.remove('hidden');
   offWorkModal.dataset.vacationId = record.vacationId;
+
 
   return;
 }
@@ -2576,6 +2583,8 @@ window.closeOffWork = () => {
 
   removeWeeklyDayBtn.classList.add('hidden');
   removeWeeklyAllBtn.classList.add('hidden');
+removeVacationBtn.classList.add('hidden');
+offWorkModal.dataset.vacationId = '';
 
   offWorkModal.dataset.weeklyId = '';
   vacationRange.style.display = 'none';
@@ -2584,7 +2593,7 @@ offVacation.disabled = false;
 
 vacationFrom = null;
 vacationTo = null;
-currentVacationId = null;
+
 if (vacationPicker) {
   vacationPicker.destroy();
   vacationPicker = null;
@@ -2640,7 +2649,7 @@ offVacation.onchange = () => {
 window.saveOffWork = async () => {
   // ===== VACATION SAVE =====
 if (offVacation.checked) {
-  currentVacationId = crypto.randomUUID();
+  const vacationId = crypto.randomUUID();
   if (!vacationFrom || !vacationTo) {
     alert('Select vacation dates');
     return;
@@ -2671,7 +2680,8 @@ if (offVacation.checked) {
   staffId: offStaff.value,
   allDay: true,
   vacation: true,
-  vacationId: currentVacationId
+  vacationId: vacationId
+
 });
 
 
@@ -2808,6 +2818,24 @@ removeWeeklyDayBtn.onclick = async () => {
   };
 
   await addDoc(collection(db, 'OffWork'), data);
+
+  closeOffWork();
+  renderCalendar();
+};
+removeVacationBtn.onclick = async () => {
+  const vacationId = offWorkModal.dataset.vacationId;
+  if (!vacationId) return;
+
+  const ok = confirm('Remove entire vacation?');
+  if (!ok) return;
+
+  const q = query(
+    collection(db, 'OffWork'),
+    where('vacationId', '==', vacationId)
+  );
+
+  const snap = await getDocs(q);
+  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
 
   closeOffWork();
   renderCalendar();
