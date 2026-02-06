@@ -1472,8 +1472,10 @@ if (slot === -1) {
 
   const todayOff = offWork.filter(o =>
   o.date === calendarDate.value &&
-  o.weeklyException !== true
+  o.weeklyException !== true &&
+  (!o.vacation || o.vacation === true)
 );
+
 
 // ===== WEEKLY OFF VISUAL =====
 const selectedDate = getLocalDateFromInput(calendarDate.value);
@@ -1542,7 +1544,11 @@ cell.dataset.weeklyStaffId = w.staffId;
         .forEach(cell => {
 
           cell.style.background = '#e0e0e0';
-          cell.onclick = () => openOffWorkEdit(o);
+          cell.onclick = () => {
+  if (!offWork.find(x => x.id === o.id)) return;
+  openOffWorkEdit(o);
+};
+
 
 
         });
@@ -2838,7 +2844,6 @@ removeVacationBtn.onclick = async () => {
   await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
 
   closeOffWork();
-  renderCalendar();
 };
 
 
