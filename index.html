@@ -2335,6 +2335,8 @@ const vacationPickerInput = document.getElementById('vacationPicker');
 let vacationPicker = null;
 let vacationFrom = null;
 let vacationTo = null;
+  let currentVacationId = null;
+
 function initVacationPicker() {
   if (vacationPicker) {
     vacationPicker.destroy();
@@ -2445,6 +2447,39 @@ offVacation.disabled = false;
 
 
 function openOffWorkEdit(record) {
+  if (record.vacation) {
+  offWorkModal.classList.remove('hidden');
+
+  offDate.value = record.date;
+
+  offStaff.innerHTML = staff
+    .filter(s => s.id !== ANYONE_ID)
+    .map(s => `<option value="${s.id}">${s.name}</option>`)
+    .join('');
+  offStaff.value = record.staffId;
+
+  offVacation.checked = true;
+
+  offWeekly.disabled = true;
+  offAllDay.disabled = true;
+  offVacation.disabled = true;
+  offStaff.disabled = true;
+
+  offTimeRange.style.display = 'none';
+  vacationRange.style.display = 'block';
+
+  initVacationPicker();
+
+  offSaveBtn.style.display = 'none';
+  offRemoveBtn.style.display = 'none';
+  removeWeeklyDayBtn.classList.add('hidden');
+  removeWeeklyAllBtn.classList.add('hidden');
+
+  offWorkModal.dataset.vacationId = record.vacationId;
+
+  return;
+}
+
   // reset weekly UI
 removeWeeklyDayBtn.classList.add('hidden');
 removeWeeklyAllBtn.classList.add('hidden');
@@ -2485,6 +2520,7 @@ offRemoveBtn.style.display = '';
   offSaveBtn.disabled = false;
   offRemoveBtn.disabled = false;
 }
+  
 function openWeeklyOffFromCell(cell) {
   const staffId = cell.dataset.weeklyStaffId;
   const weeklyId = cell.dataset.weeklyId;
@@ -2548,7 +2584,7 @@ offVacation.disabled = false;
 
 vacationFrom = null;
 vacationTo = null;
-
+currentVacationId = null;
 if (vacationPicker) {
   vacationPicker.destroy();
   vacationPicker = null;
@@ -2565,9 +2601,12 @@ offAllDay.onchange = () => {
 };
 offVacation.onchange = () => {
   if (offVacation.checked) {
+   
+
     // выключаем остальные режимы
     offWeekly.checked = false;
     offWeekly.disabled = true;
+
 
     offAllDay.checked = true;
     offAllDay.disabled = true;
@@ -2601,6 +2640,7 @@ offVacation.onchange = () => {
 window.saveOffWork = async () => {
   // ===== VACATION SAVE =====
 if (offVacation.checked) {
+  currentVacationId = crypto.randomUUID();
   if (!vacationFrom || !vacationTo) {
     alert('Select vacation dates');
     return;
@@ -2618,14 +2658,23 @@ if (offVacation.checked) {
   }
 
   await Promise.all(days.map(day => {
-    const dateStr = day.toISOString().slice(0, 10);
+    const dateStr =
+  day.getFullYear() +
+  '-' +
+  String(day.getMonth() + 1).padStart(2, '0') +
+  '-' +
+  String(day.getDate()).padStart(2, '0');
+
 
     return addDoc(collection(db, 'OffWork'), {
-      date: dateStr,
-      staffId: offStaff.value,
-      allDay: true,
-      vacation: true
-    });
+  date: dateStr,
+  staffId: offStaff.value,
+  allDay: true,
+  vacation: true,
+  vacationId: currentVacationId
+});
+
+
   }));
 
   closeOffWork();
