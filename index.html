@@ -1147,14 +1147,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebas
 
 
 import {
-
-getFirestore, collection, addDoc, updateDoc, deleteDoc,
-
-doc, onSnapshot, query, where, getDocs
-
-
-
+  getFirestore,
+  collection,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  query,
+  where,
+  getDocs,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
+
 
 
 
@@ -1472,8 +1477,7 @@ if (slot === -1) {
 
   const todayOff = offWork.filter(o =>
   o.date === calendarDate.value &&
-  o.weeklyException !== true &&
-  (!o.vacation || o.vacation === true)
+  o.weeklyException !== true
 );
 
 
@@ -2655,11 +2659,20 @@ offVacation.onchange = () => {
 window.saveOffWork = async () => {
   // ===== VACATION SAVE =====
 if (offVacation.checked) {
-  const vacationId = crypto.randomUUID();
   if (!vacationFrom || !vacationTo) {
     alert('Select vacation dates');
     return;
   }
+ const vacationDoc = await addDoc(collection(db, 'Vacations'), {
+  staffId: offStaff.value,
+  startDate: vacationFrom.toISOString().slice(0, 10),
+  endDate: vacationTo.toISOString().slice(0, 10),
+  createdAt: serverTimestamp()
+});
+
+const vacationId = vacationDoc.id;
+
+  
 
   const start = new Date(vacationFrom);
   const end = new Date(vacationTo);
@@ -2671,27 +2684,24 @@ if (offVacation.checked) {
     days.push(new Date(d));
     d.setDate(d.getDate() + 1);
   }
+await Promise.all(days.map(day => {
+  const dateStr =
+    day.getFullYear() +
+    '-' +
+    String(day.getMonth() + 1).padStart(2, '0') +
+    '-' +
+    String(day.getDate()).padStart(2, '0');
 
-  await Promise.all(days.map(day => {
-    const dateStr =
-  day.getFullYear() +
-  '-' +
-  String(day.getMonth() + 1).padStart(2, '0') +
-  '-' +
-  String(day.getDate()).padStart(2, '0');
+  return addDoc(collection(db, 'OffWork'), {
+    date: dateStr,
+    staffId: offStaff.value,
+    allDay: true,
+    vacation: true,
+    vacationId: vacationId
+  });
+}));
 
-
-    return addDoc(collection(db, 'OffWork'), {
-  date: dateStr,
-  staffId: offStaff.value,
-  allDay: true,
-  vacation: true,
-  vacationId: vacationId
-
-});
-
-
-  }));
+  
 
   closeOffWork();
   renderCalendar();
@@ -2835,13 +2845,17 @@ removeVacationBtn.onclick = async () => {
   const ok = confirm('Remove entire vacation?');
   if (!ok) return;
 
-  const q = query(
-    collection(db, 'OffWork'),
-    where('vacationId', '==', vacationId)
-  );
+  // 1. Удаляем Vacation
+await deleteDoc(doc(db, 'Vacations', vacationId));
 
-  const snap = await getDocs(q);
-  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+// 2. Удаляем все OffWork дни этого отпуска
+const q = query(
+  collection(db, 'OffWork'),
+  where('vacationId', '==', vacationId)
+);
+
+const snap = await getDocs(q);
+await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
 
   closeOffWork();
 };
