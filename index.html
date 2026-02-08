@@ -590,6 +590,17 @@ th.time {
   gap: 6px;
   font-size: 13px;
 }
+.nav-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 20px;
+  background: #eee;
+  color: #555;
+  font-size: 20px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}
 
 </style>
 
@@ -623,10 +634,8 @@ th.time {
   <input type="date" id="calendarDate">
 </div>
 
-
-
-<button class="add-btn" onclick="openAdd()">+</button>
-
+<button class="nav-btn" onclick="goPrevDay()">←</button>
+<button class="nav-btn" onclick="goNextDay()">→</button>
 
 
 </div>
@@ -2962,6 +2971,31 @@ window.toggleMenu = () => {
 
 window.closeMenu = () => {
   document.getElementById('topMenu').classList.add('hidden');
+};
+window.goPrevDay = () => {
+  const d = getLocalDateFromInput(calendarDate.value);
+  d.setDate(d.getDate() - 1);
+
+  calendarDate.value =
+    d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+
+  updateDateLabel();
+  renderCalendar();
+};
+
+window.goNextDay = () => {
+  const d = getLocalDateFromInput(calendarDate.value);
+  d.setDate(d.getDate() + 1);
+
+  calendarDate.value =
+    d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+
+  updateDateLabel();
+  renderCalendar();
 };
 
 document.addEventListener('click', e => {
