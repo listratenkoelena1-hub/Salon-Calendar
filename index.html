@@ -637,12 +637,29 @@ th.time {
 
 
 <body>
+  <div id="loginScreen" class="modal hidden">
+  <div class="modal-content">
+    <h3>Login</h3>
+
+    <label>Email</label>
+    <input id="loginEmail" type="email">
+
+    <label>Password</label>
+    <input id="loginPassword" type="password">
+
+    <div class="modal-actions">
+      <button onclick="login()">Login</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===================== -->
 <!-- 2. CALENDAR HEADER & LAYOUT -->
 <!-- Date picker, menu, add button -->
 <!-- ===================== -->
 
-<div id="calendar-container">
+<div id="calendar-container" style="display:none">
+
 
 <header>
 
@@ -1228,17 +1245,19 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 
+import {
+  getAuth,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut
+} from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
 
 
 initializeApp({
 
 apiKey:"AIzaSyC5BecKxYxQ9V5qbmXBNkTsvnIZBtK_dx8",
-
 authDomain:"rosesnails-calendar.firebaseapp.com",
-
-
-
 projectId:"rosesnails-calendar"
 
 
@@ -1248,6 +1267,7 @@ projectId:"rosesnails-calendar"
 
 
 const db = getFirestore();
+const auth = getAuth();
 
 
 
@@ -2167,6 +2187,16 @@ closeDelete(); closeAppointment();
 
 };
 
+window.login = async () => {
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+  } catch (err) {
+    alert(err.message);
+  }
+};
 
 
 window.openSearch=()=>{
@@ -2994,6 +3024,7 @@ window.toggleMenu = () => {
 window.closeMenu = () => {
   document.getElementById('topMenu').classList.add('hidden');
 };
+  
 window.goPrevDay = () => {
   const d = getLocalDateFromInput(calendarDate.value);
   d.setDate(d.getDate() - 1);
@@ -3052,6 +3083,15 @@ document.addEventListener('click', e => {
 setInterval(() => {
   highlightCurrentTimeRow();
 }, 15 * 60 * 1000);
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('calendar-container').style.display = 'block';
+  } else {
+    document.getElementById('loginScreen').classList.remove('hidden');
+    document.getElementById('calendar-container').style.display = 'none';
+  }
+});
 
 </script>
 
