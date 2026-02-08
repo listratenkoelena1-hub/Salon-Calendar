@@ -3,6 +3,10 @@
 
 <html lang="en">
 
+<!-- ===================== -->
+<!-- 1. DOCUMENT HEAD -->
+<!-- Meta, styles, libraries -->
+<!-- ===================== -->
 
 <head>
 
@@ -599,6 +603,10 @@ th.time {
 
 
 <body>
+<!-- ===================== -->
+<!-- 2. CALENDAR HEADER & LAYOUT -->
+<!-- Date picker, menu, add button -->
+<!-- ===================== -->
 
 <div id="calendar-container">
 
@@ -644,6 +652,10 @@ th.time {
 <div id="calendar-wrapper">
 
 
+<!-- ===================== -->
+<!-- 3. CALENDAR TABLE -->
+<!-- Time grid & staff columns -->
+<!-- ===================== -->
 
 <table id="calendar"></table>
 
@@ -652,6 +664,10 @@ th.time {
 </div>
 
 </div>
+<!-- ===================== -->
+<!-- 4. APPOINTMENT MODAL -->
+<!-- Create / Edit / Delete appointments -->
+<!-- ===================== -->
 
 <div id="appointmentModal" class="modal hidden">
 
@@ -788,6 +804,10 @@ th.time {
 </div>
 
 
+<!-- ===================== -->
+<!-- 5. OFF WORK MODAL -->
+<!-- Single off, weekly off, vacation -->
+<!-- ===================== -->
 
 <div id="offWorkModal" class="modal hidden">
 
@@ -889,6 +909,10 @@ th.time {
 </div>
 
 
+<!-- ===================== -->
+<!-- 6. SEARCH MODAL -->
+<!-- Search appointments by client -->
+<!-- ===================== -->
 
 <div id="searchModal" class="modal hidden">
 
@@ -929,6 +953,10 @@ th.time {
 </div>
 
 
+<!-- ===================== -->
+<!-- 7. STAFF MANAGEMENT -->
+<!-- Add / Edit / Delete staff -->
+<!-- ===================== -->
 
 <div id="staffModal" class="modal hidden">
 
@@ -981,6 +1009,10 @@ th.time {
 </div>
 
 
+<!-- ===================== -->
+<!-- 8. CONFIRMATION & CONFLICT MODALS -->
+<!-- Delete / Busy / Off-work conflicts -->
+<!-- ===================== -->
 
 <div id="deleteModal" class="modal hidden">
 
@@ -1137,6 +1169,10 @@ th.time {
 </div>
 
 
+<!-- ===================== -->
+<!-- 9. APPLICATION LOGIC -->
+<!-- Firebase, calendar, UI state -->
+<!-- ===================== -->
 
 <script type="module">
 
@@ -2394,7 +2430,20 @@ offEnd.onchange = () => {
 };
 
 window.openOffWork = () => {
-  
+  // --- RESET VACATION STATE ---
+offVacation.checked = false;
+vacationRange.style.display = 'none';
+
+vacationFrom = null;
+vacationTo = null;
+
+if (vacationPicker) {
+  vacationPicker.destroy();
+  vacationPicker = null;
+}
+
+offSaveBtn.disabled = false;
+
 
     // reset weekly UI (IMPORTANT)
   removeWeeklyDayBtn.classList.add('hidden');
@@ -2517,6 +2566,13 @@ offRemoveBtn.style.display = '';
     .join('');
 
   offStaff.value = record.staffId;
+// --- LOCK FIELDS FOR SINGLE OFF WORK EDIT ---
+offStaff.disabled = true;
+offWeekly.checked = false;
+offWeekly.disabled = true;
+
+offVacation.checked = false;
+offVacation.disabled = true;
 
   offAllDay.checked = record.allDay;
 
@@ -2925,6 +2981,10 @@ setInterval(() => {
 </script>
 
 
+<!-- ===================== -->
+<!-- 10. AUXILIARY UI -->
+<!-- Anyone popup & helpers -->
+<!-- ===================== -->
 
 <div id="anyonePopup" class="hidden" style="
 
