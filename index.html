@@ -74,7 +74,7 @@ gap:10px;
   gap: 10px;
   position: relative;
 z-index: 3001;
-
+padding-right: 20px;
 }
 
 
@@ -525,6 +525,8 @@ th.time {
   font-size: 16px;
   font-weight: 600;
   white-space: nowrap;
+  min-width: 200px;
+  text-align: center;
 }
 
 .menu-btn {
@@ -590,7 +592,39 @@ th.time {
   gap: 6px;
   font-size: 13px;
 }
+.nav-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 20px;
+  background: #eee;
+  color: #555;
+  font-size: 20px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}
+#todayBtn {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
 
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+
+  background: rgba(255, 235, 120, 0.85);
+  color: #333;
+  font-size: 14px;
+  font-weight: 600;
+
+  border: none;
+  cursor: pointer;
+
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 5000;
+}
+
+  
 </style>
 
 <!-- Flatpickr (Vacation calendar) -->
@@ -616,7 +650,7 @@ th.time {
 
 <div class="header-left">
 
-
+<button class="nav-btn" onclick="goPrevDay()"><</button>
 
 <div class="date-wrapper">
   <div id="dateLabel"></div>
@@ -624,9 +658,7 @@ th.time {
 </div>
 
 
-
-<button class="add-btn" onclick="openAdd()">+</button>
-
+<button class="nav-btn" onclick="goNextDay()">></button>
 
 
 </div>
@@ -2940,8 +2972,7 @@ function updateDateLabel() {
   const text = d.toLocaleDateString(undefined, {
     weekday: 'long',
     month: 'short',
-    day: 'numeric',
-    year: 'numeric'
+    day: 'numeric'
   });
 
   dateLabel.textContent = text;
@@ -2962,6 +2993,50 @@ window.toggleMenu = () => {
 
 window.closeMenu = () => {
   document.getElementById('topMenu').classList.add('hidden');
+};
+window.goPrevDay = () => {
+  const d = getLocalDateFromInput(calendarDate.value);
+  d.setDate(d.getDate() - 1);
+
+  calendarDate.value =
+    d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+
+  updateDateLabel();
+  renderCalendar();
+};
+
+window.goNextDay = () => {
+  const d = getLocalDateFromInput(calendarDate.value);
+  d.setDate(d.getDate() + 1);
+
+  calendarDate.value =
+    d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+
+  updateDateLabel();
+  renderCalendar();
+};
+window.goToday = () => {
+  const now = new Date();
+
+  calendarDate.value =
+    now.getFullYear() + '-' +
+    String(now.getMonth() + 1).padStart(2, '0') + '-' +
+    String(now.getDate()).padStart(2, '0');
+
+  updateDateLabel();
+  renderCalendar();
+
+  setTimeout(() => {
+    highlightCurrentTimeRow();
+    const currentRow = document.querySelector('.current-time-row');
+    if (currentRow) {
+      currentRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, 50);
 };
 
 document.addEventListener('click', e => {
@@ -3010,6 +3085,7 @@ setInterval(() => {
 
 </div>
 
+<button id="todayBtn" onclick="goToday()">Today</button>
 
 
 </body>
