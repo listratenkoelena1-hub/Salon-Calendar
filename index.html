@@ -525,6 +525,8 @@ th.time {
   font-size: 16px;
   font-weight: 600;
   white-space: nowrap;
+  min-width: 280px;
+  text-align: center;
 }
 
 .menu-btn {
@@ -2950,8 +2952,7 @@ function updateDateLabel() {
   const text = d.toLocaleDateString(undefined, {
     weekday: 'long',
     month: 'short',
-    day: 'numeric',
-    year: 'numeric'
+    day: 'numeric'
   });
 
   dateLabel.textContent = text;
