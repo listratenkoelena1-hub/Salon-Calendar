@@ -689,6 +689,7 @@ th.time {
     <div onclick="openOffWork(); closeMenu()">Off work</div>
     <div onclick="openSearch(); closeMenu()">Search</div>
     <div onclick="openStaff(); closeMenu()">Staff</div>
+    <div onclick="logout(); closeMenu()">Logout</div>
   </div>
 </div>
 
@@ -2196,6 +2197,9 @@ window.login = async () => {
   } catch (err) {
     alert(err.message);
   }
+};
+window.logout = async () => {
+  await signOut(auth);
 };
 
 
