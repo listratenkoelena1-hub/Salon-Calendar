@@ -3087,15 +3087,39 @@ document.addEventListener('click', e => {
 setInterval(() => {
   highlightCurrentTimeRow();
 }, 15 * 60 * 1000);
-onAuthStateChanged(auth, (user) => {
-  if (user) {
-    document.getElementById('loginScreen').classList.add('hidden');
-    document.getElementById('calendar-container').style.display = 'block';
-  } else {
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
     document.getElementById('loginScreen').classList.remove('hidden');
     document.getElementById('calendar-container').style.display = 'none';
+    return;
   }
+
+  const userRef = doc(db, "users", user.uid);
+  const snap = await getDocs(
+    query(collection(db, "users"), where("__name__", "==", user.uid))
+  );
+
+  // если пользователь зашёл впервые — создаём его
+  if (snap.empty) {
+    await updateDoc(userRef, {
+      email: user.email,
+      role: "manager", // ВРЕМЕННО: первый пользователь = manager
+      staffId: null
+    }).catch(async () => {
+      // если документа нет — создаём
+      await addDoc(collection(db, "users"), {
+        email: user.email,
+        role: "manager",
+        staffId: null,
+        uid: user.uid
+      });
+    });
+  }
+
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('calendar-container').style.display = 'block';
 });
+
 
 </script>
 
