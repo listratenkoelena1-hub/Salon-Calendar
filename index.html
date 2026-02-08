@@ -603,6 +603,26 @@ th.time {
   border: none;
   cursor: pointer;
 }
+#todayBtn {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+
+  background: rgba(255, 235, 120, 0.85);
+  color: #333;
+  font-size: 14px;
+  font-weight: 600;
+
+  border: none;
+  cursor: pointer;
+
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 5000;
+}
 
   
 </style>
@@ -2999,6 +3019,25 @@ window.goNextDay = () => {
   updateDateLabel();
   renderCalendar();
 };
+window.goToday = () => {
+  const now = new Date();
+
+  calendarDate.value =
+    now.getFullYear() + '-' +
+    String(now.getMonth() + 1).padStart(2, '0') + '-' +
+    String(now.getDate()).padStart(2, '0');
+
+  updateDateLabel();
+  renderCalendar();
+
+  setTimeout(() => {
+    highlightCurrentTimeRow();
+    const currentRow = document.querySelector('.current-time-row');
+    if (currentRow) {
+      currentRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, 50);
+};
 
 document.addEventListener('click', e => {
   const menu = document.getElementById('topMenu');
@@ -3046,6 +3085,7 @@ setInterval(() => {
 
 </div>
 
+<button id="todayBtn" onclick="goToday()">Today</button>
 
 
 </body>
