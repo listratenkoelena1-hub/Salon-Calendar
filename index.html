@@ -621,17 +621,18 @@ th.time {
 .staff-row {
   display: grid;
   grid-template-columns:
-    1.2fr   /* name */
-    40px    /* color */
-    2fr     /* email */
-    1.2fr   /* role */
-    auto    /* save */
-    auto    /* up */
-    auto    /* down */
-    auto;   /* remove */
+    160px   /* name */
+    32px    /* color */
+    220px   /* email */
+    120px   /* role */
+    70px    /* save */
+    36px    /* up */
+    36px    /* down */
+    110px;  /* remove */
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
+
 
 .staff-color {
   width: 18px;
@@ -647,6 +648,8 @@ th.time {
   border-radius: 6px;
   border: 1px solid #ccc;
   font-size: 13px;
+  width: 100%;
+  min-width: 0;
 }
 
 .staff-role {
@@ -654,6 +657,8 @@ th.time {
   border-radius: 6px;
   border: 1px solid #ccc;
   font-size: 13px;
+  width: 100%;
+  min-width: 0;
 }
 
 .staff-btn {
@@ -675,9 +680,10 @@ th.time {
   border-color: #ffb3b3;
 }
 .staff-modal-content {
-  width: 90vw;          /* почти вся ширина экрана */
-  max-width: 1200px;    /* но не бесконечно на больших экранах */
+  width: 92vw;
+  max-width: 980px;
 }
+
 
   
 </style>
