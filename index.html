@@ -1093,29 +1093,35 @@ th.time {
 
 <hr>
 
+<!-- ADD NEW STAFF -->
 
+<input
+  id="newStaffName"
+  placeholder="Name"
+>
 
-<input id="newStaffName" placeholder="Name">
+<input
+  type="color"
+  id="newStaffColor"
+  value="#cce5ff"
+>
 
+<input
+  id="newStaffEmail"
+  type="email"
+  placeholder="Email"
+>
 
-
-<input type="color" id="newStaffColor" value="#cce5ff">
-
-
+<select id="newStaffRole">
+  <option value="staff">Staff</option>
+  <option value="manager">Manager</option>
+</select>
 
 <div class="modal-actions">
-
-
-
-<button onclick="addStaff()">Add</button>
-
-
-
-<button onclick="closeStaff()">Close</button>
-
-
-
+  <button onclick="addStaff()">Add</button>
+  <button onclick="closeStaff()">Close</button>
 </div>
+
 
 
 
@@ -1357,6 +1363,9 @@ const searchResults = document.getElementById('searchResults');
 const staffList = document.getElementById('staffList');
 const newStaffName = document.getElementById('newStaffName');
 const newStaffColor = document.getElementById('newStaffColor');
+  const newStaffEmail = document.getElementById('newStaffEmail');
+const newStaffRole = document.getElementById('newStaffRole');
+
  
 // ===== MODALS =====
 const appointmentModal = document.getElementById('appointmentModal');
@@ -2470,30 +2479,26 @@ function renderStaff() {
 
 
 
-window.addStaff=async()=>{
+window.addStaff = async () => {
+  const name = newStaffName.value.trim();
+  const email = newStaffEmail.value.trim();
+  const role = newStaffRole.value;
+  const color = newStaffColor.value;
 
+  if (!name) return;
 
+  await addDoc(collection(db, "staff"), {
+    name: name,
+    color: color,
+    email: email || null,
+    role: role,
+    order: staff.filter(s => s.id !== ANYONE_ID).length
+  });
 
-if(!newStaffName.value.trim()) return;
-
-await addDoc(collection(db,"staff"),{
-
-name:newStaffName.value.trim(),
-
-color:newStaffColor.value,
-
-order:staff.filter(s=>s.id!==ANYONE_ID).length
-
-
-
-});
-
-
-
-newStaffName.value='';
-
-
-
+  // очистка полей
+  newStaffName.value = '';
+  newStaffEmail.value = '';
+  newStaffRole.value = 'staff';
 };
 
 
