@@ -1243,7 +1243,9 @@ import {
   query,
   where,
   getDocs,
-  serverTimestamp
+  serverTimestamp,
+  getDoc, 
+  setDoc
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 
 import {
@@ -3095,24 +3097,14 @@ onAuthStateChanged(auth, async (user) => {
   }
 
   const userRef = doc(db, "users", user.uid);
-  const snap = await getDocs(
-    query(collection(db, "users"), where("__name__", "==", user.uid))
-  );
+  const userSnap = await getDoc(userRef);
 
-  // если пользователь зашёл впервые — создаём его
-  if (snap.empty) {
-    await updateDoc(userRef, {
+  // если пользователь зашёл впервые
+  if (!userSnap.exists()) {
+    await setDoc(userRef, {
       email: user.email,
-      role: "manager", // ВРЕМЕННО: первый пользователь = manager
+      role: "manager", // первый пользователь = manager
       staffId: null
-    }).catch(async () => {
-      // если документа нет — создаём
-      await addDoc(collection(db, "users"), {
-        email: user.email,
-        role: "manager",
-        staffId: null,
-        uid: user.uid
-      });
     });
   }
 
