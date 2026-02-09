@@ -623,6 +623,62 @@ th.time {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   z-index: 5000;
 }
+.staff-row {
+  display: grid;
+  grid-template-columns:
+    1.2fr   /* name */
+    40px    /* color */
+    2fr     /* email */
+    1.2fr   /* role */
+    auto    /* save */
+    auto    /* up */
+    auto    /* down */
+    auto;   /* remove */
+  align-items: center;
+  gap: 8px;
+}
+
+.staff-color {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  cursor: pointer;
+  padding: 0;
+}
+
+.staff-email {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 13px;
+}
+
+.staff-role {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 13px;
+}
+
+.staff-btn {
+  padding: 6px 12px;
+  border-radius: 14px;
+  border: 1px solid #ccc;
+  background: #f3f3f3;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.staff-btn.primary {
+  background: #e8f0ff;
+  border-color: #b7ccff;
+}
+
+.staff-btn.danger {
+  background: #ffeaea;
+  border-color: #ffb3b3;
+}
 
   
 </style>
@@ -2330,27 +2386,85 @@ window.closeStaff=()=>staffModal.classList.add('hidden');
 
 
 
-function renderStaff(){
+function renderStaff() {
+  staffList.innerHTML = '';
 
+  staff
+    .filter(s => s.id !== ANYONE_ID)
+    .forEach((s, i) => {
+      staffList.innerHTML += `
+        <div class="staff-card staff-row">
 
+          <!-- NAME -->
+          <div class="staff-name">${s.name}</div>
 
-staffList.innerHTML='';
+          <!-- COLOR -->
+          <input
+            type="color"
+            class="staff-color"
+            value="${s.color}"
+            onchange="updateStaffColor('${s.id}', this.value)"
+          >
 
+          <!-- EMAIL -->
+          <input
+            type="email"
+            class="staff-email"
+            placeholder="email"
+            value="${s.email || ''}"
+            data-staff-email="${s.id}"
+          >
 
+          <!-- ROLE -->
+          <select
+            class="staff-role"
+            data-staff-role="${s.id}"
+          >
+            <option value="staff" ${s.role === 'staff' ? 'selected' : ''}>
+              Staff
+            </option>
+            <option value="manager" ${s.role === 'manager' ? 'selected' : ''}>
+              Manager
+            </option>
+          </select>
 
-staff.filter(s=>s.id!==ANYONE_ID).forEach((s,i)=>{
+          <!-- SAVE -->
+          <button
+            class="staff-btn primary"
+            onclick="saveStaffMeta('${s.id}')"
+          >
+            Save
+          </button>
 
+          <!-- MOVE UP -->
+          <button
+            class="staff-btn"
+            onclick="moveStaff(${i}, -1)"
+          >
+            ↑
+          </button>
 
+          <!-- MOVE DOWN -->
+          <button
+            class="staff-btn"
+            onclick="moveStaff(${i}, 1)"
+          >
+            ↓
+          </button>
 
-staffList.innerHTML+=`<div class="staff-card"><span class="staff-name">${s.name}</span><input type="color" value="${s.color}" onchange="updateStaffColor('${s.id}',this.value)"><div class="staff-actions"><button onclick="moveStaff(${i},-1)">↑</button><button onclick="moveStaff(${i},1)">↓</button><button onclick="askStaffDelete('${s.id}')">✕</button></div></div>`;
+          <!-- REMOVE -->
+          <button
+            class="staff-btn danger"
+            onclick="askStaffDelete('${s.id}')"
+          >
+            Remove staff
+          </button>
 
-
-
-});
-
-
-
+        </div>
+      `;
+    });
 }
+
 
 
 
@@ -2384,6 +2498,22 @@ newStaffName.value='';
 
 window.updateStaffColor=(id,color)=>updateDoc(doc(db,"staff",id),{color});
 
+window.saveStaffMeta = async (staffId) => {
+  const emailInput = document.querySelector(
+    `[data-staff-email="${staffId}"]`
+  );
+  const roleSelect = document.querySelector(
+    `[data-staff-role="${staffId}"]`
+  );
+
+  const email = emailInput.value.trim();
+  const role = roleSelect.value;
+
+  await updateDoc(doc(db, "staff", staffId), {
+    email: email || null,
+    role: role
+  });
+};
 
 
 window.moveStaff=async(i,dir)=>{
