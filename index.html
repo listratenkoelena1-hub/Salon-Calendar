@@ -203,23 +203,18 @@ cursor:pointer;
 .modal {
 
 position:fixed;
-
 inset:0;
-
 background:rgba(0,0,0,.4);
-
 display:flex;
-
 align-items:center;
-
 justify-content:center;
-
-z-index:1000;
-
-
+z-index:6000;
 
 }
 
+.modal ~ header {
+  pointer-events: none;
+}
 
 
 .hidden { display:none; }
@@ -1094,27 +1089,6 @@ th.time {
 <hr>
 <h4 style="margin: 12px 0 8px 0;">Add new staff</h4>
   
-<input
-  id="newStaffName"
-  placeholder="Name"
->
-
-<input
-  type="color"
-  id="newStaffColor"
-  value="#cce5ff"
->
-
-<input
-  id="newStaffEmail"
-  type="email"
-  placeholder="Email"
->
-
-<select id="newStaffRole">
-  <option value="staff">Staff</option>
-  <option value="manager">Manager</option>
-</select>
 
 <div class="staff-card staff-row">
 
