@@ -212,9 +212,7 @@ z-index:6000;
 
 }
 
-.modal ~ header {
-  pointer-events: none;
-}
+
 
 
 .hidden { display:none; }
@@ -309,7 +307,21 @@ margin-bottom:8px;
 
 
 
-.staff-name { flex:1; font-weight:600; }
+.staff-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+}
+
+
+.staff-row > * {
+  min-width: 0;
+}
 
 .staff-actions { display:flex; gap:4px; }
 
@@ -621,16 +633,18 @@ th.time {
 .staff-row {
   display: grid;
   grid-template-columns:
-    160px   /* name */
-    32px    /* color */
-    220px   /* email */
-    120px   /* role */
-    70px    /* save */
-    36px    /* up */
-    36px    /* down */
-    110px;  /* remove */
+  120px   /* name — компактно */
+  28px    /* color */
+  200px   /* email */
+  110px   /* role */
+  64px    /* save */
+  32px    /* up */
+  32px    /* down */
+  104px;  /* remove */
   align-items: center;
   gap: 10px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 
@@ -653,12 +667,14 @@ th.time {
 }
 
 .staff-role {
+  width: 110px;          /* <= ключевой момент */
+  min-width: 110px;
+  max-width: 110px;
+
   padding: 6px 8px;
   border-radius: 6px;
   border: 1px solid #ccc;
   font-size: 13px;
-  width: 100%;
-  min-width: 0;
 }
 
 .staff-btn {
