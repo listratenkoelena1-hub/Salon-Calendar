@@ -1281,6 +1281,25 @@ projectId:"rosesnails-calendar"
 
 const db = getFirestore();
 const auth = getAuth();
+ // ===== DOM ELEMENTS =====
+
+// Appointment modal
+const aDate = document.getElementById('aDate');
+const aStaff = document.getElementById('aStaff');
+const aTime = document.getElementById('aTime');
+const aDuration = document.getElementById('aDuration');
+const aClient = document.getElementById('aClient');
+const aNote = document.getElementById('aNote');
+
+// Search
+const searchInput = document.getElementById('searchInput');
+const searchResults = document.getElementById('searchResults');
+
+// Staff
+const staffList = document.getElementById('staffList');
+const newStaffName = document.getElementById('newStaffName');
+const newStaffColor = document.getElementById('newStaffColor');
+ 
 // ===== MODALS =====
 const appointmentModal = document.getElementById('appointmentModal');
 const deleteModal = document.getElementById('deleteModal');
