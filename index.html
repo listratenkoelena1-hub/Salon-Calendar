@@ -650,6 +650,15 @@ th.time {
     <div class="modal-actions">
       <button onclick="login()">Login</button>
     </div>
+    <div style="margin-top:10px; text-align:center;">
+  <button
+    style="background:none;border:none;color:#555;font-size:12px;cursor:pointer;"
+    onclick="resetPassword()"
+  >
+    Forgot password?
+  </button>
+</div>
+
   </div>
 </div>
 
@@ -1253,6 +1262,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut
+  sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
 
@@ -2202,6 +2212,21 @@ window.login = async () => {
 };
 window.logout = async () => {
   await signOut(auth);
+};
+window.resetPassword = async () => {
+  const email = document.getElementById('loginEmail').value;
+
+  if (!email) {
+    alert('Please enter your email first');
+    return;
+  }
+
+  try {
+    await sendPasswordResetEmail(auth, email);
+    alert('Password reset email sent. Check your inbox.');
+  } catch (err) {
+    alert(err.message);
+  }
 };
 
 
