@@ -254,7 +254,7 @@ margin-top:8px;
 .modal-content input,
 .modal-content select,
 .modal-content textarea {
-  width: 100%;
+  box-sizing: border-box;
 }
 .staff-row select.staff-role {
   width: 110px !important;
@@ -644,6 +644,17 @@ th.time {
   border: 1px solid #ccc;
   font-size: 13px;
   width: 100%;
+  min-width: 0;
+}
+/* NAME — компактное поле */
+.staff-name-input {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 13px;
+
+  width: 100%;
+  max-width: 120px;
   min-width: 0;
 }
 
@@ -1097,10 +1108,11 @@ th.time {
 
   <!-- NAME -->
   <input
-    id="newStaffName"
-    class="staff-email"
-    placeholder="Name"
-  >
+  id="newStaffName"
+  class="staff-name-input"
+  placeholder="Name"
+>
+
 
   <!-- COLOR -->
   <input
@@ -1134,9 +1146,7 @@ th.time {
   >
     Add
   </button>
-<div></div>
-<div></div>
-<div></div>
+
 
 </div>
 
