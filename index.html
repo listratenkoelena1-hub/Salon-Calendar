@@ -1092,9 +1092,8 @@ th.time {
 
 
 <hr>
-
-<!-- ADD NEW STAFF -->
-
+<h4 style="margin: 12px 0 8px 0;">Add new staff</h4>
+  
 <input
   id="newStaffName"
   placeholder="Name"
@@ -1117,8 +1116,51 @@ th.time {
   <option value="manager">Manager</option>
 </select>
 
+<div class="staff-card staff-row">
+
+  <!-- NAME -->
+  <input
+    id="newStaffName"
+    class="staff-email"
+    placeholder="Name"
+  >
+
+  <!-- COLOR -->
+  <input
+    type="color"
+    id="newStaffColor"
+    class="staff-color"
+    value="#cce5ff"
+  >
+
+  <!-- EMAIL -->
+  <input
+    id="newStaffEmail"
+    type="email"
+    class="staff-email"
+    placeholder="Email"
+  >
+
+  <!-- ROLE -->
+  <select
+    id="newStaffRole"
+    class="staff-role"
+  >
+    <option value="staff">Staff</option>
+    <option value="manager">Manager</option>
+  </select>
+
+  <!-- ADD -->
+  <button
+    class="staff-btn primary"
+    onclick="addStaff()"
+  >
+    Add
+  </button>
+
+</div>
+
 <div class="modal-actions">
-  <button onclick="addStaff()">Add</button>
   <button onclick="closeStaff()">Close</button>
 </div>
 
