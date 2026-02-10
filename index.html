@@ -296,6 +296,13 @@ margin-top:12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  width: 100%;
+  min-width: 0;
+}
+.staff-row input,
+.staff-row select,
+.staff-row button,
+.staff-row span {
   min-width: 0;
 }
 
@@ -626,7 +633,6 @@ th.time {
   align-items: center;
   gap: 10px;
   min-width: 0;
-  overflow: hidden;
 }
 
 
@@ -690,7 +696,7 @@ th.time {
 }
 .staff-modal-content {
   width: 92vw;
-  max-width: 980px;
+  max-width: 1100px;
 }
 
 .staff-status {
@@ -1128,7 +1134,9 @@ th.time {
 <h4 style="margin: 12px 0 8px 0;">Add new staff</h4>
   
 
-<div class="staff-card staff-row">
+<div class="staff-card">
+  <div class="staff-row">
+
 
   <!-- NAME -->
   <input
@@ -1171,7 +1179,7 @@ th.time {
     Add
   </button>
 
-
+</div>
 </div>
 
 <div class="modal-actions">
