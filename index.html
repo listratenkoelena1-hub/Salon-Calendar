@@ -622,6 +622,7 @@ th.time {
   32px    /* up */
   32px    /* down */
   104px;  /* remove */
+  60px;   /* saved status */
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -702,6 +703,17 @@ th.time {
 }
 
 .staff-status.show {
+  opacity: 1;
+}
+.staff-saved {
+  font-size: 12px;
+  color: #2e7d32;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  white-space: nowrap;
+}
+
+.staff-saved.show {
   opacity: 1;
 }
 
@@ -2555,6 +2567,13 @@ function renderStaff() {
           >
             Remove staff
           </button>
+          <span
+  id="staff-status-${s.id}"
+  class="staff-saved"
+>
+  ✓ Saved
+</span>
+
 
         </div>
       `;
@@ -2615,7 +2634,7 @@ if (statusEl) {
 
   setTimeout(() => {
     statusEl.classList.remove('show');
-  }, 2000);
+  }, 4000);
 }
 
 };
