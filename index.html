@@ -692,6 +692,18 @@ th.time {
   max-width: 980px;
 }
 
+.staff-status {
+  font-size: 12px;
+  color: #2e7d32;
+  margin-left: 6px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  white-space: nowrap;
+}
+
+.staff-status.show {
+  opacity: 1;
+}
 
   
 </style>
@@ -2516,6 +2528,9 @@ function renderStaff() {
           >
             Save
           </button>
+<span class="staff-status" id="staff-status-${s.id}">
+  Saved ✓
+</span>
 
           <!-- MOVE UP -->
           <button
@@ -2594,6 +2609,15 @@ window.saveStaffMeta = async (staffId) => {
     role: role
   });
   await ensureAuthUser(email, role, staffId);
+  const statusEl = document.getElementById(`staff-status-${staffId}`);
+if (statusEl) {
+  statusEl.classList.add('show');
+
+  setTimeout(() => {
+    statusEl.classList.remove('show');
+  }, 2000);
+}
+
 };
 
 
