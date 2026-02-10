@@ -1358,8 +1358,10 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  createUserWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
+
 
 
 
@@ -1377,6 +1379,42 @@ projectId:"rosesnails-calendar"
 
 const db = getFirestore();
 const auth = getAuth();
+  async function ensureAuthUser(email, role, staffId = null) {
+  if (!email) return;
+
+  try {
+    // временный пароль — пользователь его НЕ будет использовать
+    const tempPassword = 'Temp1234!';
+
+    const userCredential = await createUserWithEmailAndPassword(
+      auth,
+      email,
+      tempPassword
+    );
+
+    const user = userCredential.user;
+
+    // создаём документ user
+    await setDoc(doc(db, "users", user.uid), {
+      email: email,
+      role: role,
+      staffId: staffId
+    });
+
+    // сразу отправляем reset password
+    await sendPasswordResetEmail(auth, email);
+
+  } catch (error) {
+    // если пользователь уже существует — это НЕ ошибка для нас
+    if (error.code === 'auth/email-already-in-use') {
+      console.log('User already exists:', email);
+      return;
+    }
+
+    console.error('Auth user create error:', error);
+  }
+}
+
  // ===== DOM ELEMENTS =====
 
 // Appointment modal
@@ -2519,13 +2557,16 @@ window.addStaff = async () => {
 
   if (!name) return;
 
-  await addDoc(collection(db, "staff"), {
-    name: name,
-    color: color,
-    email: email || null,
-    role: role,
-    order: staff.filter(s => s.id !== ANYONE_ID).length
-  });
+  const docRef = await addDoc(collection(db, "staff"), {
+  name: name,
+  color: color,
+  email: email || null,
+  role: role,
+  order: staff.filter(s => s.id !== ANYONE_ID).length
+});
+
+await ensureAuthUser(email, role, docRef.id);
+
 
   // очистка полей
   newStaffName.value = '';
@@ -2552,6 +2593,7 @@ window.saveStaffMeta = async (staffId) => {
     email: email || null,
     role: role
   });
+  await ensureAuthUser(email, role, staffId);
 };
 
 
