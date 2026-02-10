@@ -722,6 +722,31 @@ th.time {
 .staff-saved.show {
   opacity: 1;
 }
+/* ===== STAFF VIEW (ограниченный доступ) ===== */
+
+#staffModal.staff-view .staff-email,
+#staffModal.staff-view .staff-role,
+#staffModal.staff-view .staff-btn,
+#staffModal.staff-view hr,
+#staffModal.staff-view h4,
+#staffModal.staff-view #newStaffName,
+#staffModal.staff-view #newStaffEmail,
+#staffModal.staff-view #newStaffRole,
+#staffModal.staff-view button[onclick="addStaff()"] {
+  display: none !important;
+}
+
+/* компактная модалка */
+#staffModal.staff-view .staff-modal-content {
+  max-width: 360px;
+}
+
+/* компактная строка: имя + цвет */
+#staffModal.staff-view .staff-row {
+  grid-template-columns:
+    1fr
+    28px;
+}
 
   
 </style>
@@ -1411,6 +1436,8 @@ projectId:"rosesnails-calendar"
 
 const db = getFirestore();
 const auth = getAuth();
+  let currentUserRole = 'manager'; // по умолчанию
+
   async function ensureAuthUser(email, role, staffId = null) {
   if (!email) return;
 
@@ -2493,7 +2520,16 @@ setTimeout(()=>openEdit(id),50);
 
 
 
-window.openStaff=()=>staffModal.classList.remove('hidden');
+window.openStaff = () => {
+  staffModal.classList.remove('hidden');
+
+  if (currentUserRole === 'staff') {
+    staffModal.classList.add('staff-view');
+  } else {
+    staffModal.classList.remove('staff-view');
+  }
+};
+
 
 window.closeStaff=()=>staffModal.classList.add('hidden');
 
@@ -2590,6 +2626,7 @@ function renderStaff() {
 
 
 window.addStaff = async () => {
+  if (currentUserRole === 'staff') return;
   const name = newStaffName.value.trim();
   const email = newStaffEmail.value.trim();
   const role = newStaffRole.value;
@@ -2619,6 +2656,7 @@ await ensureAuthUser(email, role, docRef.id);
 window.updateStaffColor=(id,color)=>updateDoc(doc(db,"staff",id),{color});
 
 window.saveStaffMeta = async (staffId) => {
+  if (currentUserRole === 'staff') return;
   const emailInput = document.querySelector(
     `[data-staff-email="${staffId}"]`
   );
@@ -2647,24 +2685,14 @@ if (statusEl) {
 
 
 window.moveStaff=async(i,dir)=>{
-
-
-
+if (currentUserRole === 'staff') return;
 const real=staff.filter(s=>s.id!==ANYONE_ID);
-
 const j=i+dir;
-
 if(j<0||j>=real.length) return;
-
 const a=real[i], b=real[j];
-
 await Promise.all([
-
 updateDoc(doc(db,"staff",a.id),{order:j}),
-
 updateDoc(doc(db,"staff",b.id),{order:i})
-
-
 
 ]);
 
@@ -2675,51 +2703,27 @@ updateDoc(doc(db,"staff",b.id),{order:i})
 
 
 window.askStaffDelete=id=>{
-
-
-
+if (currentUserRole === 'staff') return;
 staffToDelete=id;
-
-
-
 staffDeleteModal.classList.remove('hidden');
-
-
-
 };
 
 
 
 window.cancelStaffDelete=()=>{
-
 staffToDelete=null;
-
 staffDeleteModal.classList.add('hidden');
-
-
-
 };
 
 
 
 window.confirmStaffDelete=async()=>{
-
-
-
 const q=query(collection(db,"appointments"),where("staffId","==",staffToDelete));
-
 const snap=await getDocs(q);
-
 await Promise.all(snap.docs.map(d=>deleteDoc(d.ref)));
-
 await deleteDoc(doc(db,"staff",staffToDelete));
-
 staffToDelete=null;
-
 staffDeleteModal.classList.add('hidden');
-
-
-
 };
 
 
@@ -3418,6 +3422,11 @@ onAuthStateChanged(auth, async (user) => {
       staffId: null
     });
   }
+if (userSnap.exists()) {
+  currentUserRole = userSnap.data().role || 'manager';
+} else {
+  currentUserRole = 'manager';
+}
 
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('calendar-container').style.display = 'block';
