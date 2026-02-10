@@ -824,7 +824,13 @@ th.time {
   <div id="topMenu" class="top-menu hidden">
     <div onclick="openOffWork(); closeMenu()">Off work</div>
     <div onclick="openSearch(); closeMenu()">Search</div>
-    <div onclick="openStaff(); closeMenu()">Staff</div>
+    <div
+  id="staffMenuItem"
+  onclick="openStaff(); closeMenu()"
+>
+  Staff
+</div>
+
     <div onclick="logout(); closeMenu()">Logout</div>
   </div>
 </div>
@@ -2524,6 +2530,8 @@ setTimeout(()=>openEdit(id),50);
 
 
 window.openStaff = () => {
+  if (currentUserRole === 'reception') return;
+
   staffModal.classList.remove('hidden');
 
   if (currentUserRole === 'staff') {
@@ -2532,6 +2540,7 @@ window.openStaff = () => {
     staffModal.classList.remove('staff-view');
   }
 };
+
 
 
 window.closeStaff=()=>staffModal.classList.add('hidden');
@@ -3429,6 +3438,15 @@ if (userSnap.exists()) {
   currentUserRole = userSnap.data().role || 'manager';
 } else {
   currentUserRole = 'manager';
+}
+const staffMenuItem = document.getElementById('staffMenuItem');
+
+if (staffMenuItem) {
+  if (currentUserRole === 'reception') {
+    staffMenuItem.style.display = 'none';
+  } else {
+    staffMenuItem.style.display = '';
+  }
 }
 
   document.getElementById('loginScreen').classList.add('hidden');
