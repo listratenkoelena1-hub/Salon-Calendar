@@ -747,6 +747,9 @@ th.time {
     1fr
     28px;
 }
+#staffModal.staff-view .add-staff-section {
+  display: none;
+}
 
   
 </style>
@@ -1155,57 +1158,57 @@ th.time {
 
 
 
-<hr>
-<h4 style="margin: 12px 0 8px 0;">Add new staff</h4>
-  
+<div class="add-staff-section">
 
-<div class="staff-card">
-  <div class="staff-row">
+  <hr>
+  <h4 style="margin: 12px 0 8px 0;">Add new staff</h4>
 
+  <div class="staff-card staff-row">
 
-  <!-- NAME -->
-  <input
-  id="newStaffName"
-  class="staff-name-input"
-  placeholder="Name"
->
+    <!-- NAME -->
+    <input
+      id="newStaffName"
+      class="staff-name-input"
+      placeholder="Name"
+    >
 
+    <!-- COLOR -->
+    <input
+      type="color"
+      id="newStaffColor"
+      class="staff-color"
+      value="#cce5ff"
+    >
 
-  <!-- COLOR -->
-  <input
-    type="color"
-    id="newStaffColor"
-    class="staff-color"
-    value="#cce5ff"
-  >
+    <!-- EMAIL -->
+    <input
+      id="newStaffEmail"
+      type="email"
+      class="staff-email"
+      placeholder="Email"
+    >
 
-  <!-- EMAIL -->
-  <input
-    id="newStaffEmail"
-    type="email"
-    class="staff-email"
-    placeholder="Email"
-  >
+    <!-- ROLE -->
+    <select
+      id="newStaffRole"
+      class="staff-role"
+    >
+      <option value="staff">Staff</option>
+      <option value="manager">Manager</option>
+    </select>
 
-  <!-- ROLE -->
-  <select
-    id="newStaffRole"
-    class="staff-role"
-  >
-    <option value="staff">Staff</option>
-    <option value="manager">Manager</option>
-  </select>
+    <!-- ADD -->
+    <button
+      class="staff-btn primary"
+      onclick="addStaff()"
+    >
+      Add
+    </button>
 
-  <!-- ADD -->
-  <button
-    class="staff-btn primary"
-    onclick="addStaff()"
-  >
-    Add
-  </button>
+  </div>
 
 </div>
-</div>
+
 
 <div class="modal-actions">
   <button onclick="closeStaff()">Close</button>
