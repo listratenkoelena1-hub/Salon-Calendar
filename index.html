@@ -1006,7 +1006,11 @@ th.time {
   font-size: 16px;
   text-align: center;
 }
-
+.dr-rows-wrapper {
+  max-height: 420px;   /* примерно 10 строк */
+  overflow-y: auto;
+  padding-right: 4px;
+}
 </style>
 
 
@@ -3772,7 +3776,6 @@ function renderDailyReport() {
     entries = entries.filter(e => e.staffId === currentUserStaffId);
   }
 
-  // авто-первая строка
   if (
     currentUserRole === 'staff' &&
     currentUserStaffId &&
@@ -3786,6 +3789,30 @@ function renderDailyReport() {
     .slice()
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
+  // ===== TOTALS =====
+  let totalService = 0;
+  let totalTax = 0;
+  let totalTips = 0;
+  let totalCash = 0;
+  let totalCard = 0;
+  let totalGift = 0;
+  let totalCheck = 0;
+
+  entries.forEach(e => {
+    const service = Number(e.serviceAmount) || 0;
+    const tip = Number(e.tip) || 0;
+    const tax = service * 0.05;
+
+    totalService += service;
+    totalTax += tax;
+    totalTips += tip;
+
+    if (e.paymentMethod === "cash") totalCash += service + tax;
+    if (e.paymentMethod === "card") totalCard += service + tax;
+    if (e.paymentMethod === "giftcard") totalGift += service + tax;
+    if (e.paymentMethod === "check") totalCheck += service + tax;
+  });
+
   let html = `
     <div class="dr-head">
       <div>#</div>
@@ -3795,6 +3822,8 @@ function renderDailyReport() {
       <div>Payment</div>
       <div></div>
     </div>
+
+    <div class="dr-rows-wrapper">
   `;
 
   entries.forEach((e, index) => {
@@ -3852,8 +3881,35 @@ function renderDailyReport() {
     `;
   });
 
+  html += `</div>`; // закрываем rows wrapper
+
+  // ===== TOTAL BLOCK =====
+  html += `
+    <div style="margin-top:14px; font-size:13px; border-top:1px solid #eee; padding-top:10px;">
+      <div><b>Total Service:</b> $${totalService.toFixed(2)}</div>
+      <div><b>Total Tax:</b> $${totalTax.toFixed(2)}</div>
+      <div><b>Total Tips:</b> $${totalTips.toFixed(2)}</div>
+      <div style="margin-top:6px;">
+        <div>Cash: $${totalCash.toFixed(2)}</div>
+        <div>Card: $${totalCard.toFixed(2)}</div>
+        <div>Gift: $${totalGift.toFixed(2)}</div>
+        <div>Check: $${totalCheck.toFixed(2)}</div>
+      </div>
+    </div>
+  `;
+
+  // ===== BUTTONS =====
+  html += `
+    <div style="display:flex; gap:8px; margin-top:14px;">
+      <button onclick="openWithdrawal()">Tips Withdrawal</button>
+      <button onclick="closeDay()">Close Day</button>
+      <button onclick="closeDailyReport()">Close</button>
+    </div>
+  `;
+
   body.innerHTML = html;
 }
+
 
 
 
