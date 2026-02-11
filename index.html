@@ -326,35 +326,22 @@ margin-top:12px;
 
 }
 
-/* Compact flatpickr */
+/* Компактный popup flatpickr */
 
 .flatpickr-calendar {
-  font-size: 14px !important;
-  width: 260px !important;
-  padding: 8px !important;
-}
-
-.flatpickr-months {
-  font-size: 14px !important;
-}
-
-.flatpickr-weekdays {
-  font-size: 12px !important;
+  font-size: 13px;
+  transform: scale(0.9);
+  transform-origin: top left;
 }
 
 .flatpickr-day {
-  height: 32px !important;
-  line-height: 32px !important;
-  font-size: 14px !important;
-  margin: 0 !important;
+  height: 30px !important;
+  line-height: 30px !important;
+  font-size: 13px !important;
 }
 
-.flatpickr-days {
-  padding: 0 !important;
-}
-
-.flatpickr-innerContainer {
-  padding: 0 !important;
+.flatpickr-weekday {
+  font-size: 12px !important;
 }
 
 
@@ -1595,15 +1582,7 @@ function initAppointmentDatePicker() {
   datePickerInstance = flatpickr(aDatePicker, {
     dateFormat: "Y-m-d",
     defaultDate: aDate.value,
-    appendTo: appointmentModal.querySelector('.modal-content'),
-    clickOpens: false,
-    onReady: function(selectedDates, dateStr, instance) {
-      const calendar = instance.calendarContainer;
-
-      calendar.style.position = "absolute";
-      calendar.style.top = changeDateBtn.offsetTop + changeDateBtn.offsetHeight + 6 + "px";
-      calendar.style.left = changeDateBtn.offsetLeft + "px";
-    },
+    position: "below",
     onChange: function(selectedDates, dateStr) {
       if (!dateStr) return;
       aDate.value = dateStr;
