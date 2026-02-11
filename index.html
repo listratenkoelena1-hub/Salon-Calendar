@@ -3736,6 +3736,21 @@ function renderDailyReport() {
     entries = entries.filter(e => e.staffId === currentUserStaffId);
   }
 
+  // ===== AUTO CREATE FIRST ROW =====
+  if (
+    currentUserRole === 'staff' &&
+    currentUserStaffId &&
+    entries.length === 0
+  ) {
+    addDrEntry();
+    return;
+  }
+
+  // сортировка по order
+  entries = entries
+    .slice()
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
   let html = `
     <table class="dr-table">
       <tr>
@@ -3748,54 +3763,146 @@ function renderDailyReport() {
       </tr>
   `;
 
-  entries
-    .sort((a,b)=>a.order - b.order)
-    .forEach((e, index) => {
-      html += `
-        <tr>
-          <td>${index + 1}</td>
-          <td>
-            <input class="dr-input"
-              type="number"
-              value="${e.serviceAmount || 0}"
-              onchange="updateDrField('${e.id}','serviceAmount',this.value)">
-          </td>
-          <td>${((e.serviceAmount || 0) * 0.05).toFixed(2)}</td>
-          <td>
-            <input class="dr-input"
-              type="number"
-              value="${e.tip || 0}"
-              onchange="updateDrField('${e.id}','tip',this.value)">
-          </td>
-          <td>
-            <select class="dr-select"
-              onchange="updateDrField('${e.id}','paymentMethod',this.value)">
-              <option value="card" ${e.paymentMethod==='card'?'selected':''}>Card</option>
-              <option value="cash" ${e.paymentMethod==='cash'?'selected':''}>Cash</option>
-              <option value="giftcard" ${e.paymentMethod==='giftcard'?'selected':''}>Gift</option>
-              <option value="check" ${e.paymentMethod==='check'?'selected':''}>Check</option>
-            </select>
-          </td>
-          <td>
-            <button onclick="deleteDrEntry('${e.id}')">✕</button>
-          </td>
-        </tr>
-      `;
-    });
+  entries.forEach((e, index) => {
+    const isClosed = e.status === "closed";
+    const serviceAmount = e.serviceAmount ?? "";
+    const tip = e.tip ?? "";
+    const paymentMethod = e.paymentMethod || "card";
+    const tax = ((Number(e.serviceAmount) || 0) * 0.05).toFixed(2);
+
+    html += `
+      <tr>
+        <td>${index + 1}</td>
+
+        <td>
+          <input class="dr-input"
+            type="number"
+            value="${serviceAmount}"
+            ${isClosed ? 'disabled' : ''}
+            onchange="updateDrField('${e.id}','serviceAmount',this.value)">
+        </td>
+
+        <td>${tax}</td>
+
+        <td>
+          <input class="dr-input"
+            type="number"
+            value="${tip}"
+            ${isClosed ? 'disabled' : ''}
+            onchange="updateDrField('${e.id}','tip',this.value)">
+        </td>
+
+        <td>
+          <select class="dr-select"
+            ${isClosed ? 'disabled' : ''}
+            onchange="updateDrField('${e.id}','paymentMethod',this.value)">
+            <option value="card" ${paymentMethod==='card'?'selected':''}>Card</option>
+            <option value="cash" ${paymentMethod==='cash'?'selected':''}>Cash</option>
+            <option value="giftcard" ${paymentMethod==='giftcard'?'selected':''}>Gift</option>
+            <option value="check" ${paymentMethod==='check'?'selected':''}>Check</option>
+          </select>
+        </td>
+
+        <td>
+          ${
+            isClosed
+              ? `<button onclick="reopenDrEntry('${e.id}')">✏️</button>`
+              : `<button onclick="closeDrEntry('${e.id}')">✅</button>`
+          }
+        </td>
+      </tr>
+    `;
+  });
 
   html += `</table>`;
 
-  // Add button (только staff)
-  if (currentUserRole === 'staff') {
-    html += `
-      <button class="dr-add-btn" onclick="addDrEntry()">
-        + Add Row
-      </button>
-    `;
-  }
-
   body.innerHTML = html;
 }
+
+
+// ===== DAILY REPORT ACTIONS =====
+
+window.addDrEntry = async () => {
+  const dateStr = getDrDateString();
+
+  const sameDay = drEntries.filter(e =>
+    e.date === dateStr &&
+    e.staffId === currentUserStaffId
+  );
+
+  const hasOpen = sameDay.some(e => e.status !== 'closed');
+  if (hasOpen) return;
+
+  await addDoc(collection(db, "DayEntries"), {
+    date: dateStr,
+    staffId: currentUserStaffId,
+    serviceAmount: null,
+    tip: null,
+    paymentMethod: "card",
+    status: "open",
+    order: sameDay.length,
+    createdAt: serverTimestamp()
+  });
+};
+
+
+window.updateDrField = async (id, field, value) => {
+  const data = {};
+
+  if (field === "serviceAmount" || field === "tip") {
+    data[field] = Number(value) || 0;
+  } else {
+    data[field] = value;
+  }
+
+  await updateDoc(doc(db, "DayEntries", id), data);
+};
+
+
+window.deleteDrEntry = async (id) => {
+  await deleteDoc(doc(db, "DayEntries", id));
+};
+
+
+window.closeDrEntry = async (id) => {
+  const entry = drEntries.find(e => e.id === id);
+  if (!entry) return;
+
+  const dateStr = getDrDateString();
+
+  const sameDay = drEntries.filter(e =>
+    e.date === dateStr &&
+    e.staffId === currentUserStaffId
+  );
+
+  const hasOpen = sameDay.some(e =>
+    e.id !== id && e.status !== 'closed'
+  );
+
+  await updateDoc(doc(db, "DayEntries", id), {
+    status: "closed"
+  });
+
+  if (!hasOpen) {
+    await addDoc(collection(db, "DayEntries"), {
+      date: dateStr,
+      staffId: currentUserStaffId,
+      serviceAmount: null,
+      tip: null,
+      paymentMethod: "card",
+      status: "open",
+      order: sameDay.length,
+      createdAt: serverTimestamp()
+    });
+  }
+};
+
+
+window.reopenDrEntry = async (id) => {
+  await updateDoc(doc(db, "DayEntries", id), {
+    status: "open"
+  });
+};
 
 
 window.goPrevDay = () => {
