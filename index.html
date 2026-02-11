@@ -3831,7 +3831,10 @@ function renderDailyReport() {
     const serviceAmount = e.serviceAmount ?? "";
     const tip = e.tip ?? "";
     const paymentMethod = e.paymentMethod || "card";
-    const tax = ((Number(e.serviceAmount) || 0) * 0.05).toFixed(2);
+    const service = Number(e.serviceAmount) || 0;
+const tax = service * 0.05;
+const serviceWithTax = (service + tax).toFixed(2);
+
 
     html += `
       <div class="dr-row">
@@ -3847,7 +3850,8 @@ function renderDailyReport() {
             onchange="updateDrField('${e.id}','serviceAmount',this.value)">
         </div>
 
-        <div>${tax}</div>
+       <div>${serviceWithTax}</div>
+
 
         <div>
           <input class="dr-input"
@@ -3884,33 +3888,60 @@ function renderDailyReport() {
   html += `</div>`; // закрываем rows wrapper
 
   // ===== TOTAL BLOCK =====
-  html += `
-    <div style="margin-top:14px; font-size:13px; border-top:1px solid #eee; padding-top:10px;">
+const totalServiceWithTax = totalService + totalTax;
+
+// previous tips (из прошлых дней)
+const previousTips = drWithdrawals
+  .filter(w => w.staffId === currentUserStaffId)
+  .reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
+
+const totalTipsAllTime = totalTips + previousTips;
+
+html += `
+  <div style="margin-top:16px; font-size:13px; border-top:1px solid #eee; padding-top:12px;">
+
+    <div style="display:flex; justify-content:space-between;">
       <div><b>Total Service:</b> $${totalService.toFixed(2)}</div>
-      <div><b>Total Tax:</b> $${totalTax.toFixed(2)}</div>
-      <div><b>Total Tips:</b> $${totalTips.toFixed(2)}</div>
-      <div style="margin-top:6px;">
+      <div><b>Service With Tax:</b> $${totalServiceWithTax.toFixed(2)}</div>
+    </div>
+
+    <div style="margin-top:10px;">
+      <div style="display:flex; justify-content:space-between;">
+        <div><b>Today Tips:</b> $${totalTips.toFixed(2)}</div>
+        <div><b>Previous Tips:</b> $${previousTips.toFixed(2)}</div>
+      </div>
+
+      <div style="margin-top:4px;">
+        <b>Total Tips:</b> $${totalTipsAllTime.toFixed(2)}
+      </div>
+    </div>
+
+    <div style="margin-top:14px;">
+      <b>Total Payment Types:</b>
+      <div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:12px;">
         <div>Cash: $${totalCash.toFixed(2)}</div>
         <div>Card: $${totalCard.toFixed(2)}</div>
         <div>Gift: $${totalGift.toFixed(2)}</div>
         <div>Check: $${totalCheck.toFixed(2)}</div>
       </div>
     </div>
-  `;
+
+  </div>
+`;
 
   // ===== BUTTONS =====
-  html += `
-    <div style="display:flex; gap:8px; margin-top:14px;">
-      <button onclick="openWithdrawal()">Tips Withdrawal</button>
-      <button onclick="closeDay()">Close Day</button>
-      <button onclick="closeDailyReport()">Close</button>
-    </div>
-  `;
-
-  body.innerHTML = html;
-}
-
-
+html += `
+  <div style="
+    display:flex;
+    gap:8px;
+    margin-top:16px;
+    justify-content:flex-end;
+  ">
+    <button onclick="openWithdrawal()">Tips Withdrawal</button>
+    <button onclick="closeDay()">Close Day</button>
+    <button onclick="closeDailyReport()">Close</button>
+  </div>
+`;
 
 
 // ===== DAILY REPORT ACTIONS =====
@@ -4125,9 +4156,7 @@ if (currentUserRole === 'staff' || currentUserRole === 'reception') {
       <!-- content will be injected later -->
     </div>
 
-    <div class="modal-actions">
-      <button onclick="closeDailyReport()">Close</button>
-    </div>
+    
 
   </div>
 </div>
