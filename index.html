@@ -931,6 +931,45 @@ th.time {
   min-width: 160px;
   text-align: center;
 }
+.dr-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.dr-table th,
+.dr-table td {
+  border: 1px solid #ddd;
+  padding: 6px;
+  text-align: center;
+}
+
+.dr-table th {
+  background: #f5f5f5;
+  font-weight: 600;
+}
+
+.dr-input {
+  width: 80px;
+  padding: 4px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.dr-select {
+  padding: 4px;
+  font-size: 13px;
+}
+
+.dr-add-btn {
+  margin-top: 12px;
+  padding: 8px 14px;
+  border-radius: 16px;
+  border: 1px solid #ccc;
+  background: #f3f3f3;
+  cursor: pointer;
+}
 
 </style>
 
@@ -1587,6 +1626,7 @@ projectId:"rosesnails-calendar"
 const db = getFirestore();
 const auth = getAuth();
   let currentUserRole = 'manager'; // по умолчанию
+let currentUserStaffId = null;
 
   async function ensureAuthUser(email, role, staffId = null) {
   if (!email) return;
@@ -1697,6 +1737,13 @@ const staffDeleteModal = document.getElementById('staffDeleteModal');
 
 
 let staff=[], appointments=[], editId=null, staffToDelete=null;
+  // ===== DAILY REPORT DATA =====
+
+let drEntries = [];
+let drExtras = [];
+let drWithdrawals = [];
+let drDayStatus = null;
+
 aPhone.addEventListener('input', () => {
   const phone = aPhone.value.trim();
   if (!phone) return;
@@ -1886,6 +1933,28 @@ onSnapshot(collection(db, "OffWork"), s => {
 
 
 
+});
+// ===== DAILY REPORT SNAPSHOTS =====
+
+onSnapshot(collection(db, "DayEntries"), snapshot => {
+  drEntries = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderDailyReport();
+});
+
+onSnapshot(collection(db, "DayExtras"), snapshot => {
+  drExtras = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderDailyReport();
+});
+
+onSnapshot(collection(db, "TipWithdrawals"), snapshot => {
+  drWithdrawals = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderDailyReport();
+});
+
+onSnapshot(collection(db, "DayStatus"), snapshot => {
+  const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  drDayStatus = docs;
+  renderDailyReport();
 });
 
 
@@ -3631,6 +3700,8 @@ window.openDailyReport = () => {
     formatDrDate(drCurrentDate);
 
   modal.classList.remove('hidden');
+  renderDailyReport();
+
 };
 
 window.closeDailyReport = () => {
@@ -3649,7 +3720,84 @@ window.drNextDay = () => {
   document.getElementById('drDateLabel').textContent =
     formatDrDate(drCurrentDate);
 };
- 
+ function getDrDateString() {
+  return drCurrentDate.toISOString().slice(0, 10);
+}
+
+function renderDailyReport() {
+  const body = document.getElementById('dailyReportBody');
+  if (!body) return;
+
+  const dateStr = getDrDateString();
+
+  let entries = drEntries.filter(e => e.date === dateStr);
+
+  if (currentUserRole === 'staff' && currentUserStaffId) {
+    entries = entries.filter(e => e.staffId === currentUserStaffId);
+  }
+
+  let html = `
+    <table class="dr-table">
+      <tr>
+        <th>#</th>
+        <th>Service</th>
+        <th>Tax</th>
+        <th>Tip</th>
+        <th>Payment</th>
+        <th></th>
+      </tr>
+  `;
+
+  entries
+    .sort((a,b)=>a.order - b.order)
+    .forEach((e, index) => {
+      html += `
+        <tr>
+          <td>${index + 1}</td>
+          <td>
+            <input class="dr-input"
+              type="number"
+              value="${e.serviceAmount || 0}"
+              onchange="updateDrField('${e.id}','serviceAmount',this.value)">
+          </td>
+          <td>${((e.serviceAmount || 0) * 0.05).toFixed(2)}</td>
+          <td>
+            <input class="dr-input"
+              type="number"
+              value="${e.tip || 0}"
+              onchange="updateDrField('${e.id}','tip',this.value)">
+          </td>
+          <td>
+            <select class="dr-select"
+              onchange="updateDrField('${e.id}','paymentMethod',this.value)">
+              <option value="card" ${e.paymentMethod==='card'?'selected':''}>Card</option>
+              <option value="cash" ${e.paymentMethod==='cash'?'selected':''}>Cash</option>
+              <option value="giftcard" ${e.paymentMethod==='giftcard'?'selected':''}>Gift</option>
+              <option value="check" ${e.paymentMethod==='check'?'selected':''}>Check</option>
+            </select>
+          </td>
+          <td>
+            <button onclick="deleteDrEntry('${e.id}')">✕</button>
+          </td>
+        </tr>
+      `;
+    });
+
+  html += `</table>`;
+
+  // Add button (только staff)
+  if (currentUserRole === 'staff') {
+    html += `
+      <button class="dr-add-btn" onclick="addDrEntry()">
+        + Add Row
+      </button>
+    `;
+  }
+
+  body.innerHTML = html;
+}
+
+
 window.goPrevDay = () => {
   const d = getLocalDateFromInput(calendarDate.value);
   d.setDate(d.getDate() - 1);
@@ -3727,10 +3875,14 @@ onAuthStateChanged(auth, async (user) => {
     });
   }
 if (userSnap.exists()) {
-  currentUserRole = userSnap.data().role || 'manager';
+  const data = userSnap.data();
+  currentUserRole = data.role || 'manager';
+  currentUserStaffId = data.staffId || null;
 } else {
   currentUserRole = 'manager';
+  currentUserStaffId = null;
 }
+
 const staffMenuItem = document.getElementById('staffMenuItem');
 
 if (staffMenuItem) {
