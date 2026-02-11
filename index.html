@@ -908,67 +908,103 @@ th.time {
   /* ===== DAILY REPORT ===== */
 
 .daily-report-content {
-  width: 95vw;
+  width: 92vw;          /* как остальные модалки */
+  max-width: 380px;     /* ширина телефона */
   max-height: 95vh;
   overflow-y: auto;
 }
 
 .daily-report-wide {
-  max-width: 1100px;
+  max-width: 1100px;    /* для manager / reception */
 }
 
 .dr-header {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 20px;
-  margin-bottom: 16px;
+  gap: 16px;
+  margin-bottom: 14px;
 }
 
 .dr-date-label {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  min-width: 160px;
+  min-width: 150px;
   text-align: center;
 }
-.dr-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 10px;
+
+/* ===== Compact Layout ===== */
+
+.dr-head {
+  display: grid;
+  grid-template-columns: 24px 64px 44px 44px 70px 24px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  opacity: 0.7;
+}
+
+.dr-row {
+  display: grid;
+  grid-template-columns: 24px 64px 44px 44px 70px 24px;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
   font-size: 13px;
-}
-
-.dr-table th,
-.dr-table td {
-  border: 1px solid #ddd;
-  padding: 6px;
-  text-align: center;
-}
-
-.dr-table th {
-  background: #f5f5f5;
-  font-weight: 600;
 }
 
 .dr-input {
-  width: 80px;
-  padding: 4px;
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid #e0e0e0;
   font-size: 13px;
-  text-align: center;
+  padding: 2px 0;
+  background: transparent;
+}
+
+.dr-input:focus {
+  outline: none;
+  border-bottom: 1px solid #888;
+}
+
+.dr-input:disabled {
+  border-bottom: none;
+  color: #666;
+}
+
+/* убрать стрелки */
+.dr-input::-webkit-outer-spin-button,
+.dr-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.dr-input[type=number] {
+  -moz-appearance: textfield;
 }
 
 .dr-select {
-  padding: 4px;
+  border: none;
+  border-bottom: 1px solid #e0e0e0;
+  background: transparent;
   font-size: 13px;
+  padding: 2px 0;
 }
 
-.dr-add-btn {
-  margin-top: 12px;
-  padding: 8px 14px;
-  border-radius: 16px;
-  border: 1px solid #ccc;
-  background: #f3f3f3;
+.dr-select:focus {
+  outline: none;
+  border-bottom: 1px solid #888;
+}
+
+.dr-select:disabled {
+  border-bottom: none;
+  color: #666;
+}
+
+.dr-action {
   cursor: pointer;
+  font-size: 16px;
+  text-align: center;
 }
 
 </style>
@@ -3736,7 +3772,7 @@ function renderDailyReport() {
     entries = entries.filter(e => e.staffId === currentUserStaffId);
   }
 
-  // ===== AUTO CREATE FIRST ROW =====
+  // авто-первая строка
   if (
     currentUserRole === 'staff' &&
     currentUserStaffId &&
@@ -3746,21 +3782,19 @@ function renderDailyReport() {
     return;
   }
 
-  // сортировка по order
   entries = entries
     .slice()
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   let html = `
-    <table class="dr-table">
-      <tr>
-        <th>#</th>
-        <th>Service</th>
-        <th>Tax</th>
-        <th>Tip</th>
-        <th>Payment</th>
-        <th></th>
-      </tr>
+    <div class="dr-head">
+      <div>#</div>
+      <div>Service</div>
+      <div>Tax</div>
+      <div>Tip</div>
+      <div>Payment</div>
+      <div></div>
+    </div>
   `;
 
   entries.forEach((e, index) => {
@@ -3771,28 +3805,32 @@ function renderDailyReport() {
     const tax = ((Number(e.serviceAmount) || 0) * 0.05).toFixed(2);
 
     html += `
-      <tr>
-        <td>${index + 1}</td>
+      <div class="dr-row">
+        <div>${index + 1}</div>
 
-        <td>
+        <div>
           <input class="dr-input"
             type="number"
+            min="0"
+            step="0.01"
             value="${serviceAmount}"
             ${isClosed ? 'disabled' : ''}
             onchange="updateDrField('${e.id}','serviceAmount',this.value)">
-        </td>
+        </div>
 
-        <td>${tax}</td>
+        <div>${tax}</div>
 
-        <td>
+        <div>
           <input class="dr-input"
             type="number"
+            min="0"
+            step="0.01"
             value="${tip}"
             ${isClosed ? 'disabled' : ''}
             onchange="updateDrField('${e.id}','tip',this.value)">
-        </td>
+        </div>
 
-        <td>
+        <div>
           <select class="dr-select"
             ${isClosed ? 'disabled' : ''}
             onchange="updateDrField('${e.id}','paymentMethod',this.value)">
@@ -3801,23 +3839,22 @@ function renderDailyReport() {
             <option value="giftcard" ${paymentMethod==='giftcard'?'selected':''}>Gift</option>
             <option value="check" ${paymentMethod==='check'?'selected':''}>Check</option>
           </select>
-        </td>
+        </div>
 
-        <td>
+        <div class="dr-action">
           ${
             isClosed
-              ? `<button onclick="reopenDrEntry('${e.id}')">✏️</button>`
-              : `<button onclick="closeDrEntry('${e.id}')">✅</button>`
+              ? `<span onclick="reopenDrEntry('${e.id}')">✏️</span>`
+              : `<span onclick="closeDrEntry('${e.id}')">✅</span>`
           }
-        </td>
-      </tr>
+        </div>
+      </div>
     `;
   });
 
-  html += `</table>`;
-
   body.innerHTML = html;
 }
+
 
 
 // ===== DAILY REPORT ACTIONS =====
