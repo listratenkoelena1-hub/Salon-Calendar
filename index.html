@@ -1616,10 +1616,11 @@ function initAppointmentDatePicker() {
   datePickerInstance = flatpickr(aDatePicker, {
     dateFormat: "Y-m-d",
     defaultDate: aDate.value,
-    clickOpens: false,
-    positionElement: changeDateBtn,
+
     appendTo: appointmentModal.querySelector('.modal-content'),
-    static: false,
+    positionElement: changeDateBtn,
+    position: "below",
+    static: true,
 
     onChange: function(selectedDates, dateStr) {
       if (!dateStr) return;
@@ -1629,6 +1630,7 @@ function initAppointmentDatePicker() {
     }
   });
 }
+
 
 
 
