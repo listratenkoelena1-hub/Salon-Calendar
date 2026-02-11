@@ -1599,11 +1599,26 @@ function initAppointmentDatePicker() {
   datePickerInstance = flatpickr(aDatePicker, {
     dateFormat: "Y-m-d",
     defaultDate: aDate.value,
+    clickOpens: false,
 
     appendTo: appointmentModal.querySelector('.modal-content'),
-    positionElement: changeDateBtn,
-    position: "below",
-    static: true,
+
+    onReady: function(selectedDates, dateStr, instance) {
+      const calendar = instance.calendarContainer;
+
+      calendar.style.position = "absolute";
+
+      const btnRect = changeDateBtn.getBoundingClientRect();
+      const modalRect = appointmentModal
+        .querySelector('.modal-content')
+        .getBoundingClientRect();
+
+      calendar.style.top =
+        btnRect.bottom - modalRect.top + 6 + "px";
+
+      calendar.style.left =
+        btnRect.left - modalRect.left + "px";
+    },
 
     onChange: function(selectedDates, dateStr) {
       if (!dateStr) return;
@@ -1613,6 +1628,7 @@ function initAppointmentDatePicker() {
     }
   });
 }
+
 
 
 changeDateBtn.onclick = () => {
