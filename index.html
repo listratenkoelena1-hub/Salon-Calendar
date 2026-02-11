@@ -354,31 +354,6 @@ margin-top:12px;
   font-size: 11px !important;
 }
 
-/* Контейнер дней */
-.flatpickr-days {
-  display: flex !important;
-  justify-content: center !important;
-}
-
-.dayContainer {
-  width: 182px !important;   /* 26px × 7 */
-  min-width: 182px !important;
-  max-width: 182px !important;
-}
-
-/* Ячейки дней */
-.flatpickr-day {
-  width: 26px !important;
-  height: 26px !important;
-  line-height: 26px !important;
-  margin: 0 !important;
-  font-size: 13px !important;
-  padding: 0 !important;
-}
-
-
-
-
 .staff-card {
   padding:8px;
   border:1px solid #ddd;
@@ -386,6 +361,24 @@ margin-top:12px;
   margin-bottom:8px;
 }
 
+/* ===== Flatpickr real compact fix ===== */
+
+.flatpickr-calendar .dayContainer {
+  display: grid !important;
+  grid-template-columns: repeat(7, 1fr) !important;
+  width: 100% !important;
+}
+
+.flatpickr-calendar .flatpickr-day {
+  flex: none !important;
+  max-width: none !important;
+  width: 100% !important;
+  height: 26px !important;
+  line-height: 26px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: 13px !important;
+}
 
 
 
