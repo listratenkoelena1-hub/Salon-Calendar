@@ -333,6 +333,12 @@ margin-top:12px;
 
 }
 
+/* small flatpickr */
+.flatpickr-calendar {
+  font-size: 12px;
+  transform: scale(0.85);
+  transform-origin: top left;
+}
 
 
 .staff-card {
@@ -1574,10 +1580,16 @@ function initAppointmentDatePicker() {
   datePickerInstance = flatpickr(aDatePicker, {
     dateFormat: "Y-m-d",
     defaultDate: aDate.value,
+    clickOpens: false,
+    allowInput: false,
+    static: false,
+    position: "below",
+    appendTo: changeDateBtn.parentElement,
     onChange: function(selectedDates, dateStr) {
       if (!dateStr) return;
       aDate.value = dateStr;
       checkTimeAvailability();
+      datePickerInstance.close();
     }
   });
 }
