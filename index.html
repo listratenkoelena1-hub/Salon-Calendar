@@ -380,6 +380,25 @@ margin-top:12px;
   font-size: 13px !important;
 }
 
+/* Убираем расстояние между колонками */
+.flatpickr-calendar .dayContainer {
+  display: grid !important;
+  grid-template-columns: repeat(7, 1fr) !important;
+  gap: 0px !important;
+  column-gap: 0px !important;
+  row-gap: 2px !important; /* можно 0 если нужно ещё плотнее */
+}
+
+/* Убираем внутренние отступы дней */
+.flatpickr-calendar .flatpickr-day {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Убираем лишние отступы сверху */
+.flatpickr-calendar .flatpickr-days {
+  padding: 0 !important;
+}
 
 
 .staff-name {
