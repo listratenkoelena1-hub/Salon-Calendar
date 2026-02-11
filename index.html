@@ -1617,25 +1617,9 @@ function initAppointmentDatePicker() {
     dateFormat: "Y-m-d",
     defaultDate: aDate.value,
     clickOpens: false,
-
-    onOpen: function(selectedDates, dateStr, instance) {
-      const calendar = instance.calendarContainer;
-
-      const modalBox = appointmentModal.querySelector('.modal-content');
-      const btnRect = changeDateBtn.getBoundingClientRect();
-      const modalRect = modalBox.getBoundingClientRect();
-
-      calendar.style.position = "absolute";
-      calendar.style.zIndex = "9999";
-
-      calendar.style.top =
-        (btnRect.bottom - modalRect.top + 6) + "px";
-
-      calendar.style.left =
-        (btnRect.left - modalRect.left) + "px";
-
-      modalBox.appendChild(calendar);
-    },
+    positionElement: changeDateBtn,
+    appendTo: appointmentModal.querySelector('.modal-content'),
+    static: false,
 
     onChange: function(selectedDates, dateStr) {
       if (!dateStr) return;
@@ -1645,6 +1629,7 @@ function initAppointmentDatePicker() {
     }
   });
 }
+
 
 
 
