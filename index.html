@@ -326,35 +326,26 @@ margin-top:12px;
 
 }
 
-/* ===== Compact flatpickr FIXED GRID ===== */
+/* ===== REAL compact flatpickr grid fix ===== */
 
 .flatpickr-calendar {
-  width: 250px !important;
+  width: 240px !important;
   padding: 6px !important;
-}
-
-.flatpickr-days {
-  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 .flatpickr-innerContainer {
   padding: 0 !important;
 }
 
-.flatpickr-weekdays {
-  padding: 0 4px !important;
-  margin-bottom: 4px !important;
-}
-
-.flatpickr-weekday {
-  flex: 1 0 14.28% !important;
-  max-width: 14.28% !important;
-  font-size: 12px !important;
+.flatpickr-days {
+  width: 100% !important;
 }
 
 .flatpickr-day {
-  flex: 1 0 14.28% !important;
-  max-width: 14.28% !important;
+  min-width: unset !important;     /* ВАЖНО */
+  width: 14.2857% !important;      /* 100 / 7 */
+  max-width: 14.2857% !important;
 
   height: 32px !important;
   line-height: 32px !important;
@@ -363,6 +354,18 @@ margin-top:12px;
   padding: 0 !important;
 
   font-size: 14px !important;
+  box-sizing: border-box !important;
+}
+
+.flatpickr-weekday {
+  width: 14.2857% !important;
+  max-width: 14.2857% !important;
+  font-size: 12px !important;
+}
+
+.flatpickr-weekdays {
+  padding: 0 !important;
+  margin: 0 0 4px 0 !important;
 }
 
 .flatpickr-months {
@@ -372,8 +375,6 @@ margin-top:12px;
 .flatpickr-current-month {
   font-size: 14px !important;
 }
-
-
 
 
 
