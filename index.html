@@ -995,6 +995,7 @@ th.time {
   <button type="button" id="changeDateBtn" class="ap-btn-small">
     Change date
   </button>
+  <input type="text" id="aDatePicker" style="display:none;">
 </div>
 
 <div class="ap-row">
@@ -1560,6 +1561,31 @@ const aTime = document.getElementById('aTime');
 const aDuration = document.getElementById('aDuration');
 const aClient = document.getElementById('aClient');
 const aNote = document.getElementById('aNote');
+const changeDateBtn = document.getElementById('changeDateBtn');
+const aDatePicker = document.getElementById('aDatePicker');
+
+let datePickerInstance = null;
+
+function initAppointmentDatePicker() {
+  if (datePickerInstance) {
+    datePickerInstance.destroy();
+  }
+
+  datePickerInstance = flatpickr(aDatePicker, {
+    dateFormat: "Y-m-d",
+    defaultDate: aDate.value,
+    onChange: function(selectedDates, dateStr) {
+      if (!dateStr) return;
+      aDate.value = dateStr;
+      checkTimeAvailability();
+    }
+  });
+}
+
+changeDateBtn.onclick = () => {
+  initAppointmentDatePicker();
+  datePickerInstance.open();
+};
 
 // Search
 const searchInput = document.getElementById('searchInput');
@@ -1651,6 +1677,13 @@ const MORNING_SLOTS = 8;
 let morningExpanded = false; 
 
 const ANYONE_ID="anyone";
+aStaff.onchange = () => {
+  handleAnyone();
+  checkTimeAvailability();
+};
+
+aTime.onchange = checkTimeAvailability;
+aDuration.onchange = checkTimeAvailability;
 
 function getLocalDateFromInput(value) {
   const [y, m, d] = value.split('-').map(Number);
@@ -2341,6 +2374,9 @@ aTime.innerHTML =
 
     .join('');
 
+setTimeout(() => {
+  checkTimeAvailability();
+}, 0);
 
 
 }
@@ -2367,6 +2403,38 @@ aDuration.disabled=false;
 
 };
 
+function checkTimeAvailability() {
+  const timeStatus = document.getElementById('timeCheck');
+  if (!timeStatus) return;
+
+  const data = {
+    date: aDate.value,
+    staffId: aStaff.value,
+    start: +aTime.value,
+    duration: +aDuration.value
+  };
+
+  if (data.staffId === ANYONE_ID) {
+    timeStatus.textContent = '';
+    return;
+  }
+
+  const conflict = appointments.some(a => {
+    if (a.id === editId) return false;
+    if (a.date !== data.date || a.staffId !== data.staffId) return false;
+
+    return Math.max(a.start, data.start) <
+           Math.min(a.start + a.duration, data.start + data.duration);
+  });
+
+  if (conflict) {
+    timeStatus.textContent = '✖ Slot busy';
+    timeStatus.style.color = '#d32f2f';
+  } else {
+    timeStatus.textContent = '✔ Slot available';
+    timeStatus.style.color = '#2e7d32';
+  }
+}
 
 
 window.saveAppointment=async()=>{
