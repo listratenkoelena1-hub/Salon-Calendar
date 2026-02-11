@@ -326,7 +326,7 @@ margin-top:12px;
 
 }
 
-/* ===== Compact flatpickr (internal only) ===== */
+/* ===== Clean Compact Flatpickr ===== */
 
 .flatpickr-calendar {
   padding: 4px !important;
@@ -344,70 +344,23 @@ margin-top:12px;
   font-size: 14px !important;
 }
 
-/* Дни недели */
 .flatpickr-weekdays {
   margin-bottom: 2px !important;
 }
 
+/* Дни и заголовки работают через flex 14.28% */
+/* Мы просто уменьшаем внутренние отступы */
+
+.flatpickr-day,
 .flatpickr-weekday {
-  width: 26px !important;
-  font-size: 11px !important;
-}
-
-.staff-card {
-  padding:8px;
-  border:1px solid #ddd;
-  border-radius:8px;
-  margin-bottom:8px;
-}
-
-/* ===== Flatpickr real compact fix ===== */
-
-.flatpickr-calendar .dayContainer {
-  display: grid !important;
-  grid-template-columns: repeat(7, 1fr) !important;
-  width: 100% !important;
-}
-
-.flatpickr-calendar .flatpickr-day {
-  flex: none !important;
-  max-width: none !important;
-  width: 100% !important;
-  height: 26px !important;
-  line-height: 26px !important;
-  margin: 0 !important;
   padding: 0 !important;
+  margin: 0 !important;
   font-size: 13px !important;
 }
 
-/* Убираем расстояние между колонками */
-.flatpickr-calendar .dayContainer {
-  display: grid !important;
-  grid-template-columns: repeat(7, 1fr) !important;
-  gap: 0px !important;
-  column-gap: 0px !important;
-  row-gap: 2px !important; /* можно 0 если нужно ещё плотнее */
-}
-
-/* Убираем внутренние отступы дней */
-.flatpickr-calendar .flatpickr-day {
-  margin: 0 !important;
-  padding: 0 !important;
-}
-
-/* Убираем лишние отступы сверху */
-.flatpickr-calendar .flatpickr-days {
-  padding: 0 !important;
-}
-/* Уменьшаем ширину колонок */
-.flatpickr-calendar .flatpickr-day {
-  flex: 0 0 12.5% !important;   /* было 14.28% */
-  max-width: 12.5% !important;
-}
-
-.flatpickr-calendar .flatpickr-weekday {
-  flex: 0 0 12.5% !important;
-  max-width: 12.5% !important;
+.flatpickr-day {
+  height: 26px !important;
+  line-height: 26px !important;
 }
 
 
