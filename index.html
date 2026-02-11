@@ -1048,6 +1048,10 @@ th.time {
     <option value="14">03:30</option>
   </select>
 </div>
+<div class="ap-row" id="phoneRow">
+  <span class="ap-label">Phone</span>
+  <input id="aPhone" class="ap-input-medium" placeholder="+1...">
+</div>
 
 <div class="ap-row">
   <span class="ap-label">Client</span>
@@ -1582,6 +1586,8 @@ const aDate = document.getElementById('aDate');
 const aStaff = document.getElementById('aStaff');
 const aTime = document.getElementById('aTime');
 const aDuration = document.getElementById('aDuration');
+  const aPhone = document.getElementById('aPhone');
+const phoneRow = document.getElementById('phoneRow');
 const aClient = document.getElementById('aClient');
 const aNote = document.getElementById('aNote');
 const changeDateBtn = document.getElementById('changeDateBtn');
@@ -1646,6 +1652,15 @@ const staffDeleteModal = document.getElementById('staffDeleteModal');
 
 
 let staff=[], appointments=[], editId=null, staffToDelete=null;
+aPhone.addEventListener('input', () => {
+  const phone = aPhone.value.trim();
+  if (!phone) return;
+
+  const match = appointments.find(a => a.phone === phone);
+  if (match && match.client) {
+    aClient.value = match.client;
+  }
+});
 
 const calendar=document.getElementById('calendar');
 
@@ -2355,6 +2370,7 @@ function openAddFromCell(cell) {
   aTime.value = slotIndex;
 
   aClient.value = '';
+aPhone.value = '';
 
   aNote.value = '';
 
@@ -2383,6 +2399,7 @@ aTime.value = a.start === -1 ? -1 : a.start;
 aDuration.value=a.duration||1;
 
 aClient.value=a.client;
+aPhone.value = a.phone || '';
 
 aNote.value=a.note||'';
 
@@ -2477,9 +2494,10 @@ window.saveAppointment=async()=>{
 
 const data={
 
-date:calendarDate.value,
+date:aDate.value,
 
 staffId:aStaff.value,
+phone: aPhone.value || null,
 
 start:
 
@@ -3619,6 +3637,11 @@ if (staffMenuItem) {
   } else {
     staffMenuItem.style.display = '';
   }
+}
+if (currentUserRole === 'staff' || currentUserRole === 'reception') {
+  phoneRow.style.display = 'none';
+} else {
+  phoneRow.style.display = 'flex';
 }
 
   document.getElementById('loginScreen').classList.add('hidden');
