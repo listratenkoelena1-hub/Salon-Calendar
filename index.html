@@ -218,22 +218,15 @@ z-index:6000;
 .hidden { display:none; }
 
 .modal-content {
-
-background:#fff;
-
-padding:15px;
-
-border-radius:12px;
-
-width:380px;
-
-max-height:90vh;
-
-overflow:auto;
-
-
-
+  background:#fff;
+  padding:15px;
+  border-radius:12px;
+  width:380px;
+  max-height:90vh;
+  overflow:auto;
+  position: relative;
 }
+
 
 
 
@@ -901,10 +894,6 @@ th.time {
 
   
 </style>
-
-<!-- Flatpickr (Vacation calendar) -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
 
 </head>
@@ -1604,19 +1593,26 @@ function initAppointmentDatePicker() {
   }
 
   datePickerInstance = flatpickr(aDatePicker, {
-  dateFormat: "Y-m-d",
-  defaultDate: aDate.value,
-  static: true,
-  positionElement: changeDateBtn,
-  onChange: function(selectedDates, dateStr) {
-    if (!dateStr) return;
-    aDate.value = dateStr;
-    checkTimeAvailability();
-    datePickerInstance.close();
-  }
-});
+    dateFormat: "Y-m-d",
+    defaultDate: aDate.value,
+    appendTo: appointmentModal.querySelector('.modal-content'),
+    clickOpens: false,
+    onReady: function(selectedDates, dateStr, instance) {
+      const calendar = instance.calendarContainer;
 
+      calendar.style.position = "absolute";
+      calendar.style.top = changeDateBtn.offsetTop + changeDateBtn.offsetHeight + 6 + "px";
+      calendar.style.left = changeDateBtn.offsetLeft + "px";
+    },
+    onChange: function(selectedDates, dateStr) {
+      if (!dateStr) return;
+      aDate.value = dateStr;
+      checkTimeAvailability();
+      datePickerInstance.close();
+    }
+  });
 }
+
 
 changeDateBtn.onclick = () => {
   initAppointmentDatePicker();
