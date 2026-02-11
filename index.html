@@ -1026,13 +1026,19 @@ th.time {
 
 <div class="ap-row">
   <span class="ap-label">Date</span>
-  <input id="aDate" type="date" readonly disabled class="ap-input-date">
-  <button type="button" id="changeDateBtn" class="ap-btn-small">
-    Change date
-  </button>
-  <input type="text" id="aDatePicker" style="position:absolute; opacity:0; pointer-events:none;">
 
+  <div style="position:relative;">
+    <input id="aDate" type="date" readonly disabled class="ap-input-date">
+
+    <button type="button" id="changeDateBtn" class="ap-btn-small">
+      Change date
+    </button>
+
+    <input type="text" id="aDatePicker"
+           style="position:absolute; opacity:0; pointer-events:none;">
+  </div>
 </div>
+
 
 <div class="ap-row">
   <span class="ap-label">Staff</span>
@@ -1611,10 +1617,7 @@ function initAppointmentDatePicker() {
     dateFormat: "Y-m-d",
     defaultDate: aDate.value,
     clickOpens: false,
-
-    appendTo: appointmentModal.querySelector('.modal-content'),
-    positionElement: changeDateBtn,
-    position: "below left",
+    static: true,
 
     onChange: function(selectedDates, dateStr) {
       if (!dateStr) return;
