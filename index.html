@@ -887,6 +887,24 @@ th.time {
   font-weight: 600;
 }
 
+.app-client {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-service {
+  font-size: 10px;
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: relative;
+
+  mask-image: linear-gradient(to right, black 80%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 80%, transparent 100%);
+}
   
 </style>
 
@@ -2197,7 +2215,11 @@ dayAppointments
 
       cell.classList.add('busy', 'block-start', 'block-end');
 
-      cell.innerHTML = a.client;
+      cell.innerHTML = `
+  <div class="app-client">${a.client || ''}</div>
+  <div class="app-service">${a.note || ''}</div>
+`;
+
 
       cell.onclick = () => openEdit(a.id);
 
@@ -2227,13 +2249,21 @@ dayAppointments
 
         cell.classList.add('block-start', 'block-end');
 
-        cell.innerHTML = a.client;
+        cell.innerHTML = `
+  <div class="app-client">${a.client || ''}</div>
+  <div class="app-service">${a.note || ''}</div>
+`;
+
 
       } else if (i === 0) {
 
         cell.classList.add('block-start');
 
-        cell.innerHTML = a.client;
+        cell.innerHTML = `
+  <div class="app-client">${a.client || ''}</div>
+  <div class="app-service">${a.note || ''}</div>
+`;
+
 
       } else if (i === last) {
 
