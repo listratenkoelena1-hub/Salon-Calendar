@@ -804,6 +804,68 @@ th.time {
 #staffModal.staff-view .add-staff-section {
   display: none;
 }
+/* ===== APPOINTMENT MODAL NEW LAYOUT ===== */
+
+.ap-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.ap-label {
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ap-input-small {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+  min-width: 110px;
+}
+
+.ap-input-medium {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+  min-width: 160px;
+}
+
+.ap-input-date {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+  width: 140px;
+}
+
+.ap-textarea {
+  width: 100%;
+  margin-top: 6px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+  padding: 8px;
+}
+
+.ap-btn-small {
+  padding: 6px 10px;
+  border-radius: 14px;
+  border: 1px solid #ccc;
+  background: #f3f3f3;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.ap-time-status {
+  font-size: 13px;
+  font-weight: 600;
+}
 
   
 </style>
@@ -927,99 +989,51 @@ th.time {
 
 
 
-<label>Date</label>
-
-
-
-<input id="aDate" type="date" readonly disabled>
-
-
-
-<label>Staff</label>
-
-
-
-<select id="aStaff" onchange="handleAnyone()"></select>
-
-
-
-<label>Start time</label>
-
-
-
-<select id="aTime"></select>
-
-
-
-<label>Duration</label>
-
-
-
-<select id="aDuration">
-
-
-
-<option value="1">15 min</option>
-
-
-
-<option value="2">30 min</option>
-
-
-
-<option value="3">45 min</option>
-
-
-
-<option value="4">01:00</option>
-
-
-
-<option value="5">01:15</option>
-
-
-
-<option value="6">01:30</option>
-
-
-
-<option value="7">01:45</option>
-
-
-
-<option value="8">02:00</option>
-
-
-
-<option value="10">02:30</option>
-
-
-
-<option value="12">03:00</option>
-
-
-
-<option value="14">03:30</option>
-
-
-
-</select>
-
-
-
-<label>Client</label>
-
-
-
-<input id="aClient">
-
-
-
-<label>Note</label>
-
-
-
-<textarea id="aNote"></textarea>
+<div class="ap-row">
+  <span class="ap-label">Date</span>
+  <input id="aDate" type="date" readonly disabled class="ap-input-date">
+  <button type="button" id="changeDateBtn" class="ap-btn-small">
+    Change date
+  </button>
+</div>
+
+<div class="ap-row">
+  <span class="ap-label">Staff</span>
+  <select id="aStaff" onchange="handleAnyone()" class="ap-input-small"></select>
+</div>
+
+<div class="ap-row">
+  <span class="ap-label">Time</span>
+  <select id="aTime" class="ap-input-small"></select>
+  <span id="timeCheck" class="ap-time-status"></span>
+</div>
+
+<div class="ap-row">
+  <span class="ap-label">Duration</span>
+  <select id="aDuration" class="ap-input-small">
+    <option value="1">15 min</option>
+    <option value="2">30 min</option>
+    <option value="3">45 min</option>
+    <option value="4">01:00</option>
+    <option value="5">01:15</option>
+    <option value="6">01:30</option>
+    <option value="7">01:45</option>
+    <option value="8">02:00</option>
+    <option value="10">02:30</option>
+    <option value="12">03:00</option>
+    <option value="14">03:30</option>
+  </select>
+</div>
+
+<div class="ap-row">
+  <span class="ap-label">Client</span>
+  <input id="aClient" class="ap-input-medium">
+</div>
+
+<div>
+  <div class="ap-label" style="margin-top:12px;">Service</div>
+  <textarea id="aNote" class="ap-textarea"></textarea>
+</div>
 
 
 
