@@ -3964,6 +3964,13 @@ html += `
 
 
   // ===== BUTTONS =====
+// проверка: сегодня ли выбранный день
+const todayStr = new Date().toISOString().slice(0, 10);
+const isToday = dateStr === todayStr;
+
+// withdrawal доступен только сегодня и если день не закрыт
+const withdrawalDisabled = (!isToday || dayClosed) ? 'disabled' : '';
+
 html += `
   <div style="
     display:flex;
@@ -3971,13 +3978,19 @@ html += `
     margin-top:16px;
     justify-content:flex-end;
   ">
-    <button onclick="openWithdrawal()">Tips Withdrawal</button>
-    <button onclick="openCloseDayModal()">Close Day</button>
+    <button ${withdrawalDisabled}
+      onclick="openWithdrawal()">
+      Tips Withdrawal
+    </button>
+
+    <button ${!isToday || dayClosed ? 'disabled' : ''}
+      onclick="openCloseDayModal()">
+      Close Day
+    </button>
+
     <button onclick="closeDailyReport()">Close</button>
   </div>
 `;
-   body.innerHTML = html;
-}
 
 // ===== DAILY REPORT ACTIONS =====
 
@@ -4190,6 +4203,10 @@ window.confirmCloseDay = async () => {
 
 window.openWithdrawal = () => {
   const dateStr = getDrDateString();
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // разрешено только сегодня
+  if (dateStr !== todayStr) return;
 
   const dayClosed = drDayStatus?.some(d =>
     d.date === dateStr &&
@@ -4208,6 +4225,11 @@ window.closeWithdrawal = () => {
 };
 
 window.confirmWithdrawal = async () => {
+    const dateStr = getDrDateString();
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  if (dateStr !== todayStr) return;
+
   const amount = Number(document.getElementById('withdrawAmount').value);
   if (!amount || amount <= 0) return;
 
