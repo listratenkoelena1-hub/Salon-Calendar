@@ -3768,6 +3768,10 @@ function renderDailyReport() {
   const body = document.getElementById('dailyReportBody');
   if (!body) return;
 
+  if (!currentUserRole) return;
+  if (currentUserRole === 'staff' && !currentUserStaffId) return;
+
+
   const dateStr = getDrDateString();
 const dayClosed = drDayStatus?.some(d =>
   d.date === dateStr &&
