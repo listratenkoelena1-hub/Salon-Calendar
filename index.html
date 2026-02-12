@@ -3769,6 +3769,11 @@ function renderDailyReport() {
   if (!body) return;
 
   const dateStr = getDrDateString();
+const dayClosed = drDayStatus?.some(d =>
+  d.date === dateStr &&
+  d.staffId === currentUserStaffId &&
+  d.locked === true
+);
 
   let entries = drEntries.filter(e => e.date === dateStr);
 
@@ -3827,7 +3832,7 @@ function renderDailyReport() {
   `;
 
   entries.forEach((e, index) => {
-    const isClosed = e.status === "closed";
+    const isClosed = e.status === "closed" || dayClosed;
     const serviceAmount = e.serviceAmount ?? "";
     const tip = e.tip ?? "";
     const paymentMethod = e.paymentMethod || "card";
@@ -3888,46 +3893,75 @@ const serviceWithTax = (service + tax).toFixed(2);
   html += `</div>`; // закрываем rows wrapper
 
   // ===== TOTAL BLOCK =====
+
+// Total service with tax
 const totalServiceWithTax = totalService + totalTax;
 
-// previous tips (из прошлых дней)
-const previousTips = drWithdrawals
+// ===== TIPS SYSTEM =====
+
+// today tips (только выбранный день)
+const todayTips = totalTips;
+
+// все заработанные tips за всё время
+const totalEarnedTips = drEntries
+  .filter(e => e.staffId === currentUserStaffId)
+  .reduce((sum, e) => sum + (Number(e.tip) || 0), 0);
+
+// все withdrawal (за всё время)
+const totalWithdrawnTips = drWithdrawals
   .filter(w => w.staffId === currentUserStaffId)
   .reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
 
-const totalTipsAllTime = totalTips + previousTips;
+// withdrawal только сегодня
+const todayWithdrawn = drWithdrawals
+  .filter(w =>
+    w.staffId === currentUserStaffId &&
+    w.date === dateStr
+  )
+  .reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
+
+// balance
+const balanceTips = totalEarnedTips - totalWithdrawnTips;
+
+// previous tips (до сегодняшнего дня)
+const previousTips = totalEarnedTips - todayTips;
 
 html += `
   <div style="margin-top:16px; font-size:13px; border-top:1px solid #eee; padding-top:12px;">
 
+    <!-- 1️⃣ Total Service Row -->
     <div style="display:flex; justify-content:space-between;">
       <div><b>Total Service:</b> $${totalService.toFixed(2)}</div>
       <div><b>Service With Tax:</b> $${totalServiceWithTax.toFixed(2)}</div>
     </div>
 
-    <div style="margin-top:10px;">
-      <div style="display:flex; justify-content:space-between;">
-        <div><b>Today Tips:</b> $${totalTips.toFixed(2)}</div>
+    <!-- spacing -->
+    <div style="height:12px;"></div>
+
+    <!-- 2️⃣ Tips Block -->
+    <div style="display:flex; justify-content:space-between;">
+
+      <!-- LEFT COLUMN -->
+      <div>
         <div><b>Previous Tips:</b> $${previousTips.toFixed(2)}</div>
+        <div style="margin-top:6px;">
+          <b>Today Tips:</b> $${todayTips.toFixed(2)}
+        </div>
       </div>
 
-      <div style="margin-top:4px;">
-        <b>Total Tips:</b> $${totalTipsAllTime.toFixed(2)}
+      <!-- RIGHT COLUMN -->
+      <div style="text-align:right;">
+        <div><b>Withdrawal Today:</b> $${todayWithdrawn.toFixed(2)}</div>
+        <div style="margin-top:6px; font-weight:600;">
+          Balance: $${balanceTips.toFixed(2)}
+        </div>
       </div>
-    </div>
 
-    <div style="margin-top:14px;">
-      <b>Total Payment Types:</b>
-      <div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:12px;">
-        <div>Cash: $${totalCash.toFixed(2)}</div>
-        <div>Card: $${totalCard.toFixed(2)}</div>
-        <div>Gift: $${totalGift.toFixed(2)}</div>
-        <div>Check: $${totalCheck.toFixed(2)}</div>
-      </div>
     </div>
 
   </div>
 `;
+
 
   // ===== BUTTONS =====
 html += `
@@ -3938,7 +3972,7 @@ html += `
     justify-content:flex-end;
   ">
     <button onclick="openWithdrawal()">Tips Withdrawal</button>
-    <button onclick="closeDay()">Close Day</button>
+    <button onclick="openCloseDayModal()">Close Day</button>
     <button onclick="closeDailyReport()">Close</button>
   </div>
 `;
@@ -4133,7 +4167,74 @@ if (currentUserRole === 'staff' || currentUserRole === 'reception') {
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('calendar-container').style.display = 'block';
 });
+window.openCloseDayModal = () => {
+  document.getElementById('closeDayModal').classList.remove('hidden');
+};
 
+window.cancelCloseDay = () => {
+  document.getElementById('closeDayModal').classList.add('hidden');
+};
+
+window.confirmCloseDay = async () => {
+  const dateStr = getDrDateString();
+
+  await setDoc(doc(db, "DayStatus", dateStr + "_" + currentUserStaffId), {
+    date: dateStr,
+    staffId: currentUserStaffId,
+    locked: true,
+    lockedAt: serverTimestamp()
+  });
+
+  cancelCloseDay();
+};
+
+window.openWithdrawal = () => {
+  const dateStr = getDrDateString();
+
+  const dayClosed = drDayStatus?.some(d =>
+    d.date === dateStr &&
+    d.staffId === currentUserStaffId &&
+    d.locked === true
+  );
+
+  if (dayClosed) return;
+
+  document.getElementById('withdrawAmount').value = '';
+  document.getElementById('withdrawModal').classList.remove('hidden');
+};
+
+window.closeWithdrawal = () => {
+  document.getElementById('withdrawModal').classList.add('hidden');
+};
+
+window.confirmWithdrawal = async () => {
+  const amount = Number(document.getElementById('withdrawAmount').value);
+  if (!amount || amount <= 0) return;
+
+  const totalEarned = drEntries
+    .filter(e => e.staffId === currentUserStaffId)
+    .reduce((sum, e) => sum + (Number(e.tip) || 0), 0);
+
+  const totalWithdrawn = drWithdrawals
+    .filter(w => w.staffId === currentUserStaffId)
+    .reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
+
+  const balance = totalEarned - totalWithdrawn;
+
+  if (amount > balance) {
+    alert("Not enough balance");
+    return;
+  }
+
+  await addDoc(collection(db, "TipWithdrawals"), {
+    staffId: currentUserStaffId,
+    date: getDrDateString(),
+    amount: amount,
+    createdAt: serverTimestamp()
+  });
+
+  closeWithdrawal();
+};
 
 </script>
 <!-- ===================== -->
@@ -4194,6 +4295,44 @@ if (currentUserRole === 'staff' || currentUserRole === 'reception') {
 
 <button id="todayBtn" onclick="goToday()">Today</button>
 
+<!-- CLOSE DAY CONFIRM -->
+<div id="closeDayModal" class="modal hidden">
+  <div class="modal-content" style="max-width:280px;">
+    <h4>Close Day</h4>
+
+    <p style="font-size:13px; margin-top:10px;">
+      Are you sure you want to close this day?
+      <br><br>
+      After closing, you will not be able to edit this day.
+    </p>
+
+    <div class="modal-actions">
+      <button onclick="confirmCloseDay()">OK</button>
+      <button onclick="cancelCloseDay()">Cancel</button>
+    </div>
+  </div>
+</div>
+<!-- TIPS WITHDRAWAL -->
+<div id="withdrawModal" class="modal hidden">
+  <div class="modal-content" style="max-width:260px;">
+    <h4>Tips Withdrawal</h4>
+
+    <p style="font-size:13px; margin-top:8px;">
+      How much tips would you like to withdraw today?
+    </p>
+
+    <input id="withdrawAmount"
+      type="number"
+      min="0"
+      step="0.01"
+      style="width:100%; margin-top:10px;">
+
+    <div class="modal-actions">
+      <button onclick="confirmWithdrawal()">OK</button>
+      <button onclick="closeWithdrawal()">Cancel</button>
+    </div>
+  </div>
+</div>
 
 </body>
 
