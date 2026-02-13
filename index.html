@@ -1040,11 +1040,12 @@ th.time {
 }
 
 .mgr-card {
-  min-width: 250px;
-  max-width: 260px;
+  width: 210px;
+  flex: 0 0 210px;
   border-right: 1px solid #e5e5e5;
-  padding-right: 10px;
+  padding-right: 8px;
 }
+
 
 .mgr-card-title {
   font-weight: 600;
@@ -1054,7 +1055,7 @@ th.time {
 
 .mgr-head {
   display: grid;
-  grid-template-columns: 50px 60px 55px 55px;
+  grid-template-columns: 45px 55px 45px 45px;
   font-size: 11px;
   font-weight: 600;
   margin-bottom: 6px;
@@ -1090,6 +1091,32 @@ th.time {
   row-gap: 6px;
   font-size: 13px;
   font-weight: 500;
+}
+.mgr-totals-title {
+  font-weight: 600;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.mgr-two-col {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  row-gap: 4px;
+  font-size: 12px;
+}
+
+.mgr-two-col.space-top {
+  margin-top: 8px;
+}
+.mgr-global {
+  font-size: 13px;
+}
+
+.mgr-global-row {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
 }
 
 </style>
@@ -4133,43 +4160,70 @@ function renderManagerDailyReport() {
           <div class="mgr-divider"></div>
 
           <div class="mgr-totals">
-            <div>Srv</div><div>0</div>
-            <div>S+T</div><div>0</div>
 
-            <div>Card</div><div>0</div>
-            <div>Cash</div><div>0</div>
-            <div>Gift</div><div>0</div>
-            <div>Check</div><div>0</div>
+  <div class="mgr-totals-title">Totals</div>
 
-            <div>Prev</div><div>0</div>
-            <div>Today</div><div>0</div>
-            <div>W/D</div><div>0</div>
-            <div>Bal</div><div>0</div>
-          </div>
+  <div class="mgr-two-col">
+    <div>Service</div><div>0</div>
+    <div>Service + Tax</div><div>0</div>
+  </div>
 
-        </div>
+  <div class="mgr-two-col space-top">
+    <div>Card</div><div>0</div>
+    <div>Cash</div><div>0</div>
+    <div>Gift</div><div>0</div>
+    <div>Check</div><div>0</div>
+  </div>
+
+  <div class="mgr-two-col space-top">
+    <div>Previous Tips</div><div>0</div>
+    <div>Tips Today</div><div>0</div>
+    <div>Tips Withdrawal</div><div>0</div>
+    <div>Tips Balance</div><div>0</div>
+  </div>
+
+</div>
+
       `;
     });
 
   html += `
       </div>
 
-      <div class="mgr-global-divider"></div>
-
       <div class="mgr-global">
-        <div>Total Service</div><div>0</div>
-        <div>Total S+T</div><div>0</div>
 
-        <div>Total Card</div><div>0</div>
-        <div>Total Cash</div><div>0</div>
-        <div>Total Gift</div><div>0</div>
-        <div>Total Check</div><div>0</div>
+  <div class="mgr-global-row">
+    <div>Total Service</div>
+    <div>0</div>
 
-        <div>Total Product</div><div>0</div>
-        <div>Total GiftCards</div><div>0</div>
-      </div>
+    <div>Total Service with Tax</div>
+    <div>0</div>
+  </div>
 
-    </div>
+  <div class="mgr-global-row">
+    <div>Total Card</div>
+    <div>0</div>
+
+    <div>Total Cash</div>
+    <div>0</div>
+
+    <div>Total Gift</div>
+    <div>0</div>
+
+    <div>Total Check</div>
+    <div>0</div>
+  </div>
+
+  <div class="mgr-global-row">
+    <div>Total Products</div>
+    <div>0</div>
+
+    <div>Total Gift Cards</div>
+    <div>0</div>
+  </div>
+
+</div>
+
   `;
 
   body.innerHTML = html;
