@@ -4184,25 +4184,65 @@ function renderManagerDailyReport() {
 
             <!-- SERVICE ROW -->
             <div class="mgr-row-inline">
-              <div>Service&nbsp;&nbsp;0&nbsp;&nbsp;&nbsp;&nbsp;Srv+Tax&nbsp;&nbsp;0</div>
+              <div class="mgr-pair">
+                <span>Service</span>
+                <span>0</span>
+              </div>
+
+              <div class="mgr-pair">
+                <span>Srv+Tax</span>
+                <span>0</span>
+              </div>
             </div>
 
             <!-- PAYMENTS -->
             <div class="mgr-row-inline">
-              <div>Card&nbsp;&nbsp;0&nbsp;&nbsp;&nbsp;&nbsp;Cash&nbsp;&nbsp;0</div>
+              <div class="mgr-pair">
+                <span>Card</span>
+                <span>0</span>
+              </div>
+
+              <div class="mgr-pair">
+                <span>Gift</span>
+                <span>0</span>
+              </div>
             </div>
 
             <div class="mgr-row-inline">
-              <div>Gift&nbsp;&nbsp;0&nbsp;&nbsp;&nbsp;&nbsp;Check&nbsp;&nbsp;0</div>
+              <div class="mgr-pair">
+                <span>Cash</span>
+                <span>0</span>
+              </div>
+
+              <div class="mgr-pair">
+                <span>Check</span>
+                <span>0</span>
+              </div>
             </div>
 
             <!-- TIPS -->
             <div class="mgr-row-inline">
-              <div>Prev Tips&nbsp;&nbsp;0&nbsp;&nbsp;&nbsp;&nbsp;Today Tips&nbsp;&nbsp;0</div>
+              <div class="mgr-pair">
+                <span>Prev Tips</span>
+                <span>0</span>
+              </div>
+
+              <div class="mgr-pair">
+                <span>Today Tips</span>
+                <span>0</span>
+              </div>
             </div>
 
             <div class="mgr-row-inline">
-              <div>Tips Withdr&nbsp;&nbsp;0&nbsp;&nbsp;&nbsp;&nbsp;Tips Bal&nbsp;&nbsp;0</div>
+              <div class="mgr-pair">
+                <span>Tips Withdr</span>
+                <span>0</span>
+              </div>
+
+              <div class="mgr-pair">
+                <span>Tips Bal</span>
+                <span>0</span>
+              </div>
             </div>
 
           </div>
@@ -4253,6 +4293,7 @@ function renderManagerDailyReport() {
 
   body.innerHTML = html;
 }
+
 
 // ===== DAILY REPORT ACTIONS =====
 
