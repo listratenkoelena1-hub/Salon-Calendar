@@ -1073,11 +1073,9 @@ th.time {
 }
 
 .mgr-totals {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  row-gap: 4px;
   font-size: 12px;
 }
+
 
 .mgr-global-divider {
   height: 2px;
@@ -1130,10 +1128,11 @@ th.time {
 }
 .mgr-row-inline {
   display: flex;
-  justify-content: space-between;
+  gap: 18px;   /* расстояние между левым и правым блоком */
   font-size: 11px;
   margin-bottom: 4px;
 }
+
 
 .mgr-pair {
   display: flex;
