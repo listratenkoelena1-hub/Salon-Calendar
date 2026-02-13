@@ -3769,13 +3769,17 @@ window.drPrevDay = () => {
   drCurrentDate.setDate(drCurrentDate.getDate() - 1);
   document.getElementById('drDateLabel').textContent =
     formatDrDate(drCurrentDate);
+  renderDailyReport();
 };
+
 
 window.drNextDay = () => {
   drCurrentDate.setDate(drCurrentDate.getDate() + 1);
   document.getElementById('drDateLabel').textContent =
     formatDrDate(drCurrentDate);
+  renderDailyReport();
 };
+
  function getDrDateString() {
   return drCurrentDate.toISOString().slice(0, 10);
 }
@@ -3989,7 +3993,16 @@ const todayStr = new Date().toISOString().slice(0, 10);
 const isToday = dateStr === todayStr;
 
 // withdrawal доступен только сегодня и если день не закрыт
-const withdrawalDisabled = (!isToday || dayClosed) ? 'disabled' : '';
+const alreadyWithdrawnToday = drWithdrawals.some(w =>
+  w.staffId === currentUserStaffId &&
+  w.date === dateStr
+);
+
+const withdrawalDisabled =
+  (!isToday || dayClosed || alreadyWithdrawnToday)
+    ? 'disabled'
+    : '';
+
 
 html += `
   <div style="
@@ -4204,8 +4217,22 @@ if (currentUserRole === 'staff' || currentUserRole === 'reception') {
   document.getElementById('calendar-container').style.display = 'block';
 });
 window.openCloseDayModal = () => {
+  const dateStr = getDrDateString();
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  if (dateStr !== todayStr) return;
+
+  const dayClosed = drDayStatus?.some(d =>
+    d.date === dateStr &&
+    d.staffId === currentUserStaffId &&
+    d.locked === true
+  );
+
+  if (dayClosed) return;
+
   document.getElementById('closeDayModal').classList.remove('hidden');
 };
+
 
 window.cancelCloseDay = () => {
   document.getElementById('closeDayModal').classList.add('hidden');
@@ -4214,15 +4241,31 @@ window.cancelCloseDay = () => {
 window.confirmCloseDay = async () => {
   const dateStr = getDrDateString();
 
-  await setDoc(doc(db, "DayStatus", dateStr + "_" + currentUserStaffId), {
-    date: dateStr,
-    staffId: currentUserStaffId,
-    locked: true,
-    lockedAt: serverTimestamp()
-  });
+  // 🔹 Проверяем открытые строки
+  const openRows = drEntries.filter(e =>
+    e.date === dateStr &&
+    e.staffId === currentUserStaffId &&
+    e.status !== "closed"
+  );
+
+  if (openRows.length > 0) {
+    alert("Please close all rows before closing the day.");
+    return;
+  }
+
+  await setDoc(
+    doc(db, "DayStatus", dateStr + "_" + currentUserStaffId),
+    {
+      date: dateStr,
+      staffId: currentUserStaffId,
+      locked: true,
+      lockedAt: serverTimestamp()
+    }
+  );
 
   cancelCloseDay();
 };
+
 
 window.openWithdrawal = () => {
   const dateStr = getDrDateString();
@@ -4271,6 +4314,15 @@ window.confirmWithdrawal = async () => {
     alert("Not enough balance");
     return;
   }
+const alreadyWithdrawnToday = drWithdrawals.some(w =>
+  w.staffId === currentUserStaffId &&
+  w.date === dateStr
+);
+
+if (alreadyWithdrawnToday) {
+  alert("Withdrawal already made today");
+  return;
+}
 
   await addDoc(collection(db, "TipWithdrawals"), {
     staffId: currentUserStaffId,
