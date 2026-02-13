@@ -1011,8 +1011,19 @@ th.time {
   overflow-y: auto;
   padding-right: 4px;
 }
-  .dr-button:disabled {
-  opacity: 0.4;
+  .dr-button {
+  padding: 6px 14px;
+  border-radius: 14px;
+  border: 1px solid #ccc;
+  background: #f3f3f3;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dr-button:disabled {
+  background: #e0e0e0;
+  color: #999;
+  border-color: #ddd;
   cursor: not-allowed;
 }
 
@@ -3997,7 +4008,8 @@ html += `
   Close Day
 </button>
 
-          <button onclick="closeDailyReport()">Close</button>
+          <button class="dr-button" onclick="closeDailyReport()">Close</button>
+
   </div>
 `;
   body.innerHTML = html;
@@ -4242,7 +4254,8 @@ window.confirmWithdrawal = async () => {
   if (dateStr !== todayStr) return;
 
   const amount = Number(document.getElementById('withdrawAmount').value);
-  if (!amount || amount <= 0) return;
+  if (isNaN(amount) || amount <= 0) return;
+
 
   const totalEarned = drEntries
     .filter(e => e.staffId === currentUserStaffId)
