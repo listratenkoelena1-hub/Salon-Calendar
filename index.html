@@ -1040,11 +1040,12 @@ th.time {
 }
 
 .mgr-card {
-  width: 210px;
-  flex: 0 0 210px;
+  width: 160px;
+  flex: 0 0 160px;
   border-right: 1px solid #e5e5e5;
-  padding-right: 8px;
+  padding-right: 6px;
 }
+
 
 
 .mgr-card-title {
@@ -1100,10 +1101,20 @@ th.time {
 
 .mgr-two-col {
   display: grid;
-  grid-template-columns: 1fr auto;
-  row-gap: 4px;
-  font-size: 12px;
+  grid-template-columns: auto 1fr;
+  row-gap: 3px;
+  font-size: 11px;
 }
+
+.mgr-two-col > div:nth-child(odd) {
+  white-space: nowrap;
+}
+
+.mgr-two-col > div:nth-child(even) {
+  text-align: right;
+  padding-left: 6px;
+}
+
 
 .mgr-two-col.space-top {
   margin-top: 8px;
@@ -4164,8 +4175,9 @@ function renderManagerDailyReport() {
   <div class="mgr-totals-title">Totals</div>
 
   <div class="mgr-two-col">
-    <div>Service</div><div>0</div>
-    <div>Service + Tax</div><div>0</div>
+    <div>Srv</div><div>0</div>
+<div>Srv+Tax</div><div>0</div>
+
   </div>
 
   <div class="mgr-two-col space-top">
@@ -4176,10 +4188,11 @@ function renderManagerDailyReport() {
   </div>
 
   <div class="mgr-two-col space-top">
-    <div>Previous Tips</div><div>0</div>
-    <div>Tips Today</div><div>0</div>
-    <div>Tips Withdrawal</div><div>0</div>
-    <div>Tips Balance</div><div>0</div>
+    <div>Prev tips</div><div>0</div>
+<div>Today Tips</div><div>0</div>
+<div>Withdraw</div><div>0</div>
+<div>Balance</div><div>0</div>
+
   </div>
 
 </div>
