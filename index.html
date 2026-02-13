@@ -927,7 +927,7 @@ th.time {
 }
 
 .dr-date-label {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   min-width: 150px;
   text-align: center;
@@ -1025,6 +1025,71 @@ th.time {
   color: #999;
   border-color: #ddd;
   cursor: not-allowed;
+}
+/* ===== MANAGER DAILY REPORT ===== */
+
+.mgr-wrapper {
+  width: 100%;
+}
+
+.mgr-staff-scroll {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+}
+
+.mgr-card {
+  min-width: 250px;
+  max-width: 260px;
+  border-right: 1px solid #e5e5e5;
+  padding-right: 10px;
+}
+
+.mgr-card-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.mgr-head {
+  display: grid;
+  grid-template-columns: 50px 60px 55px 55px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  opacity: 0.7;
+}
+
+.mgr-rows {
+  min-height: 60px;
+}
+
+.mgr-divider {
+  height: 1px;
+  background: #ddd;
+  margin: 8px 0;
+}
+
+.mgr-totals {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  row-gap: 4px;
+  font-size: 12px;
+}
+
+.mgr-global-divider {
+  height: 2px;
+  background: #ccc;
+  margin: 16px 0;
+}
+
+.mgr-global {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  row-gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 </style>
@@ -3785,6 +3850,10 @@ window.drNextDay = () => {
 }
 
 function renderDailyReport() {
+  if (currentUserRole === 'manager') {
+  renderManagerDailyReport();
+  return;
+}
   const body = document.getElementById('dailyReportBody');
   if (!body) return;
 
@@ -4026,6 +4095,83 @@ html += `
 
   </div>
 `;
+  body.innerHTML = html;
+}
+function renderManagerDailyReport() {
+  const body = document.getElementById('dailyReportBody');
+  if (!body) return;
+
+  let html = `
+    <div class="mgr-wrapper">
+
+      <div class="mgr-staff-scroll">
+  `;
+
+  // создаём карточку для каждого мастера (кроме Anyone)
+  staff
+    .filter(s => s.id !== "anyone")
+    .forEach(s => {
+
+      html += `
+        <div class="mgr-card">
+
+          <div class="mgr-card-title">
+            ${s.name}
+          </div>
+
+          <div class="mgr-head">
+            <div>Srv</div>
+            <div>S+T</div>
+            <div>Pay</div>
+            <div>Tip</div>
+          </div>
+
+          <div class="mgr-rows">
+            <!-- строки будут позже -->
+          </div>
+
+          <div class="mgr-divider"></div>
+
+          <div class="mgr-totals">
+            <div>Srv</div><div>0</div>
+            <div>S+T</div><div>0</div>
+
+            <div>Card</div><div>0</div>
+            <div>Cash</div><div>0</div>
+            <div>Gift</div><div>0</div>
+            <div>Check</div><div>0</div>
+
+            <div>Prev</div><div>0</div>
+            <div>Today</div><div>0</div>
+            <div>W/D</div><div>0</div>
+            <div>Bal</div><div>0</div>
+          </div>
+
+        </div>
+      `;
+    });
+
+  html += `
+      </div>
+
+      <div class="mgr-global-divider"></div>
+
+      <div class="mgr-global">
+        <div>Total Service</div><div>0</div>
+        <div>Total S+T</div><div>0</div>
+
+        <div>Total Card</div><div>0</div>
+        <div>Total Cash</div><div>0</div>
+        <div>Total Gift</div><div>0</div>
+        <div>Total Check</div><div>0</div>
+
+        <div>Total Product</div><div>0</div>
+        <div>Total GiftCards</div><div>0</div>
+      </div>
+
+    </div>
+  `;
+
   body.innerHTML = html;
 }
 
