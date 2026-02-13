@@ -4153,11 +4153,9 @@ function renderManagerDailyReport() {
 
   let html = `
     <div class="mgr-wrapper">
-
       <div class="mgr-staff-scroll">
   `;
 
-  // создаём карточку для каждого мастера (кроме Anyone)
   staff
     .filter(s => s.id !== "anyone")
     .forEach(s => {
@@ -4176,83 +4174,40 @@ function renderManagerDailyReport() {
             <div>Tip</div>
           </div>
 
-          <div class="mgr-rows">
-            <!-- строки будут позже -->
-          </div>
+          <div class="mgr-rows"></div>
 
           <div class="mgr-divider"></div>
 
           <div class="mgr-totals">
 
-  <div class="mgr-totals-title">Totals</div>
+            <div class="mgr-totals-title">Totals</div>
 
-  <div class="mgr-row-inline">
-  <div class="mgr-pair">
-    <span>Srv</span>
-    <span>0</span>
-  </div>
+            <!-- SERVICE ROW -->
+            <div class="mgr-row-inline">
+              <div>Service&nbsp;&nbsp;0&nbsp;&nbsp;&nbsp;&nbsp;Srv+Tax&nbsp;&nbsp;0</div>
+            </div>
 
-  <div class="mgr-pair">
-    <span>Srv+Tax</span>
-    <span>0</span>
-  </div>
-</div>
+            <!-- PAYMENTS -->
+            <div class="mgr-row-inline">
+              <div>Card&nbsp;&nbsp;0&nbsp;&nbsp;&nbsp;&nbsp;Cash&nbsp;&nbsp;0</div>
+            </div>
 
+            <div class="mgr-row-inline">
+              <div>Gift&nbsp;&nbsp;0&nbsp;&nbsp;&nbsp;&nbsp;Check&nbsp;&nbsp;0</div>
+            </div>
 
-  </div>
+            <!-- TIPS -->
+            <div class="mgr-row-inline">
+              <div>Prev Tips&nbsp;&nbsp;0&nbsp;&nbsp;&nbsp;&nbsp;Today Tips&nbsp;&nbsp;0</div>
+            </div>
 
-  <div class="mgr-row-inline">
-  <div class="mgr-pair">
-    <span>Card</span>
-    <span>0</span>
-  </div>
+            <div class="mgr-row-inline">
+              <div>Tips Withdr&nbsp;&nbsp;0&nbsp;&nbsp;&nbsp;&nbsp;Tips Bal&nbsp;&nbsp;0</div>
+            </div>
 
-  <div class="mgr-pair">
-    <span>Cash</span>
-    <span>0</span>
-  </div>
-</div>
+          </div>
 
-<div class="mgr-row-inline">
-  <div class="mgr-pair">
-    <span>Gift</span>
-    <span>0</span>
-  </div>
-
-  <div class="mgr-pair">
-    <span>Check</span>
-    <span>0</span>
-  </div>
-</div>
-
-
-  <div class="mgr-row-inline">
-  <div class="mgr-pair">
-    <span>Prev Tips</span>
-    <span>0</span>
-  </div>
-
-  <div class="mgr-pair">
-    <span>Today Tips</span>
-    <span>0</span>
-  </div>
-</div>
-
-<div class="mgr-row-inline">
-  <div class="mgr-pair">
-    <span>Tips Withdr</span>
-    <span>0</span>
-  </div>
-
-  <div class="mgr-pair">
-    <span>Tips Bal</span>
-    <span>0</span>
-  </div>
-</div>
-
-
-</div>
-</div>
+        </div>
       `;
     });
 
@@ -4261,38 +4216,39 @@ function renderManagerDailyReport() {
 
       <div class="mgr-global">
 
-  <div class="mgr-global-row">
-    <div>Total Service</div>
-    <div>0</div>
+        <div class="mgr-global-row">
+          <div>Total Service</div>
+          <div>0</div>
 
-    <div>Total Service with Tax</div>
-    <div>0</div>
-  </div>
+          <div>Total Service with Tax</div>
+          <div>0</div>
+        </div>
 
-  <div class="mgr-global-row">
-    <div>Total Card</div>
-    <div>0</div>
+        <div class="mgr-global-row">
+          <div>Total Card</div>
+          <div>0</div>
 
-    <div>Total Cash</div>
-    <div>0</div>
+          <div>Total Cash</div>
+          <div>0</div>
 
-    <div>Total Gift</div>
-    <div>0</div>
+          <div>Total Gift</div>
+          <div>0</div>
 
-    <div>Total Check</div>
-    <div>0</div>
-  </div>
+          <div>Total Check</div>
+          <div>0</div>
+        </div>
 
-  <div class="mgr-global-row">
-    <div>Total Products</div>
-    <div>0</div>
+        <div class="mgr-global-row">
+          <div>Total Products</div>
+          <div>0</div>
 
-    <div>Total Gift Cards</div>
-    <div>0</div>
-  </div>
+          <div>Total Gift Cards</div>
+          <div>0</div>
+        </div>
 
-</div>
+      </div>
 
+    </div>
   `;
 
   body.innerHTML = html;
