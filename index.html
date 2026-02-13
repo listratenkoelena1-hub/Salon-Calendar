@@ -1129,6 +1129,18 @@ th.time {
   flex-wrap: wrap;
   margin-bottom: 6px;
 }
+.mgr-row-inline {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.mgr-pair {
+  display: flex;
+  gap: 4px; /* расстояние между словом и цифрой */
+}
+
 
 </style>
 
@@ -4174,26 +4186,70 @@ function renderManagerDailyReport() {
 
   <div class="mgr-totals-title">Totals</div>
 
-  <div class="mgr-two-col">
-    <div>Srv</div><div>0</div>
-<div>Srv+Tax</div><div>0</div>
+  <div class="mgr-row-inline">
+  <div class="mgr-pair">
+    <span>Srv</span>
+    <span>0</span>
+  </div>
+
+  <div class="mgr-pair">
+    <span>Srv+Tax</span>
+    <span>0</span>
+  </div>
+</div>
+
 
   </div>
 
-  <div class="mgr-two-col space-top">
-    <div>Card</div><div>0</div>
-    <div>Cash</div><div>0</div>
-    <div>Gift</div><div>0</div>
-    <div>Check</div><div>0</div>
+  <div class="mgr-row-inline">
+  <div class="mgr-pair">
+    <span>Card</span>
+    <span>0</span>
   </div>
 
-  <div class="mgr-two-col space-top">
-    <div>Prev tips</div><div>0</div>
-<div>Today Tips</div><div>0</div>
-<div>Withdraw</div><div>0</div>
-<div>Balance</div><div>0</div>
-
+  <div class="mgr-pair">
+    <span>Cash</span>
+    <span>0</span>
   </div>
+</div>
+
+<div class="mgr-row-inline">
+  <div class="mgr-pair">
+    <span>Gift</span>
+    <span>0</span>
+  </div>
+
+  <div class="mgr-pair">
+    <span>Check</span>
+    <span>0</span>
+  </div>
+</div>
+
+
+  <div class="mgr-row-inline">
+  <div class="mgr-pair">
+    <span>Prev Tips</span>
+    <span>0</span>
+  </div>
+
+  <div class="mgr-pair">
+    <span>Today Tips</span>
+    <span>0</span>
+  </div>
+</div>
+
+<div class="mgr-row-inline">
+  <div class="mgr-pair">
+    <span>Tips Withdr</span>
+    <span>0</span>
+  </div>
+
+  <div class="mgr-pair">
+    <span>Tips Bal</span>
+    <span>0</span>
+  </div>
+</div>
+
 
 </div>
 </div>
