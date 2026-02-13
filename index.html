@@ -1011,6 +1011,11 @@ th.time {
   overflow-y: auto;
   padding-right: 4px;
 }
+  .dr-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 </style>
 
 
@@ -3982,17 +3987,17 @@ html += `
     margin-top:16px;
     justify-content:flex-end;
   ">
-    <button ${withdrawalDisabled}
-      onclick="openWithdrawal()">
+    <button class="dr-button" ${withdrawalDisabled}
+  onclick="openWithdrawal()">
       Tips Withdrawal
     </button>
 
-    <button ${!isToday || dayClosed ? 'disabled' : ''}
-      onclick="openCloseDayModal()">
-      Close Day
-    </button>
+    <button class="dr-button" ${!isToday || dayClosed ? 'disabled' : ''}
+  onclick="openCloseDayModal()">
+  Close Day
+</button>
 
-    <button onclick="closeDailyReport()">Close</button>
+          <button onclick="closeDailyReport()">Close</button>
   </div>
 `;
   body.innerHTML = html;
