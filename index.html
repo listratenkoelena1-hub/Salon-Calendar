@@ -4290,10 +4290,67 @@ function renderManagerDailyReport() {
 
     </div>
   `;
+  // ===== ROLE BUTTONS =====
+  let buttonsHtml = `
+    <div style="
+      display:flex;
+      justify-content:flex-end;
+      gap:8px;
+      margin-top:16px;
+    ">
+  `;
+
+  // Manager button
+  if (currentUserRole === 'manager') {
+    buttonsHtml += `
+      <button class="dr-button" onclick="openTheDayModal()">
+        Open the Day
+      </button>
+    `;
+  }
+
+  // Reception buttons
+  if (currentUserRole === 'reception') {
+    buttonsHtml += `
+      <button class="dr-button" onclick="sellProduct()">
+        Sell Product
+      </button>
+
+      <button class="dr-button" onclick="sellGiftCertificate()">
+        Sell Gift Certificate
+      </button>
+    `;
+  }
+
+  // Close button for everyone
+  buttonsHtml += `
+      <button class="dr-button" onclick="closeDailyReport()">
+        Close
+      </button>
+    </div>
+  `;
+
+  html += buttonsHtml;
 
   body.innerHTML = html;
 }
 
+// ===== ROLE ACTIONS =====
+
+window.openTheDayModal = () => {
+  if (currentUserRole !== 'manager') return;
+  alert('Open the Day modal (to be implemented)');
+};
+
+window.sellProduct = () => {
+  if (currentUserRole !== 'reception') return;
+  alert('Sell Product (to be implemented)');
+};
+
+window.sellGiftCertificate = () => {
+  if (currentUserRole !== 'reception') return;
+  alert('Sell Gift Certificate (to be implemented)');
+};
 
 // ===== DAILY REPORT ACTIONS =====
 
