@@ -3835,16 +3835,6 @@ if (!data.allDay && data.end <= data.start) {
   await addDoc(collection(db, "OffWork"), data);
 }
 
-editingOffWorkId = null;
-
-  closeOffWork();
-
-
-
-};
-
-
-
 offSaveBtn.onclick = saveOffWork;
 
 
