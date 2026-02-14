@@ -4102,8 +4102,6 @@ const todayWithdrawn = drWithdrawals
 // balance
 const balanceTips = totalEarnedTips - totalWithdrawnTips;
 
-// previous tips (до сегодняшнего дня)
-const previousTips = totalEarnedTips - todayTips;
 
 html += `
   <div style="margin-top:16px; font-size:13px; border-top:1px solid #eee; padding-top:12px;">
@@ -4121,12 +4119,12 @@ html += `
     <div style="display:flex; justify-content:space-between;">
 
       <!-- LEFT COLUMN -->
-      <div>
-        <div><b>Previous Tips:</b> $${previousTips.toFixed(2)}</div>
-        <div style="margin-top:6px;">
-          <b>Today Tips:</b> $${todayTips.toFixed(2)}
-        </div>
-      </div>
+<div>
+  <div>
+    <b>Today Tips:</b> $${todayTips.toFixed(2)}
+  </div>
+</div>
+
 
       <!-- RIGHT COLUMN -->
       <div style="text-align:right;">
