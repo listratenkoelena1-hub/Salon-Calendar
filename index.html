@@ -4425,6 +4425,7 @@ window.closeSellProduct = () => {
 window.confirmSellProduct = async () => {
   const name = document.getElementById('productName').value;
   const amount = Number(document.getElementById('productAmount').value);
+  const payment = document.getElementById('productPayment').value;
 
   if (!name || amount <= 0) return;
 
@@ -4433,6 +4434,7 @@ window.confirmSellProduct = async () => {
     type: "product",
     name: name,
     amount: amount,
+    paymentMethod: payment,
     createdAt: serverTimestamp()
   });
 
@@ -4458,8 +4460,8 @@ window.closeSellGift = () => {
 };
 
 window.confirmSellGift = async () => {
-  const amount =
-    Number(document.getElementById('giftAmount').value);
+  const amount = Number(document.getElementById('giftAmount').value);
+  const payment = document.getElementById('giftPayment').value;
 
   if (amount <= 0) return;
 
@@ -4467,12 +4469,14 @@ window.confirmSellGift = async () => {
     date: getDrDateString(),
     type: "gift",
     amount: amount,
+    paymentMethod: payment,
     createdAt: serverTimestamp()
   });
 
   closeSellGift();
   renderDailyReport();
 };
+
 // ---------- SPRING HELP ----------
 
 window.openSpringHelp = () => {
@@ -4515,6 +4519,7 @@ function renderRightTotalsBlock() {
 
   const dayEntries = drEntries.filter(e => e.date === dateStr);
   const springToday = springServices.filter(s => s.date === dateStr);
+const extrasToday = drExtras.filter(e => e.date === dateStr);
 
   let totalService = 0;
   let totalTax = 0;
@@ -4551,6 +4556,15 @@ function renderRightTotalsBlock() {
     if (s.paymentMethod === "giftcard") totalGift += service + tax;
     if (s.paymentMethod === "check") totalCheck += service + tax;
   });
+// ===== PRODUCTS & GIFTS =====
+extrasToday.forEach(e => {
+  const amount = Number(e.amount) || 0;
+
+  if (e.paymentMethod === "card") totalCard += amount;
+  if (e.paymentMethod === "cash") totalCash += amount;
+  if (e.paymentMethod === "giftcard") totalGift += amount;
+  if (e.paymentMethod === "check") totalCheck += amount;
+});
 
   // ===== WITHDRAWALS =====
   const withdrawalsToday = drWithdrawals.filter(w => w.date === dateStr);
@@ -4617,18 +4631,18 @@ function renderSoldTodayBlock() {
 
 
   const extrasHtml = extrasToday.map(e => `
-    <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-      <span>
-        ${e.type === "product" ? e.name : "Gift Certificate"} 
-        ${Number(e.amount).toFixed(2)}
-      </span>
-      <span class="mgr-trash"
-  onclick="deleteDayExtra('${e.id}')">
-  🗑
-</span>
+  <div class="mgr-sold-row">
+    <span>
+      ${e.type === "product" ? e.name : "Gift Certificate"} 
+      ${Number(e.amount).toFixed(2)}
+    </span>
+    <span class="mgr-trash"
+      onclick="deleteDayExtra('${e.id}')">
+      🗑
+    </span>
+  </div>
+`).join('');
 
-    </div>
-  `).join('');
 
   return `
     ${springHtml}
@@ -5094,6 +5108,13 @@ if (alreadyWithdrawnToday) {
 
     <label style="margin-top:8px;">Amount</label>
     <input id="productAmount" type="number" min="0" step="0.01" style="width:100%;">
+<label style="margin-top:8px;">Payment</label>
+<select id="productPayment" style="width:100%;">
+  <option value="card">Card</option>
+  <option value="cash">Cash</option>
+  <option value="giftcard">Gift</option>
+  <option value="check">Check</option>
+</select>
 
     <div class="modal-actions">
       <button onclick="confirmSellProduct()">Save</button>
@@ -5113,6 +5134,12 @@ if (alreadyWithdrawnToday) {
 
     <label>Amount</label>
     <input id="giftAmount" type="number" min="0" step="0.01" style="width:100%;">
+<label style="margin-top:8px;">Payment</label>
+<select id="giftPayment" style="width:100%;">
+  <option value="card">Card</option>
+  <option value="cash">Cash</option>
+  <option value="check">Check</option>
+</select>
 
     <div class="modal-actions">
       <button onclick="confirmSellGift()">Save</button>
