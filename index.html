@@ -1140,6 +1140,25 @@ th.time {
   display: flex;
   gap: 4px; /* расстояние между словом и цифрой */
 }
+/* ===== SOLD TODAY BLOCK ===== */
+
+.mgr-sold-row {
+  display: inline-flex;   /* важно: не flex 100%, а inline-flex */
+  align-items: center;
+  gap: 6px;               /* расстояние между текстом и мусоркой */
+  margin-bottom: 4px;
+}
+
+.mgr-trash {
+  cursor: pointer;
+  font-size: 13px;
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.mgr-trash:hover {
+  opacity: 1;
+}
 
 
 </style>
@@ -4589,7 +4608,11 @@ function renderSoldTodayBlock() {
   const springHtml = springToday.map(s => `
     <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
       <span>Spring Service ${Number(s.serviceAmount).toFixed(2)}</span>
-      <button onclick="deleteSpringService('${s.id}')">🗑</button>
+      <span class="mgr-trash"
+      onclick="deleteSale('${id}')">
+  🗑
+</span>
+
     </div>
   `).join('');
 
