@@ -4495,7 +4495,6 @@ function renderRightTotalsBlock() {
   const dateStr = getDrDateString();
 
   const dayEntries = drEntries.filter(e => e.date === dateStr);
-  const dayExtras = drExtras.filter(e => e.date === dateStr);
   const springToday = springServices.filter(s => s.date === dateStr);
 
   let totalService = 0;
@@ -4505,8 +4504,6 @@ function renderRightTotalsBlock() {
   let totalGift = 0;
   let totalCheck = 0;
   let totalWithdrawals = 0;
-  let totalProducts = 0;
-  let totalGiftCards = 0;
 
   // ===== SERVICES =====
   dayEntries.forEach(e => {
@@ -4536,37 +4533,32 @@ function renderRightTotalsBlock() {
     if (s.paymentMethod === "check") totalCheck += service + tax;
   });
 
-  // ===== PRODUCTS / GIFTS =====
-  dayExtras.forEach(e => {
-    if (e.type === "product") totalProducts += Number(e.amount) || 0;
-    if (e.type === "gift") totalGiftCards += Number(e.amount) || 0;
-  });
-
   // ===== WITHDRAWALS =====
   const withdrawalsToday = drWithdrawals.filter(w => w.date === dateStr);
   withdrawalsToday.forEach(w => {
     totalWithdrawals += Number(w.amount) || 0;
   });
 
-  const cashInDrawer = totalCash - totalWithdrawals;
+  const cashAfterWithdrawals = totalCash - totalWithdrawals;
 
   return `
+    <!-- ROW 1 -->
     <div>
-      <div>Total Service ${totalService.toFixed(2)}</div>
-      <div>Total Service with Tax ${(totalService + totalTax).toFixed(2)}</div>
+      Total Service ${totalService.toFixed(2)} &nbsp;&nbsp;&nbsp;
+      Total Service with Tax ${(totalService + totalTax).toFixed(2)}
     </div>
 
-    <div style="margin-top:10px;">
-      <div>Total Card ${totalCard.toFixed(2)}</div>
-      <div>Total Cash ${totalCash.toFixed(2)}</div>
-      <div>Cash in Drawer ${cashInDrawer.toFixed(2)}</div>
-      <div>Total Gift ${totalGift.toFixed(2)}</div>
-      <div>Total Check ${totalCheck.toFixed(2)}</div>
+    <!-- ROW 2 -->
+    <div style="margin-top:8px;">
+      Total Card ${totalCard.toFixed(2)} &nbsp;&nbsp;&nbsp;
+      Total Cash ${totalCash.toFixed(2)} &nbsp;&nbsp;&nbsp;
+      Total Gift ${totalGift.toFixed(2)} &nbsp;&nbsp;&nbsp;
+      Total Check ${totalCheck.toFixed(2)}
     </div>
 
-    <div style="margin-top:10px;">
-      <div>Total Products ${totalProducts.toFixed(2)}</div>
-      <div>Total Gift Cards ${totalGiftCards.toFixed(2)}</div>
+    <!-- ROW 3 -->
+    <div style="margin-top:8px;">
+      Cash after withdrawals ${cashAfterWithdrawals.toFixed(2)}
     </div>
   `;
 }
@@ -4577,6 +4569,18 @@ function renderSoldTodayBlock() {
 
   const springToday = springServices.filter(s => s.date === dateStr);
   const extrasToday = drExtras.filter(e => e.date === dateStr);
+
+  let totalProducts = 0;
+  let totalGiftCards = 0;
+
+  extrasToday.forEach(e => {
+    if (e.type === "product") {
+      totalProducts += Number(e.amount) || 0;
+    }
+    if (e.type === "gift") {
+      totalGiftCards += Number(e.amount) || 0;
+    }
+  });
 
   if (springToday.length === 0 && extrasToday.length === 0) {
     return `<div style="opacity:0.5;">No activity</div>`;
@@ -4599,7 +4603,17 @@ function renderSoldTodayBlock() {
     </div>
   `).join('');
 
-  return springHtml + extrasHtml;
+  return `
+    ${springHtml}
+    ${extrasHtml}
+
+    <div style="margin-top:12px; border-top:1px solid #eee; padding-top:8px;">
+      <div>Total Products ${totalProducts.toFixed(2)}</div>
+      <div style="margin-top:4px;">
+        Total Gift Cards ${totalGiftCards.toFixed(2)}
+      </div>
+    </div>
+  `;
 }
 
 window.deleteSpringService = async (id) => {
