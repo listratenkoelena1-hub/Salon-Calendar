@@ -3929,7 +3929,7 @@ window.drNextDay = () => {
 }
 
 function renderDailyReport() {
-  if (currentUserRole === 'manager') {
+  if (currentUserRole === 'manager' || currentUserRole === 'reception') {
   renderManagerDailyReport();
   return;
 }
