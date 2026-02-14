@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+f<!DOCTYPE html>
 
 
 <html lang="en">
@@ -3630,51 +3630,149 @@ offVacation.onchange = () => {
 
 
 window.saveOffWork = async () => {
-  // ===== VACATION SAVE =====
-if (offVacation.checked) {
-  if (!vacationFrom || !vacationTo) {
-    alert('Select vacation dates');
+
+  // =========================================
+  // VACATION SAVE
+  // =========================================
+  if (offVacation.checked) {
+
+    if (!vacationFrom || !vacationTo) {
+      alert('Select vacation dates');
+      return;
+    }
+
+    const start = new Date(vacationFrom);
+    const end = new Date(vacationTo);
+
+    const days = [];
+    let d = new Date(start);
+
+    while (d <= end) {
+      days.push(new Date(d));
+      d.setDate(d.getDate() + 1);
+    }
+
+    // ===== CONFLICT CHECK (VACATION) =====
+    for (const day of days) {
+
+      const dateStr =
+        day.getFullYear() +
+        '-' +
+        String(day.getMonth() + 1).padStart(2, '0') +
+        '-' +
+        String(day.getDate()).padStart(2, '0');
+
+      const weekday = day.getDay();
+
+      const hasOff = offWork.some(o =>
+        o.date === dateStr &&
+        o.staffId === offStaff.value
+      );
+
+      const hasWeekly = weeklyOff.some(w =>
+        w.staffId === offStaff.value &&
+        w.weekday === weekday &&
+        w.enabled !== false
+      );
+
+      if (hasOff || hasWeekly) {
+        document
+          .getElementById('offWorkHardConflictModal')
+          .classList.remove('hidden');
+        return;
+      }
+    }
+
+    // ===== SAVE VACATION DOCUMENT =====
+    const vacationDoc = await addDoc(collection(db, 'Vacations'), {
+      staffId: offStaff.value,
+      startDate: vacationFrom.toISOString().slice(0, 10),
+      endDate: vacationTo.toISOString().slice(0, 10),
+      createdAt: serverTimestamp()
+    });
+
+    const vacationId = vacationDoc.id;
+
+    await Promise.all(days.map(day => {
+      const dateStr =
+        day.getFullYear() +
+        '-' +
+        String(day.getMonth() + 1).padStart(2, '0') +
+        '-' +
+        String(day.getDate()).padStart(2, '0');
+
+      return addDoc(collection(db, 'OffWork'), {
+        date: dateStr,
+        staffId: offStaff.value,
+        allDay: true,
+        vacation: true,
+        vacationId: vacationId
+      });
+    }));
+
+    closeOffWork();
     return;
   }
- const vacationDoc = await addDoc(collection(db, 'Vacations'), {
-  staffId: offStaff.value,
-  startDate: vacationFrom.toISOString().slice(0, 10),
-  endDate: vacationTo.toISOString().slice(0, 10),
-  createdAt: serverTimestamp()
-});
 
-const vacationId = vacationDoc.id;
+  // =========================================
+  // NORMAL OFF WORK
+  // =========================================
 
-  
-
-  const start = new Date(vacationFrom);
-  const end = new Date(vacationTo);
-
-  const days = [];
-  let d = new Date(start);
-
-  while (d <= end) {
-    days.push(new Date(d));
-    d.setDate(d.getDate() + 1);
-  }
-await Promise.all(days.map(day => {
-  const dateStr =
-    day.getFullYear() +
-    '-' +
-    String(day.getMonth() + 1).padStart(2, '0') +
-    '-' +
-    String(day.getDate()).padStart(2, '0');
-
-  return addDoc(collection(db, 'OffWork'), {
-    date: dateStr,
+  const data = {
+    date: offDate.value,
     staffId: offStaff.value,
-    allDay: true,
-    vacation: true,
-    vacationId: vacationId
-  });
-}));
+    allDay: offAllDay.checked,
+    start: offAllDay.checked ? null : +offStart.value,
+    end: offAllDay.checked ? null : +offEnd.value
+  };
 
-  
+  const selectedDate = getLocalDateFromInput(data.date);
+  const weekday = selectedDate.getDay();
+
+  // ===== SAME DAY OFF CONFLICT =====
+  const hasOff = offWork.some(o =>
+    o.date === data.date &&
+    o.staffId === data.staffId
+  );
+
+  if (hasOff && !editingOffWorkId) {
+    document
+      .getElementById('offWorkHardConflictModal')
+      .classList.remove('hidden');
+    return;
+  }
+
+  // ===== WEEKLY CONFLICT =====
+  const hasWeekly = weeklyOff.some(w =>
+    w.staffId === data.staffId &&
+    w.weekday === weekday &&
+    w.enabled !== false
+  );
+
+  if (hasWeekly && !editingOffWorkId) {
+    document
+      .getElementById('offWorkHardConflictModal')
+      .classList.remove('hidden');
+    return;
+  }
+
+  // ===== TIME CHECK =====
+  if (!data.allDay && data.end <= data.start) {
+    return;
+  }
+
+  // ===== SAVE =====
+  if (editingOffWorkId) {
+    await updateDoc(doc(db, "OffWork", editingOffWorkId), data);
+  } else {
+    await addDoc(collection(db, "OffWork"), data);
+  }
+
+  editingOffWorkId = null;
+
+  closeOffWork();
+};
+
 
   closeOffWork();
   renderCalendar();
@@ -4990,6 +5088,11 @@ if (alreadyWithdrawnToday) {
 
   closeWithdrawal();
 };
+window.closeOffWorkHardConflict = () => {
+  document
+    .getElementById('offWorkHardConflictModal')
+    .classList.add('hidden');
+};
 
 </script>
 <!-- ===================== -->
@@ -5187,6 +5290,21 @@ if (alreadyWithdrawnToday) {
     <div class="modal-actions">
       <button onclick="confirmSpringHelp()">Save</button>
       <button onclick="closeSpringHelp()">Cancel</button>
+    </div>
+  </div>
+</div>
+<!-- OFF WORK CONFLICT MODAL -->
+<div id="offWorkHardConflictModal" class="modal hidden">
+  <div class="modal-content" style="max-width:340px;">
+    <h4>Off Work Already Exists</h4>
+
+    <p style="font-size:13px; margin-top:10px;">
+      This staff member already has off work for this period.
+      Please edit existing record instead of creating a new one.
+    </p>
+
+    <div class="modal-actions">
+      <button onclick="closeOffWorkHardConflict()">OK</button>
     </div>
   </div>
 </div>
