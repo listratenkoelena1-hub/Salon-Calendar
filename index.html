@@ -3773,68 +3773,6 @@ window.saveOffWork = async () => {
   closeOffWork();
 };
 
-
-  closeOffWork();
-  renderCalendar();
-  return;
-}
-
-
-// ===== WEEKLY OFF SAVE (TEMP FOR TEST) =====
-if (offWeekly.checked) {
-  const selectedDate = getLocalDateFromInput(offDate.value);
-  const weekday = selectedDate.getDay();
-
-  const weeklyData = {
-    staffId: offStaff.value,
-    weekday: weekday,
-    allDay: offAllDay.checked,
-    start: offAllDay.checked ? null : +offStart.value,
-    end: offAllDay.checked ? null : +offEnd.value,
-    enabled: true
-  };
-
-  await addDoc(collection(db, "WeeklyOff"), weeklyData);
-
-  closeOffWork();
-  return;
-}
-
-
-  const data = {
-
-    date: offDate.value,
-
-    staffId: offStaff.value,
-
-    allDay: offAllDay.checked,
-
-    start: offAllDay.checked ? null : +offStart.value,
-
-    end: offAllDay.checked ? null : +offEnd.value
-
-
-
-  };
-
-
-
-if (!data.allDay && data.end <= data.start) {
-
-  alert('End time must be later than start time');
-
-  return;
-
-}
-
-
-
-  if (editingOffWorkId) {
-  await updateDoc(doc(db, "OffWork", editingOffWorkId), data);
-} else {
-  await addDoc(collection(db, "OffWork"), data);
-}
-
 offSaveBtn.onclick = saveOffWork;
 
 
