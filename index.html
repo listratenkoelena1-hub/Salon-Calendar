@@ -1228,7 +1228,13 @@ th.time {
 
   <div id="topMenu" class="top-menu hidden">
     <div onclick="openDailyReport(); closeMenu()">Daily Report</div>
-    <div onclick="openOffWork(); closeMenu()">Off work</div>
+    <div
+  id="offWorkMenuItem"
+  onclick="openOffWork(); closeMenu()"
+>
+  Off work
+</div>
+
     <div onclick="openSearch(); closeMenu()">Search</div>
     <div
   id="staffMenuItem"
@@ -4849,6 +4855,17 @@ if (staffMenuItem) {
     staffMenuItem.style.display = '';
   }
 }
+  const offWorkMenuItem = document.getElementById('offWorkMenuItem');
+
+if (offWorkMenuItem) {
+  if (currentUserRole !== 'staff') {
+    offWorkMenuItem.style.display = 'none';
+  } else {
+    offWorkMenuItem.style.display = '';
+  }
+}
+
+
 if (currentUserRole === 'staff' || currentUserRole === 'reception') {
   phoneRow.style.display = 'none';
 } else {
