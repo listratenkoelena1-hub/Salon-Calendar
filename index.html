@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-
+const springHtml = springToday.map(s => `
 <html lang="en">
 
 <!-- ===================== -->
@@ -4606,15 +4606,15 @@ function renderSoldTodayBlock() {
   }
 
   const springHtml = springToday.map(s => `
-    <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-      <span>Spring Service ${Number(s.serviceAmount).toFixed(2)}</span>
-      <span class="mgr-trash"
-      onclick="deleteSale('${id}')">
-  🗑
-</span>
+  <div class="mgr-sold-row">
+    <span>Spring Service ${Number(s.serviceAmount).toFixed(2)}</span>
+    <span class="mgr-trash"
+      onclick="deleteSpringService('${s.id}')">
+      🗑
+    </span>
+  </div>
+`).join('');
 
-    </div>
-  `).join('');
 
   const extrasHtml = extrasToday.map(e => `
     <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
@@ -4622,7 +4622,11 @@ function renderSoldTodayBlock() {
         ${e.type === "product" ? e.name : "Gift Certificate"} 
         ${Number(e.amount).toFixed(2)}
       </span>
-      <button onclick="deleteDayExtra('${e.id}')">🗑</button>
+      <span class="mgr-trash"
+  onclick="deleteDayExtra('${e.id}')">
+  🗑
+</span>
+
     </div>
   `).join('');
 
