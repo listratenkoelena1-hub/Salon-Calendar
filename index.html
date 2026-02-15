@@ -2919,9 +2919,19 @@ const selectedDate = getLocalDateFromInput(data.date);
 const weekday = selectedDate.getDay();
 
 const weeklyConflict = weeklyOff.some(w => {
+
   if (w.staffId !== data.staffId) return false;
   if (w.weekday !== weekday) return false;
   if (w.enabled === false) return false;
+
+  // 🔹 проверяем исключение (weeklyException)
+  const hasException = offWork.some(o =>
+    o.weeklyException === true &&
+    o.weeklyId === w.id &&
+    o.date === data.date
+  );
+
+  if (hasException) return false;
 
   if (w.allDay) return true;
 
@@ -3030,9 +3040,18 @@ const selectedDate = getLocalDateFromInput(data.date);
 const weekday = selectedDate.getDay();
 
 const weeklyConflict = data.staffId !== ANYONE_ID && weeklyOff.some(w => {
+
   if (w.staffId !== data.staffId) return false;
   if (w.weekday !== weekday) return false;
   if (w.enabled === false) return false;
+
+  const hasException = offWork.some(o =>
+    o.weeklyException === true &&
+    o.weeklyId === w.id &&
+    o.date === data.date
+  );
+
+  if (hasException) return false;
 
   if (w.allDay) return true;
 
@@ -3043,6 +3062,7 @@ const weeklyConflict = data.staffId !== ANYONE_ID && weeklyOff.some(w => {
 
   return false;
 });
+
 
 
 if (offConflict || weeklyConflict) {
