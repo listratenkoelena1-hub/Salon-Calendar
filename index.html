@@ -1298,7 +1298,11 @@ th.time {
 
 
 
-<h3>Appointment</h3>
+<div style="display:flex; justify-content:space-between; align-items:center;">
+  <h3 style="margin:0;">Appointment</h3>
+  <div id="appointmentEditorLabel" style="font-size:13px; opacity:0.7;"></div>
+</div>
+
 
 
 
@@ -2712,8 +2716,7 @@ fillSelects();
 aClient.value='';
 
 aNote.value='';
-
-
+document.getElementById('appointmentEditorLabel').textContent = '';
 
 };
 
@@ -2752,12 +2755,20 @@ aPhone.value = '';
 aNoShow.checked = false;
 
   handleAnyone();
+document.getElementById('appointmentEditorLabel').textContent = '';
 
 }
 
 window.openEdit=id=>{
 
 const a=appointments.find(x=>x.id===id);
+const label = document.getElementById('appointmentEditorLabel');
+
+if (a.lastEditedBy) {
+  label.textContent = '@' + a.lastEditedBy;
+} else {
+  label.textContent = '';
+}
 
 if(!a) return;
 
@@ -2870,30 +2881,25 @@ function checkTimeAvailability() {
 
 window.saveAppointment=async()=>{
 
-const data={
+const editorLabel =
+  currentUserRole === 'manager'
+    ? 'Manager'
+    : currentUserRole === 'reception'
+      ? 'Reception'
+      : staff.find(s => s.id === currentUserStaffId)?.name || 'Staff';
 
-date:aDate.value,
-
-staffId:aStaff.value,
-phone: aPhone.value || null,
-
-start:
-
-  +aTime.value === -1
-
-    ? -1
-
-    : +aTime.value,
-
-duration:aStaff.value===ANYONE_ID?1:+aDuration.value,
-
-client:aClient.value,
-
-note:aNote.value,
-
-noShow: aNoShow.checked === true
-
+const data = {
+  date: aDate.value,
+  staffId: aStaff.value,
+  phone: aPhone.value || null,
+  start: +aTime.value === -1 ? -1 : +aTime.value,
+  duration: aStaff.value === ANYONE_ID ? 1 : +aDuration.value,
+  client: aClient.value,
+  note: aNote.value,
+  noShow: aNoShow.checked === true,
+  lastEditedBy: editorLabel
 };
+
 
 
 
