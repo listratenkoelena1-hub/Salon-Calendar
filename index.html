@@ -2898,14 +2898,33 @@ function checkTimeAvailability() {
     return Math.max(a.start, data.start) <
            Math.min(a.start + a.duration, data.start + data.duration);
   });
+// ===== OFF WORK CHECK =====
+const offConflict = offWork.some(o => {
+  if (o.date !== data.date) return false;
+  if (o.staffId !== data.staffId) return false;
 
-  if (conflict) {
-    timeStatus.textContent = '✖ Slot busy';
-    timeStatus.style.color = '#d32f2f';
-  } else {
-    timeStatus.textContent = '✔ Slot available';
-    timeStatus.style.color = '#2e7d32';
+  if (o.allDay) return true;
+
+  if (data.start === -1 && o.start === -1) return true;
+
+  if (data.start >= 0 && o.start >= 0) {
+    return Math.max(o.start, data.start) <
+           Math.min(o.end, data.start + data.duration);
   }
+
+  return false;
+});
+if (conflict) {
+  timeStatus.textContent = '✖ Slot busy';
+  timeStatus.style.color = '#d32f2f';
+} else if (offConflict) {
+  timeStatus.textContent = '✖ Off work';
+  timeStatus.style.color = '#d32f2f';
+} else {
+  timeStatus.textContent = '✔ Slot available';
+  timeStatus.style.color = '#2e7d32';
+}
+
 }
 
 
