@@ -1159,6 +1159,19 @@ th.time {
 .mgr-trash:hover {
   opacity: 1;
 }
+.no-show-text {
+  text-decoration: line-through;
+  color: #b71c1c;
+}
+
+.no-show-dot {
+  display:inline-block;
+  width:8px;
+  height:8px;
+  background:#d32f2f;
+  border-radius:50%;
+  margin-right:6px;
+}
 
 
 </style>
@@ -1343,6 +1356,12 @@ th.time {
   <textarea id="aNote" class="ap-textarea"></textarea>
 </div>
 
+<div style="margin-top:12px; display:flex; align-items:center; gap:6px;">
+  <input type="checkbox" id="aNoShow">
+  <label for="aNoShow" style="font-size:13px; cursor:pointer;">
+    No-show
+  </label>
+</div>
 
 
 <div class="modal-actions">
@@ -1870,6 +1889,7 @@ const aDuration = document.getElementById('aDuration');
   const aPhone = document.getElementById('aPhone');
 const phoneRow = document.getElementById('phoneRow');
 const aClient = document.getElementById('aClient');
+  const aNoShow = document.getElementById('aNoShow');
 const aNote = document.getElementById('aNote');
 const changeDateBtn = document.getElementById('changeDateBtn');
 const aDatePicker = document.getElementById('aDatePicker');
@@ -2518,9 +2538,13 @@ dayAppointments
       cell.classList.add('busy', 'block-start', 'block-end');
 
       cell.innerHTML = `
-  <div class="app-client">${a.client || ''}</div>
+  <div class="app-client ${a.noShow ? 'no-show-text' : ''}">
+    ${a.noShow ? '<span class="no-show-dot"></span>' : ''}
+    ${a.client || ''}
+  </div>
   <div class="app-service">${a.note || ''}</div>
 `;
+
 
 
       cell.onclick = () => openEdit(a.id);
@@ -2552,9 +2576,13 @@ dayAppointments
         cell.classList.add('block-start', 'block-end');
 
         cell.innerHTML = `
-  <div class="app-client">${a.client || ''}</div>
+  <div class="app-client ${a.noShow ? 'no-show-text' : ''}">
+    ${a.noShow ? '<span class="no-show-dot"></span>' : ''}
+    ${a.client || ''}
+  </div>
   <div class="app-service">${a.note || ''}</div>
 `;
+
 
 
       } else if (i === 0) {
@@ -2562,9 +2590,13 @@ dayAppointments
         cell.classList.add('block-start');
 
         cell.innerHTML = `
-  <div class="app-client">${a.client || ''}</div>
+  <div class="app-client ${a.noShow ? 'no-show-text' : ''}">
+    ${a.noShow ? '<span class="no-show-dot"></span>' : ''}
+    ${a.client || ''}
+  </div>
   <div class="app-service">${a.note || ''}</div>
 `;
+
 
 
       } else if (i === last) {
@@ -2705,6 +2737,7 @@ function openAddFromCell(cell) {
 aPhone.value = '';
 
   aNote.value = '';
+aNoShow.checked = false;
 
   handleAnyone();
 
@@ -2734,6 +2767,7 @@ aClient.value=a.client;
 aPhone.value = a.phone || '';
 
 aNote.value=a.note||'';
+aNoShow.checked = a.noShow === true;
 
 handleAnyone();
 
@@ -2845,6 +2879,7 @@ client:aClient.value,
 
 note:aNote.value
 
+noShow: aNoShow.checked === true
 
 
 };
@@ -3019,7 +3054,15 @@ if(!s) return;
 
 
 
-searchResults.innerHTML+=`<div class="search-item" onclick="openFromSearch('${a.id}')"><b>${a.client}</b><br>${a.date} ${timeLabel(a.start)} — ${s.name}</div>`;
+searchResults.innerHTML+=`
+  <div class="search-item" onclick="openFromSearch('${a.id}')">
+    <b>${a.client}</b>
+    ${a.noShow ? '<span style="color:#d32f2f; font-weight:600;"> (No-show)</span>' : ''}
+    <br>
+    ${a.date} ${timeLabel(a.start)} — ${s.name}
+  </div>
+`;
+
 
 
 
