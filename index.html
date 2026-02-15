@@ -1512,7 +1512,15 @@ th.time {
 
 
 
-<input id="searchInput" oninput="runSearch()" placeholder="Client name">
+<input id="searchInput"
+       oninput="runSearch()"
+       placeholder="Client name">
+
+<input id="searchPhone"
+       oninput="runSearch()"
+       placeholder="Phone number"
+       style="margin-top:8px; display:none;">
+
 
 
 
@@ -3016,58 +3024,79 @@ window.resetPassword = async () => {
 };
 
 
-window.openSearch=()=>{
+window.openSearch = () => {
 
+  searchInput.value = '';
+  searchResults.innerHTML = '';
 
+  const phoneInput = document.getElementById('searchPhone');
 
-searchInput.value=''; searchResults.innerHTML='';
+  if (currentUserRole === 'manager') {
+    phoneInput.style.display = 'block';
+    phoneInput.value = '';
+  } else {
+    phoneInput.style.display = 'none';
+  }
 
-
-
-searchModal.classList.remove('hidden');
-
-
-
+  searchModal.classList.remove('hidden');
 };
 
 
 
-window.runSearch=()=>{
 
+window.runSearch = () => {
 
+  const nameQuery = searchInput.value.toLowerCase().trim();
+  const phoneInput = document.getElementById('searchPhone');
+  const phoneQuery = phoneInput ? phoneInput.value.trim() : '';
 
-const q=searchInput.value.toLowerCase();
+  searchResults.innerHTML = '';
 
-searchResults.innerHTML='';
+  let results = appointments;
 
-appointments.filter(a=>a.client && a.client.toLowerCase().includes(q))
+  // По имени
+  if (nameQuery) {
+    results = results.filter(a =>
+      a.client &&
+      a.client.toLowerCase().includes(nameQuery)
+    );
+  }
 
-.sort((a,b)=>a.date<b.date?1:-1)
+  // По телефону (только для manager)
+  if (currentUserRole === 'manager' && phoneQuery) {
+    results = results.filter(a =>
+      a.phone &&
+      a.phone.includes(phoneQuery)
+    );
+  }
 
-.forEach(a=>{
+  results
+    .sort((a, b) => a.date < b.date ? 1 : -1)
+    .forEach(a => {
 
-const s=staff.find(x=>x.id===a.staffId);
+      const s = staff.find(x => x.id === a.staffId);
+      if (!s) return;
 
-if(!s) return;
+      searchResults.innerHTML += `
+        <div class="search-item"
+             onclick="openFromSearch('${a.id}')">
 
+          <b>${a.client || '—'}</b>
+          ${a.noShow ? '<span style="color:#d32f2f; font-weight:600;"> (No-show)</span>' : ''}
 
+          <br>
 
-searchResults.innerHTML+=`
-  <div class="search-item" onclick="openFromSearch('${a.id}')">
-    <b>${a.client}</b>
-    ${a.noShow ? '<span style="color:#d32f2f; font-weight:600;"> (No-show)</span>' : ''}
-    <br>
-    ${a.date} ${timeLabel(a.start)} — ${s.name}
-  </div>
-`;
+          ${a.date} ${timeLabel(a.start)} — ${s.name}
 
+          ${
+            currentUserRole === 'manager' && a.phone
+              ? `<br><span style="font-size:11px; opacity:0.6;">${a.phone}</span>`
+              : ''
+          }
 
-
-
-});
-
-
-
+        </div>
+      `;
+    });
 };
 
 
