@@ -2914,12 +2914,32 @@ const offConflict = offWork.some(o => {
 
   return false;
 });
+  // ===== WEEKLY OFF CHECK =====
+const selectedDate = getLocalDateFromInput(data.date);
+const weekday = selectedDate.getDay();
+
+const weeklyConflict = weeklyOff.some(w => {
+  if (w.staffId !== data.staffId) return false;
+  if (w.weekday !== weekday) return false;
+  if (w.enabled === false) return false;
+
+  if (w.allDay) return true;
+
+  if (data.start >= 0) {
+    return Math.max(w.start, data.start) <
+           Math.min(w.end, data.start + data.duration);
+  }
+
+  return false;
+});
+
 if (conflict) {
   timeStatus.textContent = '✖ Slot busy';
   timeStatus.style.color = '#d32f2f';
-} else if (offConflict) {
+} else if (offConflict || weeklyConflict) {
   timeStatus.textContent = '✖ Off work';
   timeStatus.style.color = '#d32f2f';
+
 } else {
   timeStatus.textContent = '✔ Slot available';
   timeStatus.style.color = '#2e7d32';
@@ -3005,9 +3025,28 @@ const offConflict = data.staffId !== ANYONE_ID && offWork.some(o => {
 
 });
 
+// ===== WEEKLY OFF SAVE CHECK =====
+const selectedDate = getLocalDateFromInput(data.date);
+const weekday = selectedDate.getDay();
+
+const weeklyConflict = data.staffId !== ANYONE_ID && weeklyOff.some(w => {
+  if (w.staffId !== data.staffId) return false;
+  if (w.weekday !== weekday) return false;
+  if (w.enabled === false) return false;
+
+  if (w.allDay) return true;
+
+  if (data.start >= 0) {
+    return Math.max(w.start, data.start) <
+           Math.min(w.end, data.start + data.duration);
+  }
+
+  return false;
+});
 
 
-if (offConflict) {
+if (offConflict || weeklyConflict) {
+
 
   document
 
