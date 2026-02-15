@@ -2879,12 +2879,17 @@ function checkTimeAvailability() {
   const timeStatus = document.getElementById('timeCheck');
   if (!timeStatus) return;
 
-  const data = {
-    date: aDate.value,
-    staffId: aStaff.value,
-    start: +aTime.value,
-    duration: +aDuration.value
-  };
+  const durationValue = aDuration.value
+  ? +aDuration.value
+  : 1; // временно считаем как минимум 1 слот
+
+const data = {
+  date: aDate.value,
+  staffId: aStaff.value,
+  start: +aTime.value,
+  duration: durationValue
+};
+
 
   if (data.staffId === ANYONE_ID) {
     timeStatus.textContent = '';
