@@ -694,6 +694,27 @@ th.time {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   z-index: 5000;
 }
+  #walkInBtn {
+  position: fixed;
+  right: 96px; /* левее Today */
+  bottom: 16px;
+
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+
+  background: rgba(255, 152, 0, 0.85);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+
+  border: none;
+  cursor: pointer;
+
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 5000;
+}
+
 .staff-row {
   display: grid;
   grid-template-columns:
@@ -1348,6 +1369,11 @@ th.time {
     <option value="12">03:00</option>
     <option value="14">03:30</option>
   </select>
+  <span id="durationError"
+      style="color:#d32f2f; font-size:12px; display:none;">
+  ⚠ Please set duration
+</span>
+
 </div>
 <div class="ap-row" id="phoneRow">
   <span class="ap-label">Phone</span>
@@ -2060,7 +2086,11 @@ aStaff.onchange = () => {
 };
 
 aTime.onchange = checkTimeAvailability;
-aDuration.onchange = checkTimeAvailability;
+aDuration.onchange = () => {
+  checkTimeAvailability();
+  document.getElementById('durationError').style.display = 'none';
+};
+
 
 function getLocalDateFromInput(value) {
   const [y, m, d] = value.split('-').map(Number);
@@ -2887,13 +2917,20 @@ const editorLabel =
     : currentUserRole === 'reception'
       ? 'Reception'
       : staff.find(s => s.id === currentUserStaffId)?.name || 'Staff';
+// ===== DURATION VALIDATION =====
+if (aStaff.value !== ANYONE_ID && !aDuration.value) {
+  document.getElementById('durationError').style.display = 'block';
+  return;
+}
 
 const data = {
   date: aDate.value,
   staffId: aStaff.value,
   phone: aPhone.value || null,
   start: +aTime.value === -1 ? -1 : +aTime.value,
-  duration: aStaff.value === ANYONE_ID ? 1 : +aDuration.value,
+  duration: aStaff.value === ANYONE_ID
+  ? 1
+  : Number(aDuration.value),
   client: aClient.value,
   note: aNote.value,
   noShow: aNoShow.checked === true,
@@ -4912,6 +4949,47 @@ window.goToday = () => {
     }
   }, 50);
 };
+window.openWalkIn = () => {
+
+  if (currentUserRole !== 'staff') return;
+  if (!currentUserStaffId) return;
+
+  editId = null;
+
+  appointmentModal.classList.remove('hidden');
+
+  // дата = текущая выбранная
+  aDate.value = calendarDate.value;
+
+  fillSelects();
+
+  // staff = текущий залогиненный
+  aStaff.value = currentUserStaffId;
+
+  // вычисляем ближайший слот (15 минут)
+  const now = new Date();
+  const minutesNow = now.getHours() * 60 + now.getMinutes();
+
+  let slot = Math.ceil((minutesNow - START_MINUTES) / SLOT_MINUTES);
+
+  if (slot < 0) slot = 0;
+  if (slot >= SLOTS) slot = SLOTS - 1;
+
+  aTime.value = slot;
+
+  // duration пустое
+  aDuration.value = '';
+  
+  // клиент = ножки
+  aClient.value = '👣';
+
+  aPhone.value = '';
+  aNote.value = '';
+  aNoShow.checked = false;
+
+  handleAnyone();
+  document.getElementById('appointmentEditorLabel').textContent = '';
+};
 
 document.addEventListener('click', e => {
   const menu = document.getElementById('topMenu');
@@ -4977,6 +5055,15 @@ if (currentUserRole === 'staff' || currentUserRole === 'reception') {
   phoneRow.style.display = 'none';
 } else {
   phoneRow.style.display = 'flex';
+}
+const walkBtn = document.getElementById('walkInBtn');
+
+if (walkBtn) {
+  if (currentUserRole === 'staff') {
+    walkBtn.classList.remove('hidden');
+  } else {
+    walkBtn.classList.add('hidden');
+  }
 }
 
   document.getElementById('loginScreen').classList.add('hidden');
@@ -5163,6 +5250,9 @@ window.closeOffWorkHardConflict = () => {
 </div>
 
 <button id="todayBtn" onclick="goToday()">Today</button>
+<button id="walkInBtn" onclick="openWalkIn()" class="hidden">
+  Walk-in
+</button>
 
 <!-- CLOSE DAY CONFIRM -->
 <div id="closeDayModal" class="modal hidden">
