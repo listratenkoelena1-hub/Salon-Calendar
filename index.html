@@ -385,6 +385,11 @@ margin-top:12px;
 .staff-actions { display:flex; gap:4px; }
 
 
+#searchResults {
+  max-height: 260px;     /* примерно 5 результатов */
+  overflow-y: auto;
+  margin-top: 10px;
+}
 
 .search-item {
 
@@ -3071,8 +3076,10 @@ window.runSearch = () => {
   }
 
   results
-    .sort((a, b) => a.date < b.date ? 1 : -1)
-    .forEach(a => {
+  .sort((a, b) => a.date < b.date ? 1 : -1)
+  .slice(0, 5)
+  .forEach(a => {
+
 
       const s = staff.find(x => x.id === a.staffId);
       if (!s) return;
