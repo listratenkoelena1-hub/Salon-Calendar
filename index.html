@@ -3944,6 +3944,33 @@ if (conflictType === "off") {
     if (selectedDate < today) {
       return;
     }
+// 🔴 FULL FUTURE CONFLICT CHECK FOR WEEKLY
+
+const weeklyStart = offAllDay.checked ? 0 : +offStart.value;
+const weeklyEnd = offAllDay.checked ? SLOTS : +offEnd.value;
+
+const futureConflict = appointments.some(a => {
+
+  if (a.staffId !== offStaff.value) return false;
+
+  const appDate = getLocalDateFromInput(a.date);
+
+  // только будущие даты
+  if (appDate < selectedDate) return false;
+
+  // тот же день недели
+  if (appDate.getDay() !== weekday) return false;
+
+  const appStart = a.start;
+  const appEnd = a.start + a.duration;
+
+  return rangesOverlap(weeklyStart, weeklyEnd, appStart, appEnd);
+});
+
+if (futureConflict) {
+  conflictModal.classList.remove('hidden');
+  return;
+}
 
     const weeklyData = {
       staffId: offStaff.value,
