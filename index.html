@@ -582,13 +582,10 @@ th.time {
 .date-wrapper {
   position: relative;
 }
-
 #calendarDate {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
+  display: none;
 }
+
 
 #dateLabel {
   padding: 10px 14px;
@@ -1999,6 +1996,13 @@ aPhone.addEventListener('input', () => {
 const calendar=document.getElementById('calendar');
 
 const calendarDate=document.getElementById('calendarDate');
+const changeCalendarDateBtn = document.getElementById('changeCalendarDateBtn');
+
+if (changeCalendarDateBtn) {
+  changeCalendarDateBtn.onclick = () => {
+    calendarDate.showPicker();
+  };
+}
 
 
 const today = new Date();
