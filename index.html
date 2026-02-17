@@ -3912,6 +3912,36 @@ if (conflictType === "off") {
     closeOffWork();
     return;
   }
+  // =========================================
+  // WEEKLY OFF SAVE
+  // =========================================
+  if (offWeekly.checked) {
+
+    const selectedDate = getLocalDateFromInput(offDate.value);
+    const weekday = selectedDate.getDay();
+
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    if (selectedDate < today) {
+      return;
+    }
+
+    const weeklyData = {
+      staffId: offStaff.value,
+      weekday: weekday,
+      startDate: offDate.value,
+      allDay: offAllDay.checked,
+      start: offAllDay.checked ? 0 : +offStart.value,
+      end: offAllDay.checked ? SLOTS : +offEnd.value,
+      enabled: true
+    };
+
+    await addDoc(collection(db, "WeeklyOff"), weeklyData);
+
+    closeOffWork();
+    return;
+  }
 
   // =========================================
   // NORMAL OFF WORK
