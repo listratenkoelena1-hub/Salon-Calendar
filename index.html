@@ -2456,19 +2456,17 @@ const weekday = selectedDate.getDay();
 weeklyOff
   .filter(w => {
 
+    if (!w.startDate) return false;   // 🔴 если нет startDate — не рисуем
+
     if (w.enabled === false) return false;
 
     if (w.weekday !== weekday) return false;
 
     const checkDate = getLocalDateFromInput(calendarDate.value);
+    const ruleStart = getLocalDateFromInput(w.startDate);
 
-    // 🔹 START DATE
-    if (w.startDate) {
-      const ruleStart = getLocalDateFromInput(w.startDate);
-      if (checkDate < ruleStart) return false;
-    }
+    if (checkDate < ruleStart) return false;
 
-    // 🔹 END DATE (при удалении weekly)
     if (w.endDate) {
       const ruleEnd = getLocalDateFromInput(w.endDate);
       if (checkDate > ruleEnd) return false;
@@ -2477,6 +2475,7 @@ weeklyOff
     return true;
   })
   .forEach(w => {
+
 
     const hasException = offWork.some(o =>
   o.weeklyException === true &&
