@@ -1889,7 +1889,7 @@ projectId:"rosesnails-calendar"
 
 const db = getFirestore();
 const auth = getAuth();
-  let currentUserRole = 'manager'; // по умолчанию
+  let currentUserRole = null;
 let currentUserStaffId = null;
 
   async function ensureAuthUser(email, role, staffId = null) {
@@ -5310,18 +5310,14 @@ onAuthStateChanged(auth, async (user) => {
 if (userSnap.exists()) {
   const data = userSnap.data();
 
-  if (!data.role) {
-    currentUserRole = 'staff';
-  } else {
-    currentUserRole = data.role;
-  }
-
+  currentUserRole = data.role || 'staff';
   currentUserStaffId = data.staffId || null;
 
 } else {
   currentUserRole = 'staff';
   currentUserStaffId = null;
 }
+
 
 
 const staffMenuItem = document.getElementById('staffMenuItem');
@@ -5358,10 +5354,12 @@ if (walkBtn) {
     walkBtn.classList.add('hidden');
   }
 }
-
+renderCalendar();
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('calendar-container').style.display = 'block';
 });
+
+      
 window.openCloseDayModal = () => {
   const dateStr = getDrDateString();
   const todayStr = new Date().toISOString().slice(0, 10);
