@@ -2105,6 +2105,15 @@ function getLocalDateFromInput(value) {
   const [y, m, d] = value.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
+function isOlderThan7Days(dateStr) {
+  const date = getLocalDateFromInput(dateStr);
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  const diff = (today - date) / (1000 * 60 * 60 * 24);
+  return diff > 7;
+}
+      
 function rangesOverlap(aStart, aEnd, bStart, bEnd) {
   return Math.max(aStart, bStart) < Math.min(aEnd, bEnd);
 }
@@ -2150,6 +2159,18 @@ function checkCalendarConflict({
   const weekday = selectedDate.getDay();
 
   const weeklyConflict = weeklyOff.some(w => {
+if (w.startDate) {
+  const ruleStart = getLocalDateFromInput(w.startDate);
+  const checkDate = getLocalDateFromInput(date);
+
+  if (checkDate < ruleStart) return false;
+}
+if (w.endDate) {
+  const ruleEnd = getLocalDateFromInput(w.endDate);
+  const checkDate = getLocalDateFromInput(date);
+
+  if (checkDate > ruleEnd) return false;
+}
 
     if (w.staffId !== staffId) return false;
     if (w.weekday !== weekday) return false;
@@ -3039,6 +3060,10 @@ const data = {
   noShow: aNoShow.checked === true,
   lastEditedBy: editorLabel
 };
+  if (isOlderThan7Days(data.date)) {
+  return;
+}
+    
 const end = data.start + data.duration;
 
 const conflictType = checkCalendarConflict({
@@ -3899,11 +3924,22 @@ if (conflictType === "off") {
     start: offAllDay.checked ? 0 : +offStart.value,
     end: offAllDay.checked ? SLOTS : +offEnd.value
   };
+if (isOlderThan7Days(data.date)) {
+  return;
+}
 
   // ===== TIME VALIDATION =====
   if (!data.allDay && data.end <= data.start) {
     return;
   }
+const today = new Date();
+today.setHours(0,0,0,0);
+
+const selectedDate = getLocalDateFromInput(data.date);
+
+if (selectedDate < today) {
+  return;
+}
 
   // 🔴 Универсальная проверка конфликтов
   const conflictType = checkCalendarConflict({
@@ -3976,8 +4012,10 @@ removeWeeklyAllBtn.onclick = async () => {
 
   // 1. Отключаем weekly правило
   await updateDoc(doc(db, 'WeeklyOff', weeklyId), {
-    enabled: false
-  });
+  enabled: false,
+  endDate: new Date().toISOString().slice(0,10)
+});
+
 
   // 2. Удаляем ВСЕ weeklyException, связанные с этим правилом
   const q = query(
