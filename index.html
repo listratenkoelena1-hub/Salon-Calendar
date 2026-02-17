@@ -1953,21 +1953,19 @@ let datePickerInstance = null;
 
 function initAppointmentDatePicker() {
 
-  // создаём временный input
-  const tempInput = document.createElement('input');
-  tempInput.type = 'text';
-  tempInput.style.position = 'absolute';
-  tempInput.style.opacity = '0';
-  tempInput.style.pointerEvents = 'none';
+  // если уже открыт — сначала уничтожаем
+  if (datePickerInstance) {
+    datePickerInstance.destroy();
+    datePickerInstance = null;
+  }
 
-  document.body.appendChild(tempInput);
-
-  flatpickr(tempInput, {
+  datePickerInstance = flatpickr(aDate, {
     dateFormat: "Y-m-d",
     defaultDate: aDate.value,
     positionElement: changeDateBtn,
     position: "below",
     static: false,
+    clickOpens: false,
 
     onChange: function(selectedDates, dateStr) {
       if (!dateStr) return;
@@ -1976,11 +1974,14 @@ function initAppointmentDatePicker() {
     },
 
     onClose: function() {
-      tempInput._flatpickr.destroy();
-      tempInput.remove();
+      datePickerInstance.destroy();
+      datePickerInstance = null;
     }
-  }).open();
+  });
+
+  datePickerInstance.open();
 }
+
 
 
 
