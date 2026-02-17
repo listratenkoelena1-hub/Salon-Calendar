@@ -76,19 +76,6 @@ z-index: 3001;
 padding-right: 20px;
 }
 
-
-#calendarDate {
-
-font-size:18px;
-
-padding:10px 14px;
-
-
-
-}
-
-
-
 header button {
 
 font-size:14px;
@@ -583,8 +570,13 @@ th.time {
   position: relative;
 }
 #calendarDate {
-  display: none;
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+font-size:18px;
+padding:10px 14px;
 }
+
 
 
 #dateLabel {
@@ -4125,7 +4117,12 @@ calendarDate.onchange = () => {
 
 updateDateLabel();
 
+dateLabel.onclick = () => {
+  calendarDate.showPicker();
+};
+
 window.toggleMenu = () => {
+
   document.getElementById('topMenu').classList.toggle('hidden');
 };
 
