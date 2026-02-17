@@ -4284,7 +4284,7 @@ window.toggleMenu = () => {
 window.closeMenu = () => {
   document.getElementById('topMenu').classList.add('hidden');
 };
- // ===== DAILY REPORT =====
+ // ========================================================== DAILY REPORT =========================================================//
 
 let drCurrentDate = new Date();
 
@@ -4423,12 +4423,17 @@ return;
 
   entries.forEach((e, index) => {
     const isClosed = e.status === "closed" || dayClosed;
-    const serviceAmount = e.serviceAmount ?? "";
-    const tip = e.tip ?? "";
+    const serviceAmount = e.serviceAmount != null
+  ? fromCents(e.serviceAmount)
+  : "";
+    const tip = e.tip != null
+  ? fromCents(e.tip)
+  : "";
     const paymentMethod = e.paymentMethod || "card";
-    const service = Number(e.serviceAmount) || 0;
-const tax = service * 0.05;
-const serviceWithTax = (service + tax).toFixed(2);
+    const serviceCents = Number(e.serviceAmount) || 0;
+const taxCents = Math.round(serviceCents * 0.05);
+const serviceWithTax = fromCents(serviceCents + taxCents);
+
 
 
     html += `
@@ -4542,7 +4547,7 @@ html += `
 
       <!-- RIGHT COLUMN -->
       <div style="text-align:right;">
-        <div><b>Withdrawal Today:</b> $${todayWithdrawn.toFixed(2)}</div>
+        <div><b>Withdrawal Today:</b> $${fromCents(todayWithdrawn)}</div>
         <div style="margin-top:6px; font-weight:600;">
           Balance: $${fromCents(balanceTips)}
 
@@ -4938,79 +4943,92 @@ function renderRightTotalsBlock() {
 
   const dayEntries = drEntries.filter(e => e.date === dateStr);
   const springToday = springServices.filter(s => s.date === dateStr);
-const extrasToday = drExtras.filter(e => e.date === dateStr);
+  const extrasToday = drExtras.filter(e => e.date === dateStr);
 
-  let totalService = 0;
-  let totalTax = 0;
-  let totalCard = 0;
-  let totalCash = 0;
-  let totalGift = 0;
-  let totalCheck = 0;
-  let totalWithdrawals = 0;
+  let totalServiceCents = 0;
+  let totalTaxCents = 0;
+  let totalCardCents = 0;
+  let totalCashCents = 0;
+  let totalGiftCents = 0;
+  let totalCheckCents = 0;
+  let totalWithdrawalsCents = 0;
 
   // ===== SERVICES =====
   dayEntries.forEach(e => {
-    const service = Number(e.serviceAmount) || 0;
-    const tax = service * 0.05;
 
-    totalService += service;
-    totalTax += tax;
+    const serviceCents = Number(e.serviceAmount) || 0;
+    const taxCents = Math.round(serviceCents * 0.05);
 
-    if (e.paymentMethod === "card") totalCard += service + tax;
-    if (e.paymentMethod === "cash") totalCash += service + tax;
-    if (e.paymentMethod === "giftcard") totalGift += service + tax;
-    if (e.paymentMethod === "check") totalCheck += service + tax;
+    totalServiceCents += serviceCents;
+    totalTaxCents += taxCents;
+
+    const totalWithTax = serviceCents + taxCents;
+
+    if (e.paymentMethod === "card") totalCardCents += totalWithTax;
+    if (e.paymentMethod === "cash") totalCashCents += totalWithTax;
+    if (e.paymentMethod === "giftcard") totalGiftCents += totalWithTax;
+    if (e.paymentMethod === "check") totalCheckCents += totalWithTax;
   });
 
   // ===== SPRING HELP =====
   springToday.forEach(s => {
-    const service = Number(s.serviceAmount) || 0;
-    const tax = service * 0.05;
 
-    totalService += service;
-    totalTax += tax;
+    const serviceCents = toCents(s.serviceAmount);
+    const taxCents = Math.round(serviceCents * 0.05);
 
-    if (s.paymentMethod === "card") totalCard += service + tax;
-    if (s.paymentMethod === "cash") totalCash += service + tax;
-    if (s.paymentMethod === "giftcard") totalGift += service + tax;
-    if (s.paymentMethod === "check") totalCheck += service + tax;
+    totalServiceCents += serviceCents;
+    totalTaxCents += taxCents;
+
+    const totalWithTax = serviceCents + taxCents;
+
+    if (s.paymentMethod === "card") totalCardCents += totalWithTax;
+    if (s.paymentMethod === "cash") totalCashCents += totalWithTax;
+    if (s.paymentMethod === "giftcard") totalGiftCents += totalWithTax;
+    if (s.paymentMethod === "check") totalCheckCents += totalWithTax;
   });
-// ===== PRODUCTS & GIFTS =====
-extrasToday.forEach(e => {
-  const amount = Number(e.amount) || 0;
 
-  if (e.paymentMethod === "card") totalCard += amount;
-  if (e.paymentMethod === "cash") totalCash += amount;
-  if (e.paymentMethod === "giftcard") totalGift += amount;
-  if (e.paymentMethod === "check") totalCheck += amount;
-});
+  // ===== PRODUCTS & GIFTS =====
+  extrasToday.forEach(e => {
+
+    const amountCents = toCents(e.amount);
+
+    if (e.paymentMethod === "card") totalCardCents += amountCents;
+    if (e.paymentMethod === "cash") totalCashCents += amountCents;
+    if (e.paymentMethod === "giftcard") totalGiftCents += amountCents;
+    if (e.paymentMethod === "check") totalCheckCents += amountCents;
+  });
 
   // ===== WITHDRAWALS =====
   const withdrawalsToday = drWithdrawals.filter(w => w.date === dateStr);
+
   withdrawalsToday.forEach(w => {
-    totalWithdrawals += Number(w.amount) || 0;
+    totalWithdrawalsCents += Number(w.amount) || 0;
   });
 
-  const cashAfterWithdrawals = totalCash - totalWithdrawals;
+  const cashAfterWithdrawalsCents = totalCashCents - totalWithdrawalsCents;
 
   return `
     <!-- ROW 1 -->
     <div>
-      Total Service ${totalService.toFixed(2)} &nbsp;&nbsp;&nbsp;
-      Total Service with Tax ${(totalService + totalTax).toFixed(2)}
+      Total Service ${fromCents(totalServiceCents)} 
+      &nbsp;&nbsp;&nbsp;
+      Total Service with Tax ${fromCents(totalServiceCents + totalTaxCents)}
     </div>
 
     <!-- ROW 2 -->
     <div style="margin-top:8px;">
-      Total Card ${totalCard.toFixed(2)} &nbsp;&nbsp;&nbsp;
-      Total Cash ${totalCash.toFixed(2)} &nbsp;&nbsp;&nbsp;
-      Total Gift ${totalGift.toFixed(2)} &nbsp;&nbsp;&nbsp;
-      Total Check ${totalCheck.toFixed(2)}
+      Total Card ${fromCents(totalCardCents)} 
+      &nbsp;&nbsp;&nbsp;
+      Total Cash ${fromCents(totalCashCents)} 
+      &nbsp;&nbsp;&nbsp;
+      Total Gift ${fromCents(totalGiftCents)} 
+      &nbsp;&nbsp;&nbsp;
+      Total Check ${fromCents(totalCheckCents)}
     </div>
 
     <!-- ROW 3 -->
     <div style="margin-top:8px;">
-      Cash after withdrawals ${cashAfterWithdrawals.toFixed(2)}
+      Cash after withdrawals ${fromCents(cashAfterWithdrawalsCents)}
     </div>
   `;
 }
@@ -5182,7 +5200,7 @@ window.reopenDrEntry = async (id) => {
   });
 };
 
-
+//=============================================================================================================//
 window.goPrevDay = () => {
   const d = getLocalDateFromInput(calendarDate.value);
   d.setDate(d.getDate() - 1);
