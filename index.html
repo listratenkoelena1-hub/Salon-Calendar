@@ -2858,6 +2858,10 @@ appointmentModal.classList.remove('hidden');
 aDate.value=calendarDate.value;
 
 fillSelects();
+// обычное добавление — разрешаем менять staff и дату
+aStaff.disabled = false;
+aStaff.style.opacity = '1';
+changeDateBtn.style.display = '';
 
 aClient.value='';
 
@@ -2926,6 +2930,10 @@ editId=id;
 appointmentModal.classList.remove('hidden');
 
 fillSelects();
+// редактирование — разрешаем менять staff и дату
+aStaff.disabled = false;
+aStaff.style.opacity = '1';
+changeDateBtn.style.display = '';
 
 aDate.value=a.date;
 
@@ -3045,9 +3053,33 @@ function checkTimeAvailability() {
     timeStatus.style.color = '#d32f2f';
   }
   else {
-    timeStatus.textContent = '✔ Slot available';
-    timeStatus.style.color = '#2e7d32';
+
+  // если редактируем существующий appointment —
+  // ничего не показываем, пока не меняли дату или время
+  if (editId) {
+
+    const original = appointments.find(a => a.id === editId);
+    if (!original) {
+      timeStatus.textContent = '';
+      return;
+    }
+
+    const sameDate = original.date === aDate.value;
+    const sameTime = original.start === +aTime.value;
+    const sameDuration = original.duration === +aDuration.value;
+    const sameStaff = original.staffId === aStaff.value;
+
+    if (sameDate && sameTime && sameDuration && sameStaff) {
+      timeStatus.textContent = '';
+      return;
+    }
   }
+
+  // если это новая запись или были изменения
+  timeStatus.textContent = '✔ Slot available';
+  timeStatus.style.color = '#2e7d32';
+}
+
 }
 
 
@@ -3476,7 +3508,14 @@ staffDeleteModal.classList.add('hidden');
 
 window.closeAppointment = () => {
   appointmentModal.classList.add('hidden');
+
+  // ===== RESET WALK-IN LOCKS =====
+  aStaff.disabled = false;
+  aStaff.style.opacity = '1';
+
+  changeDateBtn.style.display = '';
 };
+
 
 window.closeDelete=()=>deleteModal.classList.add('hidden');
 
@@ -3601,6 +3640,15 @@ offVacation.disabled = false;
     .filter(s => s.id !== ANYONE_ID)
     .map(s => `<option value="${s.id}">${s.name}</option>`)
     .join('');
+// ===== ROLE CONTROL =====
+if (currentUserRole === 'staff') {
+  offStaff.value = currentUserStaffId;
+  offStaff.disabled = true;
+  offStaff.style.opacity = '0.6';
+} else if (currentUserRole === 'reception') {
+  offStaff.disabled = false;
+  offStaff.style.opacity = '1';
+}
 
   offAllDay.checked = true;
   offTimeRange.style.display = 'none';
@@ -3765,7 +3813,15 @@ window.closeOffWork = () => {
   offWorkModal.classList.add('hidden');
 
   // reset weekly UI
+  // ===== RESET ROLE STATE =====
+if (currentUserRole === 'staff') {
+  offStaff.disabled = true;
+  offStaff.style.opacity = '0.6';
+} else {
   offStaff.disabled = false;
+  offStaff.style.opacity = '1';
+}
+
   offAllDay.disabled = false;
   offWeekly.disabled = false;
   offStart.disabled = false;
@@ -3844,6 +3900,10 @@ offVacation.onchange = () => {
 
 
 window.saveOffWork = async () => {
+// ===== ROLE SECURITY =====
+if (currentUserRole === 'staff') {
+  offStaff.value = currentUserStaffId;
+}
 
   // =========================================
   // VACATION SAVE
@@ -5162,9 +5222,18 @@ document.getElementById('durationError').style.display = 'none';
   aDate.value = calendarDate.value;
 
   fillSelects();
+// ===== WALK-IN LOCK STAFF =====
+aStaff.value = currentUserStaffId;
+aStaff.disabled = true;
+aStaff.style.opacity = '0.6';
 
-  // staff = текущий залогиненный
-  aStaff.value = currentUserStaffId;
+// ===== WALK-IN LOCK DATE =====
+aDate.value = calendarDate.value;
+aDate.setAttribute('readonly', true);
+
+// скрываем кнопку смены даты
+changeDateBtn.style.display = 'none';
+
 
   // вычисляем ближайший слот (15 минут)
   const now = new Date();
