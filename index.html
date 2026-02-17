@@ -3842,12 +3842,18 @@ window.saveOffWork = async () => {
         end: SLOTS
       });
 
-      if (conflictType === "busy" || conflictType === "off") {
-        document
-          .getElementById('offWorkHardConflictModal')
-          .classList.remove('hidden');
-        return;
-      }
+      if (conflictType === "busy") {
+  conflictModal.classList.remove('hidden');
+  return;
+}
+
+if (conflictType === "off") {
+  document
+    .getElementById('offWorkHardConflictModal')
+    .classList.remove('hidden');
+  return;
+}
+
     }
 
     // ===== SAVE VACATION DOCUMENT =====
@@ -3908,12 +3914,18 @@ window.saveOffWork = async () => {
     excludeId: editingOffWorkId
   });
 
-  if (conflictType === "busy" || conflictType === "off") {
-    document
-      .getElementById('offWorkHardConflictModal')
-      .classList.remove('hidden');
-    return;
-  }
+ if (conflictType === "busy") {
+  conflictModal.classList.remove('hidden');
+  return;
+}
+
+if (conflictType === "off") {
+  document
+    .getElementById('offWorkHardConflictModal')
+    .classList.remove('hidden');
+  return;
+}
+
 
   // ===== SAVE =====
   if (editingOffWorkId) {
