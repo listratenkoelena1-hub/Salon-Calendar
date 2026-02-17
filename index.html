@@ -572,7 +572,6 @@ th.time {
 #calendarDate {
   position: absolute;
   opacity: 0;
-  pointer-events: none;
 font-size:18px;
 padding:10px 14px;
 }
@@ -4116,9 +4115,30 @@ calendarDate.onchange = () => {
 };
 
 updateDateLabel();
+let mainDatePicker = null;
+
+function initMainDatePicker() {
+  if (mainDatePicker) {
+    mainDatePicker.destroy();
+  }
+
+  mainDatePicker = flatpickr(calendarDate, {
+    dateFormat: "Y-m-d",
+    defaultDate: calendarDate.value,
+    clickOpens: false,
+    onChange: function(selectedDates, dateStr) {
+      if (dateStr) {
+        calendarDate.value = dateStr;
+        updateDateLabel();
+        renderCalendar();
+      }
+    }
+  });
+}
 
 dateLabel.onclick = () => {
-  calendarDate.showPicker();
+  initMainDatePicker();
+  mainDatePicker.open();
 };
 
 window.toggleMenu = () => {
