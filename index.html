@@ -5309,12 +5309,20 @@ onAuthStateChanged(auth, async (user) => {
   }
 if (userSnap.exists()) {
   const data = userSnap.data();
-  currentUserRole = data.role || 'manager';
+
+  if (!data.role) {
+    currentUserRole = 'staff';
+  } else {
+    currentUserRole = data.role;
+  }
+
   currentUserStaffId = data.staffId || null;
+
 } else {
-  currentUserRole = 'manager';
+  currentUserRole = 'staff';
   currentUserStaffId = null;
 }
+
 
 const staffMenuItem = document.getElementById('staffMenuItem');
 
