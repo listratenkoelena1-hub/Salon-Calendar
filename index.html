@@ -24,10 +24,6 @@
                maximum-scale=1,
                user-scalable=no">
 
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-
-
 
 <style>
 
@@ -1344,8 +1340,7 @@ textarea {
   <span class="ap-label">Date</span>
 
   <div style="position:relative;">
-    <input id="aDate" type="date" readonly disabled class="ap-input-date">
-
+    <input id="aDate" type="date" readonly class="ap-input-date">
     <button type="button" id="changeDateBtn" class="ap-btn-small">
       Change date
     </button>
@@ -1938,6 +1933,10 @@ let currentUserStaffId = null;
 
 // Appointment modal
 const aDate = document.getElementById('aDate');
+      aDate.addEventListener('change', () => {
+  aDate.setAttribute('readonly', true);
+  checkTimeAvailability();
+});
 const aStaff = document.getElementById('aStaff');
 const aTime = document.getElementById('aTime');
 const aDuration = document.getElementById('aDuration');
@@ -1947,51 +1946,12 @@ const aClient = document.getElementById('aClient');
   const aNoShow = document.getElementById('aNoShow');
 const aNote = document.getElementById('aNote');
 const changeDateBtn = document.getElementById('changeDateBtn');
-const aDatePicker = document.getElementById('aDatePicker');
-
-let datePickerInstance = null;
-
-function initAppointmentDatePicker() {
-
-  // если уже открыт — сначала уничтожаем
-  if (datePickerInstance) {
-    datePickerInstance.destroy();
-    datePickerInstance = null;
-  }
-
-  datePickerInstance = flatpickr(aDate, {
-    dateFormat: "Y-m-d",
-    defaultDate: aDate.value,
-    positionElement: changeDateBtn,
-    position: "below",
-    static: false,
-    clickOpens: false,
-
-    onChange: function(selectedDates, dateStr) {
-      if (!dateStr) return;
-      aDate.value = dateStr;
-      checkTimeAvailability();
-    },
-
-    onClose: function() {
-      datePickerInstance.destroy();
-      datePickerInstance = null;
-    }
-  });
-
-  datePickerInstance.open();
-}
-
-
-
-
-
-
-
-
-changeDateBtn.onclick = () => {
-  initAppointmentDatePicker();
+      changeDateBtn.onclick = () => {
+  aDate.removeAttribute('readonly');
+  aDate.showPicker();
 };
+
+const aDatePicker = document.getElementById('aDatePicker');
 
 
 // Search
@@ -2776,10 +2736,6 @@ document.getElementById('appointmentEditorLabel').textContent = '';
 
 function openAddFromCell(cell) {
   editId = null;
-  if (datePickerInstance) {
-  datePickerInstance.clear();
-}
-aDatePicker.value = '';
 document.getElementById('durationError').style.display = 'none';
 aClient.value = '';
 aPhone.value = '';
@@ -3500,15 +3456,6 @@ staffDeleteModal.classList.add('hidden');
 
 window.closeAppointment = () => {
   appointmentModal.classList.add('hidden');
-
-  // уничтожаем flatpickr полностью
-  if (datePickerInstance) {
-    datePickerInstance.destroy();
-    datePickerInstance = null;
-  }
-};
-
-
 
 window.closeDelete=()=>deleteModal.classList.add('hidden');
 
