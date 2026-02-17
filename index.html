@@ -1338,7 +1338,7 @@ th.time {
     </button>
 
     <input type="text" id="aDatePicker"
-       style="display:none;">
+       style="position:absolute; left:-9999px; opacity:0; pointer-events:none;">
   </div>
 </div>
 
@@ -1947,7 +1947,7 @@ function initAppointmentDatePicker() {
       appendTo: appointmentModal.querySelector('.modal-content'),
       positionElement: changeDateBtn,
       position: "below",
-      static: true,
+      static: false,
       onChange: function(selectedDates, dateStr) {
         if (!dateStr) return;
         aDate.value = dateStr;
@@ -3484,12 +3484,13 @@ staffDeleteModal.classList.add('hidden');
 window.closeAppointment = () => {
   appointmentModal.classList.add('hidden');
 
+  // уничтожаем flatpickr полностью
   if (datePickerInstance) {
-    datePickerInstance.clear();
+    datePickerInstance.destroy();
+    datePickerInstance = null;
   }
-
-  aDatePicker.value = '';
 };
+
 
 
 window.closeDelete=()=>deleteModal.classList.add('hidden');
