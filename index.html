@@ -5307,16 +5307,23 @@ onAuthStateChanged(auth, async (user) => {
       staffId: null
     });
   }
-if (userSnap.exists()) {
-  const data = userSnap.data();
-
-  currentUserRole = data.role || 'staff';
-  currentUserStaffId = data.staffId || null;
-
-} else {
-  currentUserRole = 'staff';
-  currentUserStaffId = null;
+if (!userSnap.exists()) {
+  alert("User has no role assigned");
+  await signOut(auth);
+  return;
 }
+
+const data = userSnap.data();
+
+currentUserRole = data.role;
+currentUserStaffId = data.staffId;
+
+if (!currentUserRole) {
+  alert("Role missing in user document");
+  await signOut(auth);
+  return;
+}
+
 
 
 
