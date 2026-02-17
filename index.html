@@ -571,7 +571,10 @@ th.time {
 }
 #calendarDate {
   position: absolute;
+   width: 0;
+  height: 0;   
   opacity: 0;
+  pointer-events: none;    
 font-size:18px;
 padding:10px 14px;
 }
@@ -1254,7 +1257,7 @@ textarea {
 
 <div class="date-wrapper">
   <div id="dateLabel"></div>
-  <input type="date" id="calendarDate">
+ <input type="text" id="calendarDate" readonly>
 </div>
 
 
@@ -4126,6 +4129,8 @@ function initMainDatePicker() {
     dateFormat: "Y-m-d",
     defaultDate: calendarDate.value,
     clickOpens: false,
+    allowInput: false,
+    disableMobile: true,   // ← КЛЮЧЕВОЙ параметр
     onChange: function(selectedDates, dateStr) {
       if (dateStr) {
         calendarDate.value = dateStr;
@@ -4140,6 +4145,7 @@ dateLabel.onclick = () => {
   initMainDatePicker();
   mainDatePicker.open();
 };
+
 
 window.toggleMenu = () => {
 
