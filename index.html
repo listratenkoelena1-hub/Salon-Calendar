@@ -907,8 +907,8 @@ th.time {
 }
 
 .ap-time-status {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .app-client {
@@ -1338,7 +1338,7 @@ th.time {
     </button>
 
     <input type="text" id="aDatePicker"
-           style="position:absolute; opacity:0; pointer-events:none;">
+       style="display:none;">
   </div>
 </div>
 
@@ -1357,6 +1357,7 @@ th.time {
 <div class="ap-row">
   <span class="ap-label">Duration</span>
   <select id="aDuration" class="ap-input-small">
+    <option value="" selected disabled hidden></option>
     <option value="1">15 min</option>
     <option value="2">30 min</option>
     <option value="3">45 min</option>
@@ -2753,15 +2754,18 @@ document.getElementById('appointmentEditorLabel').textContent = '';
 
 
 function openAddFromCell(cell) {
-
   editId = null;
-
+document.getElementById('durationError').style.display = 'none';
+aClient.value = '';
+aPhone.value = '';
+aNote.value = '';
+aNoShow.checked = false;
   appointmentModal.classList.remove('hidden');
 
   aDate.value = calendarDate.value;
 
   fillSelects();
-
+aDuration.value = '';
   const staffIndex = +cell.dataset.staff;
 
   const slotIndex = +cell.dataset.slot;
@@ -2814,7 +2818,7 @@ aStaff.value=a.staffId;
 
 aTime.value = a.start === -1 ? -1 : a.start;
 
-aDuration.value=a.duration||1;
+aDuration.value = a.duration ?? '';
 
 aClient.value=a.client;
 aPhone.value = a.phone || '';
@@ -2882,6 +2886,10 @@ function checkTimeAvailability() {
   const durationValue = aDuration.value
   ? +aDuration.value
   : 1; // временно считаем как минимум 1 слот
+if (!aDuration.value) {
+  document.getElementById('timeCheck').textContent = '';
+  return;
+}
 
 const data = {
   date: aDate.value,
@@ -5038,6 +5046,7 @@ window.openWalkIn = () => {
   if (!currentUserStaffId) return;
 
   editId = null;
+document.getElementById('durationError').style.display = 'none';
 
   appointmentModal.classList.remove('hidden');
 
@@ -5062,7 +5071,7 @@ window.openWalkIn = () => {
 
   // duration пустое
   aDuration.value = '';
-  
+  document.getElementById('durationError').style.display = 'none';
   // клиент = ножки
   aClient.value = '👣';
 
