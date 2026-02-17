@@ -1337,8 +1337,7 @@ th.time {
       Change date
     </button>
 
-    <input type="text" id="aDatePicker"
-       style="position:absolute; left:-9999px; opacity:0; pointer-events:none;">
+    
   </div>
 </div>
 
@@ -1941,26 +1940,34 @@ let datePickerInstance = null;
 
 function initAppointmentDatePicker() {
 
-  if (!datePickerInstance) {
-    datePickerInstance = flatpickr(aDatePicker, {
-      dateFormat: "Y-m-d",
-      appendTo: appointmentModal.querySelector('.modal-content'),
-      positionElement: changeDateBtn,
-      position: "below",
-      static: false,
-      onChange: function(selectedDates, dateStr) {
-        if (!dateStr) return;
-        aDate.value = dateStr;
-        checkTimeAvailability();
-        datePickerInstance.close();
-      }
-    });
-  }
+  // создаём временный input
+  const tempInput = document.createElement('input');
+  tempInput.type = 'text';
+  tempInput.style.position = 'absolute';
+  tempInput.style.opacity = '0';
+  tempInput.style.pointerEvents = 'none';
 
-  // каждый раз обновляем текущую дату
-  datePickerInstance.setDate(aDate.value, false);
+  document.body.appendChild(tempInput);
+
+  flatpickr(tempInput, {
+    dateFormat: "Y-m-d",
+    defaultDate: aDate.value,
+    positionElement: changeDateBtn,
+    position: "below",
+    static: false,
+
+    onChange: function(selectedDates, dateStr) {
+      if (!dateStr) return;
+      aDate.value = dateStr;
+      checkTimeAvailability();
+    },
+
+    onClose: function() {
+      tempInput._flatpickr.destroy();
+      tempInput.remove();
+    }
+  }).open();
 }
-
 
 
 
@@ -1970,8 +1977,8 @@ function initAppointmentDatePicker() {
 
 changeDateBtn.onclick = () => {
   initAppointmentDatePicker();
-  datePickerInstance.open();
 };
+
 
 // Search
 const searchInput = document.getElementById('searchInput');
