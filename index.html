@@ -5204,6 +5204,57 @@ window.closeDrEntry = async (id) => {
   const hasOpen = sameDay.some(e =>
     e.id !== id && e.status !== 'closed'
   );
+const entry = drEntries.find(e => e.id === id);
+
+if (entry?.pendingSplit?.length > 0) {
+
+  const splitGroupId = crypto.randomUUID();
+
+  const parentServiceCents = Number(entry.serviceAmount) || 0;
+  const totalTipCents = Number(entry.tip) || 0;
+
+  let totalServiceCents = parentServiceCents;
+
+  entry.pendingSplit.forEach(r => {
+    totalServiceCents += toCents(r.amount);
+  });
+
+  // пересчитываем parent tip
+  const parentTipShare = Math.round(
+    (parentServiceCents / totalServiceCents) * totalTipCents
+  );
+
+  await updateDoc(doc(db, "DayEntries", id), {
+    tip: parentTipShare,
+    splitGroupId: splitGroupId,
+    isParent: true,
+    lockedSplit: true
+  });
+
+  // создаём children
+  for (const row of entry.pendingSplit) {
+
+    const serviceCents = toCents(row.amount);
+
+    const tipShare = Math.round(
+      (serviceCents / totalServiceCents) * totalTipCents
+    );
+
+    await addDoc(collection(db, "DayEntries"), {
+      date: entry.date,
+      staffId: row.staffId,
+      serviceAmount: serviceCents,
+      tip: tipShare,
+      paymentMethod: entry.paymentMethod,
+      status: "closed",
+      splitGroupId: splitGroupId,
+      isParent: false,
+      lockedSplit: true,
+      createdAt: serverTimestamp()
+    });
+  }
+
+}
 
   await updateDoc(doc(db, "DayEntries", id), {
     status: "closed"
@@ -5290,67 +5341,26 @@ window.updateSplitStaff = (index, value) => {
 window.updateSplitAmount = (index, value) => {
   splitRows[index].amount = value;
 };
-window.confirmSplitService = async () => {
+window.confirmSplitService = () => {
 
-  const parent = currentSplitParent;
-  if (!parent) return;
+  if (!currentSplitParent) return;
 
-  const splitGroupId = crypto.randomUUID();
-
-  const parentServiceCents = Number(parent.serviceAmount) || 0;
-  const totalTipCents = Number(parent.tip) || 0;
-
-  let totalServiceCents = parentServiceCents;
-
-  splitRows.forEach(r => {
-    totalServiceCents += toCents(r.amount);
-  });
-
-  if (totalServiceCents <= 0) return;
-
-  // 1️⃣ пересчитываем родителя
-  const parentTipShare = Math.round(
-    (parentServiceCents / totalServiceCents) * totalTipCents
-  );
-
-  await updateDoc(doc(db, "DayEntries", parent.id), {
-    tip: parentTipShare,
-    splitGroupId: splitGroupId,
-    isParent: true,
-    lockedSplit: true
-  });
-
-  // 2️⃣ создаём children
-  for (const row of splitRows) {
-
-    const serviceCents = toCents(row.amount);
-
-    const tipShare = Math.round(
-      (serviceCents / totalServiceCents) * totalTipCents
-    );
-
-    await addDoc(collection(db, "DayEntries"), {
-      date: parent.date,
-      staffId: row.staffId,
-      serviceAmount: serviceCents,
-      tip: tipShare,
-      paymentMethod: parent.paymentMethod,
-      status: "closed",
-      splitGroupId: splitGroupId,
-      isParent: false,
-      lockedSplit: true,
-      createdAt: serverTimestamp()
-    });
+  if (splitRows.length === 0) {
+    document.getElementById("splitModal")
+      .classList.add("hidden");
+    return;
   }
 
+  // сохраняем split временно в родительскую строку
+  currentSplitParent.pendingSplit = [...splitRows];
+
   splitRows = [];
-  currentSplitParent = null;
 
   document.getElementById("splitModal")
     .classList.add("hidden");
 
-  renderDailyReport();
 };
+
 
 //=============================================================================================================//
 window.goPrevDay = () => {
