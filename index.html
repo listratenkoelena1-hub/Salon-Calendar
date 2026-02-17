@@ -4378,27 +4378,31 @@ const dayClosed = drDayStatus?.some(d =>
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   // ===== TOTALS =====
-  let totalService = 0;
-  let totalTax = 0;
-  let totalTips = 0;
-  let totalCash = 0;
-  let totalCard = 0;
-  let totalGift = 0;
-  let totalCheck = 0;
+  let totalServiceCents = 0;
+let totalTaxCents = 0;
+let totalTipsCents = 0;
+let totalCashCents = 0;
+let totalCardCents = 0;
+let totalGiftCents = 0;
+let totalCheckCents = 0;
+
 
   entries.forEach(e => {
     const service = Number(e.serviceAmount) || 0;
-    const tip = Number(e.tip) || 0;
-    const tax = service * 0.05;
+const tip = Number(e.tip) || 0;
+const tax = Math.round(service * 0.05);
 
-    totalService += service;
-    totalTax += tax;
-    totalTips += tip;
+totalServiceCents += service;
+totalTaxCents += tax;
+totalTipsCents += tip;
 
-    if (e.paymentMethod === "cash") totalCash += service + tax;
-    if (e.paymentMethod === "card") totalCard += service + tax;
-    if (e.paymentMethod === "giftcard") totalGift += service + tax;
-    if (e.paymentMethod === "check") totalCheck += service + tax;
+if (e.paymentMethod === "cash") totalCashCents += service + tax;
+if (e.paymentMethod === "card") totalCardCents += service + tax;
+if (e.paymentMethod === "giftcard") totalGiftCents += service + tax;
+if (e.paymentMethod === "check") totalCheckCents += service + tax;
+
+return;
+
   });
 
   let html = `
@@ -4513,7 +4517,8 @@ html += `
 
    <!-- 1️⃣ Total Service Row -->
 <div>
-  <b>Total Service:</b> $${totalService.toFixed(2)}
+  <b>Total Service:</b> $${fromCents(totalServiceCents)}
+
 </div>
 
 
@@ -4526,7 +4531,8 @@ html += `
       <!-- LEFT COLUMN -->
 <div>
   <div>
-    <b>Today Tips:</b> $${todayTips.toFixed(2)}
+    <b>Today Tips:</b> $${fromCents(totalTipsCents)}
+
   </div>
 </div>
 
@@ -4535,7 +4541,8 @@ html += `
       <div style="text-align:right;">
         <div><b>Withdrawal Today:</b> $${todayWithdrawn.toFixed(2)}</div>
         <div style="margin-top:6px; font-weight:600;">
-          Balance: $${balanceTips.toFixed(2)}
+          Balance: $${fromCents(balanceTips)}
+
         </div>
       </div>
 
@@ -5078,6 +5085,15 @@ window.deleteSpringService = async (id) => {
 
   await deleteDoc(doc(db, "DayExtras", id));
 };
+// ===== MONEY HELPERS =====
+
+function toCents(value) {
+  return Math.round((Number(value) || 0) * 100);
+}
+
+function fromCents(cents) {
+  return (cents / 100).toFixed(2);
+}
 
 // ===== DAILY REPORT ACTIONS =====
 
@@ -5109,7 +5125,7 @@ window.updateDrField = async (id, field, value) => {
   const data = {};
 
   if (field === "serviceAmount" || field === "tip") {
-    data[field] = Number(value) || 0;
+    data[field] = toCents(value);
   } else {
     data[field] = value;
   }
@@ -5418,13 +5434,14 @@ window.confirmWithdrawal = async () => {
 
   if (dateStr !== todayStr) return;
 
-  const amount = Number(document.getElementById('withdrawAmount').value);
+  const amount = toCents(document.getElementById('withdrawAmount').value);
   if (isNaN(amount) || amount <= 0) return;
 
 
   const totalEarned = drEntries
-    .filter(e => e.staffId === currentUserStaffId)
-    .reduce((sum, e) => sum + (Number(e.tip) || 0), 0);
+  .filter(e => e.staffId === currentUserStaffId)
+  .reduce((sum, e) => sum + (Number(e.tip) || 0), 0);
+
 
   const totalWithdrawn = drWithdrawals
     .filter(w => w.staffId === currentUserStaffId)
