@@ -4297,6 +4297,9 @@ function formatDrDate(date) {
 }
 
 window.openDailyReport = () => {
+      console.log("Opening DR with role:", currentUserRole);
+console.log("StaffId:", currentUserStaffId);
+
   const modal = document.getElementById('dailyReportModal');
   const content = document.getElementById('dailyReportContent');
 
