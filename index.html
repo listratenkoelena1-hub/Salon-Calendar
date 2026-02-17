@@ -1940,27 +1940,27 @@ const aDatePicker = document.getElementById('aDatePicker');
 let datePickerInstance = null;
 
 function initAppointmentDatePicker() {
-  if (datePickerInstance) {
-    datePickerInstance.destroy();
+
+  if (!datePickerInstance) {
+    datePickerInstance = flatpickr(aDatePicker, {
+      dateFormat: "Y-m-d",
+      appendTo: appointmentModal.querySelector('.modal-content'),
+      positionElement: changeDateBtn,
+      position: "below",
+      static: true,
+      onChange: function(selectedDates, dateStr) {
+        if (!dateStr) return;
+        aDate.value = dateStr;
+        checkTimeAvailability();
+        datePickerInstance.close();
+      }
+    });
   }
 
-  datePickerInstance = flatpickr(aDatePicker, {
-    dateFormat: "Y-m-d",
-    defaultDate: aDate.value,
-
-    appendTo: appointmentModal.querySelector('.modal-content'),
-    positionElement: changeDateBtn,
-    position: "below",
-    static: true,
-
-    onChange: function(selectedDates, dateStr) {
-      if (!dateStr) return;
-      aDate.value = dateStr;
-      checkTimeAvailability();
-      datePickerInstance.close();
-    }
-  });
+  // каждый раз обновляем текущую дату
+  datePickerInstance.setDate(aDate.value, false);
 }
+
 
 
 
@@ -2755,6 +2755,10 @@ document.getElementById('appointmentEditorLabel').textContent = '';
 
 function openAddFromCell(cell) {
   editId = null;
+  if (datePickerInstance) {
+  datePickerInstance.clear();
+}
+aDatePicker.value = '';
 document.getElementById('durationError').style.display = 'none';
 aClient.value = '';
 aPhone.value = '';
@@ -2807,6 +2811,10 @@ if (a.lastEditedBy) {
 if(!a) return;
 
 editId=id;
+if (datePickerInstance) {
+  datePickerInstance.clear();
+}
+aDatePicker.value = '';
 
 appointmentModal.classList.remove('hidden');
 
@@ -3473,7 +3481,16 @@ staffDeleteModal.classList.add('hidden');
 
 
 
-window.closeAppointment=()=>appointmentModal.classList.add('hidden');
+window.closeAppointment = () => {
+  appointmentModal.classList.add('hidden');
+
+  if (datePickerInstance) {
+    datePickerInstance.clear();
+  }
+
+  aDatePicker.value = '';
+};
+
 
 window.closeDelete=()=>deleteModal.classList.add('hidden');
 
