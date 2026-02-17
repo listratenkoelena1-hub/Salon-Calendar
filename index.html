@@ -5204,7 +5204,6 @@ window.closeDrEntry = async (id) => {
   const hasOpen = sameDay.some(e =>
     e.id !== id && e.status !== 'closed'
   );
-const entry = drEntries.find(e => e.id === id);
 
 if (entry?.pendingSplit?.length > 0) {
 
