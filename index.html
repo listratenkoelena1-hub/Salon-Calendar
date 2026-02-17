@@ -2005,6 +2005,9 @@ let drWithdrawals = [];
 let drDayStatus = null;
 let springServices = [];
 
+// ===== SPLIT SERVICE TEMP STORAGE =====
+let splitRows = [];
+let currentSplitParent = null;
 
 aPhone.addEventListener('input', () => {
   const phone = aPhone.value.trim();
@@ -4475,12 +4478,21 @@ const serviceWithTax = fromCents(serviceCents + taxCents);
         </div>
 
         <div class="dr-action">
-          ${
-            isClosed
-              ? `<span onclick="reopenDrEntry('${e.id}')">✏️</span>`
-              : `<span onclick="closeDrEntry('${e.id}')">✅</span>`
-          }
-        </div>
+
+  ${
+    !isClosed && !e.lockedSplit
+      ? `<span onclick="openSplitModal('${e.id}')">🔀</span>`
+      : ''
+  }
+
+  ${
+    isClosed
+      ? `<span onclick="reopenDrEntry('${e.id}')">✏️</span>`
+      : `<span onclick="closeDrEntry('${e.id}')">✅</span>`
+  }
+
+</div>
+
       </div>
     `;
   });
@@ -5156,8 +5168,26 @@ window.updateDrField = async (id, field, value) => {
 
 
 window.deleteDrEntry = async (id) => {
-  await deleteDoc(doc(db, "DayEntries", id));
+
+  const entry = drEntries.find(e => e.id === id);
+  if (!entry) return;
+
+  if (!entry.splitGroupId) {
+    await deleteDoc(doc(db, "DayEntries", id));
+    return;
+  }
+
+  const groupEntries = drEntries.filter(e =>
+    e.splitGroupId === entry.splitGroupId
+  );
+
+  for (const item of groupEntries) {
+    await deleteDoc(doc(db, "DayEntries", item.id));
+  }
+
+  renderDailyReport();
 };
+
 
 
 window.closeDrEntry = async (id) => {
@@ -5198,6 +5228,128 @@ window.reopenDrEntry = async (id) => {
   await updateDoc(doc(db, "DayEntries", id), {
     status: "open"
   });
+};
+window.openSplitModal = (parentId) => {
+
+  const entry = drEntries.find(e => e.id === parentId);
+  if (!entry) return;
+
+  window.currentSplitParent = entry;
+
+  document.getElementById("splitModal")
+    .classList.remove("hidden");
+
+  renderSplitRows();
+};
+function renderSplitRows() {
+
+  const container = document.getElementById("splitRows");
+  if (!container) return;
+
+  container.innerHTML = splitRows.map((row, index) => `
+    <div style="display:flex; gap:8px; margin-bottom:6px;">
+
+      <select onchange="updateSplitStaff(${index}, this.value)">
+        ${staff
+          .filter(s => s.id !== ANYONE_ID)
+          .map(s => `
+            <option value="${s.id}" ${row.staffId === s.id ? 'selected' : ''}>
+              ${s.name}
+            </option>
+          `).join("")}
+      </select>
+
+      <input type="number"
+        step="0.01"
+        value="${row.amount}"
+        onchange="updateSplitAmount(${index}, this.value)"
+      />
+
+      <button onclick="removeSplitRow(${index})">✖</button>
+
+    </div>
+  `).join("");
+}
+window.addSplitRow = () => {
+  splitRows.push({
+    staffId: staff[0].id,
+    amount: 0
+  });
+  renderSplitRows();
+};
+
+window.removeSplitRow = (index) => {
+  splitRows.splice(index, 1);
+  renderSplitRows();
+};
+
+window.updateSplitStaff = (index, value) => {
+  splitRows[index].staffId = value;
+};
+
+window.updateSplitAmount = (index, value) => {
+  splitRows[index].amount = value;
+};
+window.confirmSplitService = async () => {
+
+  const parent = currentSplitParent;
+  if (!parent) return;
+
+  const splitGroupId = crypto.randomUUID();
+
+  const parentServiceCents = Number(parent.serviceAmount) || 0;
+  const totalTipCents = Number(parent.tip) || 0;
+
+  let totalServiceCents = parentServiceCents;
+
+  splitRows.forEach(r => {
+    totalServiceCents += toCents(r.amount);
+  });
+
+  if (totalServiceCents <= 0) return;
+
+  // 1️⃣ пересчитываем родителя
+  const parentTipShare = Math.round(
+    (parentServiceCents / totalServiceCents) * totalTipCents
+  );
+
+  await updateDoc(doc(db, "DayEntries", parent.id), {
+    tip: parentTipShare,
+    splitGroupId: splitGroupId,
+    isParent: true,
+    lockedSplit: true
+  });
+
+  // 2️⃣ создаём children
+  for (const row of splitRows) {
+
+    const serviceCents = toCents(row.amount);
+
+    const tipShare = Math.round(
+      (serviceCents / totalServiceCents) * totalTipCents
+    );
+
+    await addDoc(collection(db, "DayEntries"), {
+      date: parent.date,
+      staffId: row.staffId,
+      serviceAmount: serviceCents,
+      tip: tipShare,
+      paymentMethod: parent.paymentMethod,
+      status: "closed",
+      splitGroupId: splitGroupId,
+      isParent: false,
+      lockedSplit: true,
+      createdAt: serverTimestamp()
+    });
+  }
+
+  splitRows = [];
+  currentSplitParent = null;
+
+  document.getElementById("splitModal")
+    .classList.add("hidden");
+
+  renderDailyReport();
 };
 
 //=============================================================================================================//
@@ -5728,6 +5880,51 @@ window.closeOffWorkHardConflict = () => {
       <button onclick="closeOffWorkHardConflict()">OK</button>
     </div>
   </div>
+</div>
+<!-- ===== SPLIT SERVICE MODAL ===== -->
+<div id="splitModal" class="modal hidden">
+
+  <div class="modal-content" style="max-width:420px;">
+
+    <h3 style="margin-bottom:12px;">
+      Split Service
+    </h3>
+
+    <!-- Parent Info -->
+    <div style="font-size:13px; margin-bottom:12px; opacity:0.7;">
+      Distribute service between masters
+    </div>
+
+    <!-- Split Rows -->
+    <div id="splitRows"></div>
+
+    <!-- Add Button -->
+    <div style="margin-top:8px;">
+      <button class="dr-button" onclick="addSplitRow()">
+        + Add Master
+      </button>
+    </div>
+
+    <!-- Action Buttons -->
+    <div style="
+      display:flex;
+      justify-content:flex-end;
+      gap:8px;
+      margin-top:16px;
+    ">
+      <button class="dr-button"
+        onclick="document.getElementById('splitModal').classList.add('hidden')">
+        Cancel
+      </button>
+
+      <button class="dr-button"
+        onclick="confirmSplitService()">
+        Confirm
+      </button>
+    </div>
+
+  </div>
+
 </div>
 
 </body>
