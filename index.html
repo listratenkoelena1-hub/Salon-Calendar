@@ -4974,7 +4974,11 @@ function renderRightTotalsBlock() {
 
   const dateStr = getDrDateString();
 
-  const dayEntries = drEntries.filter(e => e.date === dateStr);
+  const dayEntries = drEntries.filter(e =>
+  e.date === dateStr &&
+  e.status === "closed"
+);
+
   const springToday = springServices.filter(s => s.date === dateStr);
   const extrasToday = drExtras.filter(e => e.date === dateStr);
 
@@ -5212,7 +5216,11 @@ window.deleteDrEntry = async (id) => {
 
 
 window.closeDrEntry = async (id) => {
-  const entry = drEntries.find(e => e.id === id);
+ const snap = await getDoc(doc(db, "DayEntries", id));
+if (!snap.exists()) return;
+
+const entry = snap.data();
+
   if (!entry) return;
 
   const dateStr = getDrDateString();
