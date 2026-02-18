@@ -4479,42 +4479,24 @@ const serviceWithTax = fromCents(serviceCents + taxCents);
           </select>
         </div>
 
-       <div class="dr-action" style="
-  display:flex;
-  gap:6px;
-  align-items:center;
-">
+       <div class="dr-action" style="display:flex; gap:6px; align-items:center;">
 
-  ${
-    !isClosed && !e.lockedSplit
-      ? `
-        <span onclick="openSplitModal('${e.id}')" 
-              style="cursor:pointer;">🔀</span>
+  ${!isClosed && !e.lockedSplit ? `
+      <span onclick="openSplitModal('${e.id}')" style="cursor:pointer;">🔀</span>
+      <span onclick="openPaymentPanel('${e.id}')" style="cursor:pointer;">💳</span>
+      <span onclick="closeDrEntry('${e.id}')" style="cursor:pointer;">✅</span>
+  ` : ''}
 
-        <span onclick="openPaymentPanel('${e.id}')" 
-              style="cursor:pointer;">💳</span>
+  ${isClosed && !e.lockedSplit ? `
+      <span onclick="reopenDrEntry('${e.id}')" style="cursor:pointer;">✏️</span>
+  ` : ''}
 
-        <span onclick="closeDrEntry('${e.id}')" 
-              style="cursor:pointer;">✅</span>
-      `
-      : ''
-  }
-
-  ${
-    isClosed && !e.lockedSplit
-      ? `<span onclick="reopenDrEntry('${e.id}')" 
-              style="cursor:pointer;">✏️</span>`
-      : ''
-  }
-
-  ${
-    e.lockedSplit
-  ? `<span onclick="deleteDrEntry('${e.id}')"
-              style="cursor:pointer;">🗑</span>`
-      : ''
-  }
+  ${e.lockedSplit ? `
+      <span onclick="deleteDrEntry('${e.id}')" style="cursor:pointer;">🗑</span>
+  ` : ''}
 
 </div>
+
 
 
       </div>
