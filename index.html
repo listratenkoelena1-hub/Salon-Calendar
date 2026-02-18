@@ -5284,7 +5284,8 @@ window.openSplitModal = (parentId) => {
   const entry = drEntries.find(e => e.id === parentId);
   if (!entry) return;
 
-  window.currentSplitParent = entry;
+  currentSplitParent = entry;
+
 
   document.getElementById("splitModal")
     .classList.remove("hidden");
