@@ -4794,6 +4794,46 @@ function renderManagerDailyReport() {
 
       </div>
   `;
+// ===== ROLE BUTTONS =====
+  html += `
+    <div style="
+      display:flex;
+      justify-content:flex-end;
+      gap:8px;
+      margin-top:16px;
+    ">
+  `;
+
+  if (currentUserRole === 'manager') {
+    html += `
+      <button class="dr-button" onclick="openTheDayModal()">
+        Open the Day
+      </button>
+
+      <button class="dr-button" onclick="openSpringHelp()">
+        Spring Help
+      </button>
+    `;
+  }
+
+  if (currentUserRole === 'reception') {
+    html += `
+      <button class="dr-button" onclick="sellProduct()">
+        Sell Product
+      </button>
+
+      <button class="dr-button" onclick="sellGiftCertificate()">
+        Sell Gift Certificate
+      </button>
+    `;
+  }
+
+  html += `
+      <button class="dr-button" onclick="closeDailyReport()">
+        Close
+      </button>
+    </div>
+  `;
 
   body.innerHTML = html;
 }
