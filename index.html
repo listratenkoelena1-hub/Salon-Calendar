@@ -4425,7 +4425,7 @@ return;
   `;
 
   entries.forEach((e, index) => {
-    const isClosed = e.status === "closed" || dayClosed;
+    const isClosed = e.status === "closed" || dayClosed || e.lockedSplit === true;
     const serviceAmount = e.serviceAmount != null
   ? fromCents(e.serviceAmount)
   : "";
@@ -4486,9 +4486,11 @@ const serviceWithTax = fromCents(serviceCents + taxCents);
   }
 
   ${
-    isClosed
-      ? `<span onclick="reopenDrEntry('${e.id}')">✏️</span>`
-      : `<span onclick="closeDrEntry('${e.id}')">✅</span>`
+    e.lockedSplit
+  ? `<span onclick="deleteDrEntry('${e.id}')">🗑</span>`
+  : isClosed
+    ? `<span onclick="reopenDrEntry('${e.id}')">✏️</span>`
+    : `<span onclick="closeDrEntry('${e.id}')">✅</span>`
   }
 
 </div>
@@ -5244,8 +5246,9 @@ if (entry?.pendingSplit?.length > 0) {
   let childrenTotalServiceCents = 0;
 
   entry.pendingSplit.forEach(r => {
-    childrenTotalServiceCents += toCents(r.amount);
-  });
+  totalServiceCents += Number(r.amount) || 0;
+});
+
 
   const totalServiceCents =
     parentServiceCents + childrenTotalServiceCents;
@@ -5267,7 +5270,7 @@ if (entry?.pendingSplit?.length > 0) {
   // ----- children -----
   for (const row of entry.pendingSplit) {
 
-    const serviceCents = toCents(row.amount);
+    const serviceCents = Number(row.amount) || 0;
 
     const tipShare = Math.round(
       (serviceCents / totalServiceCents) * totalTipCents
@@ -5306,6 +5309,9 @@ if (entry?.pendingSplit?.length > 0) {
     });
   }
 };
+await updateDoc(doc(db, "DayEntries", id), {
+  pendingSplit: null
+});
 
 
 window.reopenDrEntry = async (id) => {
@@ -5380,16 +5386,17 @@ window.confirmSplitService = async () => {
   if (!currentSplitParent) return;
 
   if (splitRows.length === 0) {
-    document.getElementById("splitModal")
-      .classList.add("hidden");
+    document.getElementById("splitModal").classList.add("hidden");
     return;
   }
 
-  // сохраняем split в Firestore
   await updateDoc(
     doc(db, "DayEntries", currentSplitParent.id),
     {
-      pendingSplit: splitRows
+      pendingSplit: splitRows.map(r => ({
+        staffId: r.staffId,
+        amount: toCents(r.amount)
+      }))
     }
   );
 
@@ -5399,8 +5406,6 @@ window.confirmSplitService = async () => {
   document.getElementById("splitModal")
     .classList.add("hidden");
 };
-
-
 
 //=============================================================================================================//
 window.goPrevDay = () => {
