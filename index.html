@@ -4395,7 +4395,10 @@ let totalGiftCents = 0;
 let totalCheckCents = 0;
 
 
-  entries.forEach(e => {
+  entries
+  .filter(e => e.status === "closed")
+  .forEach(e => {
+
     const service = Number(e.serviceAmount) || 0;
 const tip = Number(e.tip) || 0;
 const tax = Math.round(service * 0.05);
@@ -5383,12 +5386,19 @@ window.openPaymentPanel = (entryId) => {
 
   currentPaymentParent = entry;
 
-  tempPayments = entry.payments
-    ? [...entry.payments]
-    : [{
-        method: entry.paymentMethod || "card",
-        amount: entry.serviceAmount + Math.round(entry.serviceAmount * 0.05)
-      }];
+  const serviceCents = Number(entry.serviceAmount) || 0;
+  const taxCents = Math.round(serviceCents * 0.05);
+  const totalWithTax = serviceCents + taxCents;
+
+  // если уже есть payments — берём их
+  if (entry.payments && entry.payments.length > 0) {
+    tempPayments = [...entry.payments];
+  } else {
+    // иначе создаём одну строку
+    tempPayments = [
+      { method: "card", amount: totalWithTax }
+    ];
+  }
 
   renderPaymentRows();
 
@@ -5396,12 +5406,14 @@ window.openPaymentPanel = (entryId) => {
     .classList.remove("hidden");
 };
 
+
 function renderPaymentRows() {
 
   const container = document.getElementById("paymentRows");
 
   container.innerHTML = tempPayments.map((p, i) => `
-    <div style="display:flex; gap:6px; margin-bottom:6px;">
+
+    <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">
 
       <select onchange="updatePaymentMethod(${i}, this.value)">
         <option value="card" ${p.method==="card"?"selected":""}>Card</option>
@@ -5413,28 +5425,68 @@ function renderPaymentRows() {
       <input type="number"
         step="0.01"
         value="${fromCents(p.amount)}"
-        onchange="updatePaymentAmount(${i}, this.value)">
+        onchange="updatePaymentAmount(${i}, this.value)"
+      >
 
-      <span onclick="removePaymentRow(${i})">🗑</span>
+      ${i > 0 ? `
+        <span style="cursor:pointer;"
+          onclick="removePaymentRow(${i})">🗑</span>
+      ` : ''}
 
     </div>
+
   `).join("");
 }
-function updatePaymentMethod(index, value) {
-  tempPayments[index].method = value;
+
+function updatePaymentAmount(index, value) {
+
+  const newAmount = toCents(value);
+  tempPayments[index].amount = newAmount;
+
+  autoRecalculatePayments();
 }
+function autoRecalculatePayments() {
+
+  if (!currentPaymentParent) return;
+
+  const serviceCents = Number(currentPaymentParent.serviceAmount) || 0;
+  const taxCents = Math.round(serviceCents * 0.05);
+  const totalWithTax = serviceCents + taxCents;
+
+  // считаем сумму всех кроме первой строки
+  let otherTotal = 0;
+
+  tempPayments.forEach((p, i) => {
+    if (i !== 0) {
+      otherTotal += Number(p.amount) || 0;
+    }
+  });
+
+  // первая строка = остаток
+  tempPayments[0].amount = totalWithTax - otherTotal;
+
+  if (tempPayments[0].amount < 0) {
+    tempPayments[0].amount = 0;
+  }
+
+  renderPaymentRows();
+}
+
 
 function updatePaymentAmount(index, value) {
   tempPayments[index].amount = toCents(value);
 }
 
 function addPaymentRow() {
+
   tempPayments.push({
-    method: "card",
+    method: "cash",
     amount: 0
   });
+
   renderPaymentRows();
 }
+
 
 function removePaymentRow(index) {
   tempPayments.splice(index, 1);
@@ -5444,16 +5496,16 @@ function removePaymentRow(index) {
 
   if (!currentPaymentParent) return;
 
-  const totalServiceWithTax =
-    currentPaymentParent.serviceAmount +
-    Math.round(currentPaymentParent.serviceAmount * 0.05);
+  const serviceCents = Number(currentPaymentParent.serviceAmount) || 0;
+  const taxCents = Math.round(serviceCents * 0.05);
+  const totalWithTax = serviceCents + taxCents;
 
   const totalPayments = tempPayments.reduce(
     (sum, p) => sum + (Number(p.amount) || 0),
     0
   );
 
-  if (totalPayments !== totalServiceWithTax) {
+  if (totalPayments !== totalWithTax) {
     alert("Payments must equal Service + Tax");
     return;
   }
@@ -5467,8 +5519,8 @@ function removePaymentRow(index) {
   );
 
   closePaymentPanel();
-  renderDailyReport();
 };
+
 function closePaymentPanel() {
   document.getElementById("paymentPanel")
     .classList.add("hidden");
