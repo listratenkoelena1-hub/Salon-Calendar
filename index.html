@@ -4798,57 +4798,7 @@ function renderManagerDailyReport() {
   body.innerHTML = html;
 }
 
-  // ===== ROLE BUTTONS =====
-  let buttonsHtml = `
-    <div style="
-      display:flex;
-      justify-content:flex-end;
-      gap:8px;
-      margin-top:16px;
-    ">
-  `;
-
-  // Manager button
-  if (currentUserRole === 'manager') {
-    buttonsHtml += `
-      <button class="dr-button" onclick="openTheDayModal()">
-        Open the Day
-      </button>
-    `;
-    buttonsHtml += `
-  <button class="dr-button" onclick="openSpringHelp()">
-    Spring Help
-  </button>
-`;
-
-  }
-
-  // Reception buttons
-  if (currentUserRole === 'reception') {
-    buttonsHtml += `
-      <button class="dr-button" onclick="sellProduct()">
-        Sell Product
-      </button>
-
-      <button class="dr-button" onclick="sellGiftCertificate()">
-        Sell Gift Certificate
-      </button>
-    `;
-  }
-
-  // Close button for everyone
-  buttonsHtml += `
-      <button class="dr-button" onclick="closeDailyReport()">
-        Close
-      </button>
-    </div>
-  `;
-
-  html += buttonsHtml;
-
-  body.innerHTML = html;
-
-
+  
 // ===== ROLE ACTIONS =====
 
 // ---------- OPEN THE DAY ----------
