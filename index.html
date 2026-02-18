@@ -5245,13 +5245,13 @@ if (entry?.pendingSplit?.length > 0) {
 
   let childrenTotalServiceCents = 0;
 
-  entry.pendingSplit.forEach(r => {
-  totalServiceCents += Number(r.amount) || 0;
+entry.pendingSplit.forEach(r => {
+  childrenTotalServiceCents += Number(r.amount) || 0;
 });
 
+const totalServiceCents =
+  parentServiceCents + childrenTotalServiceCents;
 
-  const totalServiceCents =
-    parentServiceCents + childrenTotalServiceCents;
 
   // ----- parent tip -----
   const parentTipShare = Math.round(
@@ -5309,9 +5309,6 @@ if (entry?.pendingSplit?.length > 0) {
     });
   }
 };
-await updateDoc(doc(db, "DayEntries", id), {
-  pendingSplit: null
-});
 
 
 window.reopenDrEntry = async (id) => {
