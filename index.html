@@ -2004,6 +2004,8 @@ let drExtras = [];
 let drWithdrawals = [];
 let drDayStatus = null;
 let springServices = [];
+let currentPaymentParent = null;
+let tempPayments = [];
 
 // ===== SPLIT SERVICE TEMP STORAGE =====
 let splitRows = [];
@@ -4477,23 +4479,44 @@ const serviceWithTax = fromCents(serviceCents + taxCents);
           </select>
         </div>
 
-        <div class="dr-action">
+       <div class="dr-action" style="
+  display:flex;
+  gap:6px;
+  align-items:center;
+">
 
   ${
     !isClosed && !e.lockedSplit
-      ? `<span onclick="openSplitModal('${e.id}')">🔀</span>`
+      ? `
+        <span onclick="openSplitModal('${e.id}')" 
+              style="cursor:pointer;">🔀</span>
+
+        <span onclick="openPaymentPanel('${e.id}')" 
+              style="cursor:pointer;">💳</span>
+
+        <span onclick="closeDrEntry('${e.id}')" 
+              style="cursor:pointer;">✅</span>
+      `
+      : ''
+  }
+
+  ${
+    isClosed && !e.lockedSplit
+      ? `<span onclick="reopenDrEntry('${e.id}')" 
+              style="cursor:pointer;">✏️</span>`
       : ''
   }
 
   ${
     e.lockedSplit
-  ? `<span onclick="deleteDrEntry('${e.id}')">🗑</span>`
-  : isClosed
-    ? `<span onclick="reopenDrEntry('${e.id}')">✏️</span>`
-    : `<span onclick="closeDrEntry('${e.id}')">✅</span>`
+      e.lockedSplit
+  ? `<span onclick="deleteDrEntry('${e.id}')"
+              style="cursor:pointer;">🗑</span>`
+      : ''
   }
 
 </div>
+
 
       </div>
     `;
@@ -4646,21 +4669,23 @@ function renderManagerDailyReport() {
 
       staffEntries.forEach(e => {
 
-        const serviceCents = Number(e.serviceAmount) || 0;
-        const taxCents = Math.round(serviceCents * 0.05);
-        const tipCents = Number(e.tip) || 0;
+  const serviceCents = Number(e.serviceAmount) || 0;
+  const taxCents = Math.round(serviceCents * 0.05);
+  const tipCents = Number(e.tip) || 0;
 
-        totalServiceCents += serviceCents;
-        totalTaxCents += taxCents;
-        totalTipsTodayCents += tipCents;
+  totalServiceCents += serviceCents;
+  totalTaxCents += taxCents;
+  totalTipsTodayCents += tipCents;
 
-        const totalWithTax = serviceCents + taxCents;
+  // ✅ PAYMENTS считаем здесь
+  (e.payments || []).forEach(p => {
+    if (p.method === "card") totalCardCents += p.amount;
+    if (p.method === "cash") totalCashCents += p.amount;
+    if (p.method === "giftcard") totalGiftCents += p.amount;
+    if (p.method === "check") totalCheckCents += p.amount;
+  });
 
-        if (e.paymentMethod === "card") totalCardCents += totalWithTax;
-        if (e.paymentMethod === "cash") totalCashCents += totalWithTax;
-        if (e.paymentMethod === "giftcard") totalGiftCents += totalWithTax;
-        if (e.paymentMethod === "check") totalCheckCents += totalWithTax;
-      });
+});
 
       // ===== ALL TIME TIPS =====
       const totalEarnedTips = drEntries
@@ -4697,7 +4722,14 @@ function renderManagerDailyReport() {
                   <div class="mgr-head" style="font-weight:normal;">
                     <div>${fromCents(serviceCents)}</div>
                     <div>${fromCents(serviceCents + taxCents)}</div>
-                    <div>${e.paymentMethod || "-"}</div>
+                    <div>
+  ${
+    (e.payments || []).map(p =>
+      p.method + " " + fromCents(p.amount)
+    ).join("<br>")
+  }
+</div>
+
                     <div>${fromCents(tipCents)}</div>
                   </div>
                 `;
@@ -5192,7 +5224,9 @@ window.addDrEntry = async () => {
     staffId: currentUserStaffId,
     serviceAmount: null,
     tip: null,
-    paymentMethod: "card",
+    payments: [
+  { method: "card", amount: 0 }
+],
     status: "open",
     order: sameDay.length,
     createdAt: serverTimestamp()
@@ -5201,12 +5235,24 @@ window.addDrEntry = async () => {
 
 
 window.updateDrField = async (id, field, value) => {
+
   const data = {};
 
-  if (field === "serviceAmount" || field === "tip") {
-    data[field] = toCents(value);
-  } else {
-    data[field] = value;
+  if (field === "serviceAmount") {
+
+    const serviceCents = toCents(value);
+    const taxCents = Math.round(serviceCents * 0.05);
+    const totalWithTax = serviceCents + taxCents;
+
+    data.serviceAmount = serviceCents;
+
+    data.payments = [
+      { method: "card", amount: totalWithTax }
+    ];
+  }
+
+  if (field === "tip") {
+    data.tip = toCents(value);
   }
 
   await updateDoc(doc(db, "DayEntries", id), data);
@@ -5300,7 +5346,7 @@ const totalServiceCents =
       staffId: row.staffId,
       serviceAmount: serviceCents,
       tip: tipShare,
-      paymentMethod: entry.paymentMethod,
+      payments: entry.payments || [],
       status: "closed",
       splitGroupId: splitGroupId,
       isParent: false,
@@ -5348,6 +5394,108 @@ window.openSplitModal = (parentId) => {
 
   renderSplitRows();
 };
+
+window.openPaymentPanel = (entryId) => {
+
+  const entry = drEntries.find(e => e.id === entryId);
+  if (!entry) return;
+
+  currentPaymentParent = entry;
+
+  tempPayments = entry.payments
+    ? [...entry.payments]
+    : [{
+        method: entry.paymentMethod || "card",
+        amount: entry.serviceAmount + Math.round(entry.serviceAmount * 0.05)
+      }];
+
+  renderPaymentRows();
+
+  document.getElementById("paymentPanel")
+    .classList.remove("hidden");
+};
+
+function renderPaymentRows() {
+
+  const container = document.getElementById("paymentRows");
+
+  container.innerHTML = tempPayments.map((p, i) => `
+    <div style="display:flex; gap:6px; margin-bottom:6px;">
+
+      <select onchange="updatePaymentMethod(${i}, this.value)">
+        <option value="card" ${p.method==="card"?"selected":""}>Card</option>
+        <option value="cash" ${p.method==="cash"?"selected":""}>Cash</option>
+        <option value="giftcard" ${p.method==="giftcard"?"selected":""}>Gift</option>
+        <option value="check" ${p.method==="check"?"selected":""}>Check</option>
+      </select>
+
+      <input type="number"
+        step="0.01"
+        value="${fromCents(p.amount)}"
+        onchange="updatePaymentAmount(${i}, this.value)">
+
+      <span onclick="removePaymentRow(${i})">🗑</span>
+
+    </div>
+  `).join("");
+}
+function updatePaymentMethod(index, value) {
+  tempPayments[index].method = value;
+}
+
+function updatePaymentAmount(index, value) {
+  tempPayments[index].amount = toCents(value);
+}
+
+function addPaymentRow() {
+  tempPayments.push({
+    method: "card",
+    amount: 0
+  });
+  renderPaymentRows();
+}
+
+function removePaymentRow(index) {
+  tempPayments.splice(index, 1);
+  renderPaymentRows();
+}
+  window.confirmPaymentSplit = async () => {
+
+  if (!currentPaymentParent) return;
+
+  const totalServiceWithTax =
+    currentPaymentParent.serviceAmount +
+    Math.round(currentPaymentParent.serviceAmount * 0.05);
+
+  const totalPayments = tempPayments.reduce(
+    (sum, p) => sum + (Number(p.amount) || 0),
+    0
+  );
+
+  if (totalPayments !== totalServiceWithTax) {
+    alert("Payments must equal Service + Tax");
+    return;
+  }
+
+  await updateDoc(
+    doc(db, "DayEntries", currentPaymentParent.id),
+    {
+      payments: tempPayments,
+      paymentMethod: null
+    }
+  );
+
+  closePaymentPanel();
+  renderDailyReport();
+};
+function closePaymentPanel() {
+  document.getElementById("paymentPanel")
+    .classList.add("hidden");
+
+  currentPaymentParent = null;
+  tempPayments = [];
+}
+    
 function renderSplitRows() {
 
   const container = document.getElementById("splitRows");
@@ -5996,6 +6144,22 @@ window.closeOffWorkHardConflict = () => {
 
   </div>
 
+</div>
+<div id="paymentPanel" class="modal hidden">
+  <div class="modal-content" style="max-width:400px;">
+
+    <h3>Split Payment</h3>
+
+    <div id="paymentRows"></div>
+
+    <button onclick="addPaymentRow()">+ Add Payment</button>
+
+    <div style="margin-top:12px; text-align:right;">
+      <button onclick="closePaymentPanel()">Cancel</button>
+      <button onclick="confirmPaymentSplit()">Confirm</button>
+    </div>
+
+  </div>
 </div>
 
 </body>
