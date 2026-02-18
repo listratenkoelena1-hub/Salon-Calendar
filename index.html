@@ -4615,11 +4615,12 @@ html += `
   body.innerHTML = html;
 }
 function renderManagerDailyReport() {
+
   const body = document.getElementById('dailyReportBody');
-  const dateStr = getDrDateString();
-const dayEntries = drEntries.filter(e => e.date === dateStr);
-    
   if (!body) return;
+
+  const dateStr = getDrDateString();
+  const dayEntries = drEntries.filter(e => e.date === dateStr);
 
   let html = `
     <div class="mgr-wrapper">
@@ -4629,16 +4630,53 @@ const dayEntries = drEntries.filter(e => e.date === dateStr);
   staff
     .filter(s => s.id !== "anyone")
     .forEach(s => {
-const staffEntries = dayEntries
-  .filter(e => e.staffId === s.id && e.status === "closed")
-  .sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+
+      const staffEntries = dayEntries
+        .filter(e => e.staffId === s.id && e.status === "closed")
+        .sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+
+      // ===== TOTALS CALCULATION =====
+      let totalServiceCents = 0;
+      let totalTaxCents = 0;
+      let totalCardCents = 0;
+      let totalCashCents = 0;
+      let totalGiftCents = 0;
+      let totalCheckCents = 0;
+      let totalTipsTodayCents = 0;
+
+      staffEntries.forEach(e => {
+
+        const serviceCents = Number(e.serviceAmount) || 0;
+        const taxCents = Math.round(serviceCents * 0.05);
+        const tipCents = Number(e.tip) || 0;
+
+        totalServiceCents += serviceCents;
+        totalTaxCents += taxCents;
+        totalTipsTodayCents += tipCents;
+
+        const totalWithTax = serviceCents + taxCents;
+
+        if (e.paymentMethod === "card") totalCardCents += totalWithTax;
+        if (e.paymentMethod === "cash") totalCashCents += totalWithTax;
+        if (e.paymentMethod === "giftcard") totalGiftCents += totalWithTax;
+        if (e.paymentMethod === "check") totalCheckCents += totalWithTax;
+      });
+
+      // ===== ALL TIME TIPS =====
+      const totalEarnedTips = drEntries
+        .filter(e => e.staffId === s.id)
+        .reduce((sum, e) => sum + (Number(e.tip) || 0), 0);
+
+      const totalWithdrawnTips = drWithdrawals
+        .filter(w => w.staffId === s.id)
+        .reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
+
+      const tipsBalanceCents = totalEarnedTips - totalWithdrawnTips;
 
       html += `
         <div class="mgr-card">
 
-          <div class="mgr-card-title">
-            ${s.name}
-          </div>
+          <div class="mgr-card-title">${s.name}</div>
 
           <div class="mgr-head">
             <div>Srv</div>
@@ -4648,25 +4686,24 @@ const staffEntries = dayEntries
           </div>
 
           <div class="mgr-rows">
-  ${
-    staffEntries.map(e => {
+            ${
+              staffEntries.map(e => {
 
-      const serviceCents = Number(e.serviceAmount) || 0;
-      const taxCents = Math.round(serviceCents * 0.05);
-      const tipCents = Number(e.tip) || 0;
+                const serviceCents = Number(e.serviceAmount) || 0;
+                const taxCents = Math.round(serviceCents * 0.05);
+                const tipCents = Number(e.tip) || 0;
 
-      return `
-        <div class="mgr-head" style="font-weight:normal;">
-          <div>${fromCents(serviceCents)}</div>
-          <div>${fromCents(serviceCents + taxCents)}</div>
-          <div>${e.paymentMethod || "-"}</div>
-          <div>${fromCents(tipCents)}</div>
-        </div>
-      `;
-    }).join("")
-  }
-</div>
-
+                return `
+                  <div class="mgr-head" style="font-weight:normal;">
+                    <div>${fromCents(serviceCents)}</div>
+                    <div>${fromCents(serviceCents + taxCents)}</div>
+                    <div>${e.paymentMethod || "-"}</div>
+                    <div>${fromCents(tipCents)}</div>
+                  </div>
+                `;
+              }).join("")
+            }
+          </div>
 
           <div class="mgr-divider"></div>
 
@@ -4674,62 +4711,58 @@ const staffEntries = dayEntries
 
             <div class="mgr-totals-title">Totals</div>
 
-            <!-- SERVICE ROW -->
             <div class="mgr-row-inline">
               <div class="mgr-pair">
                 <span>Service</span>
-                <span>0</span>
+                <span>${fromCents(totalServiceCents)}</span>
               </div>
 
               <div class="mgr-pair">
                 <span>Srv+Tax</span>
-                <span>0</span>
+                <span>${fromCents(totalServiceCents + totalTaxCents)}</span>
               </div>
             </div>
 
-            <!-- PAYMENTS -->
             <div class="mgr-row-inline">
               <div class="mgr-pair">
                 <span>Card</span>
-                <span>0</span>
+                <span>${fromCents(totalCardCents)}</span>
               </div>
 
               <div class="mgr-pair">
                 <span>Gift</span>
-                <span>0</span>
+                <span>${fromCents(totalGiftCents)}</span>
               </div>
             </div>
 
             <div class="mgr-row-inline">
               <div class="mgr-pair">
                 <span>Cash</span>
-                <span>0</span>
+                <span>${fromCents(totalCashCents)}</span>
               </div>
 
               <div class="mgr-pair">
                 <span>Check</span>
-                <span>0</span>
+                <span>${fromCents(totalCheckCents)}</span>
               </div>
             </div>
 
-            <!-- TIPS -->
-<div class="mgr-row-inline">
-  <div class="mgr-pair">
-    <span>Today Tips</span>
-    <span>0</span>
-  </div>
-</div>
-
+            <div class="mgr-row-inline">
+              <div class="mgr-pair">
+                <span>Today Tips</span>
+                <span>${fromCents(totalTipsTodayCents)}</span>
+              </div>
+            </div>
 
             <div class="mgr-row-inline">
               <div class="mgr-pair">
                 <span>Tips Withdr</span>
-                <span>0</span>
+                <span>${fromCents(totalWithdrawnTips)}</span>
               </div>
 
               <div class="mgr-pair">
                 <span>Tips Bal</span>
-                <span>0</span>
+                <span>${fromCents(tipsBalanceCents)}</span>
               </div>
             </div>
 
@@ -4743,32 +4776,28 @@ const staffEntries = dayEntries
       </div>
 
       <div class="mgr-global" style="
-  display:flex;
-  justify-content:space-between;
-  margin-top:20px;
-">
+        display:flex;
+        justify-content:space-between;
+        margin-top:20px;
+      ">
 
-  <!-- LEFT SIDE — SOLD TODAY -->
-  <div style="flex:1;">
+        <div style="flex:1;">
+          <div style="font-weight:600; margin-bottom:8px;">
+            Sold Today
+          </div>
+          ${renderSoldTodayBlock()}
+        </div>
 
-    <div style="font-weight:600; margin-bottom:8px;">
-      Sold Today
-    </div>
+        <div style="text-align:right; min-width:320px;">
+          ${renderRightTotalsBlock()}
+        </div>
 
-    ${renderSoldTodayBlock()}
-
-  </div>
-
-  <!-- RIGHT SIDE — TOTALS -->
-  <div style="text-align:right; min-width:320px;">
-
-    ${renderRightTotalsBlock()}
-
-  </div>
-
-</div>
-
+      </div>
   `;
+
+  body.innerHTML = html;
+}
+
   // ===== ROLE BUTTONS =====
   let buttonsHtml = `
     <div style="
