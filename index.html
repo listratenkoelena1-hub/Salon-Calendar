@@ -4614,6 +4614,9 @@ html += `
 }
 function renderManagerDailyReport() {
   const body = document.getElementById('dailyReportBody');
+  const dateStr = getDrDateString();
+const dayEntries = drEntries.filter(e => e.date === dateStr);
+    
   if (!body) return;
 
   let html = `
@@ -4624,6 +4627,9 @@ function renderManagerDailyReport() {
   staff
     .filter(s => s.id !== "anyone")
     .forEach(s => {
+const staffEntries = dayEntries
+  .filter(e => e.staffId === s.id && e.status === "closed")
+  .sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
 
       html += `
         <div class="mgr-card">
@@ -4639,7 +4645,26 @@ function renderManagerDailyReport() {
             <div>Tip</div>
           </div>
 
-          <div class="mgr-rows"></div>
+          <div class="mgr-rows">
+  ${
+    staffEntries.map(e => {
+
+      const serviceCents = Number(e.serviceAmount) || 0;
+      const taxCents = Math.round(serviceCents * 0.05);
+      const tipCents = Number(e.tip) || 0;
+
+      return `
+        <div class="mgr-head" style="font-weight:normal;">
+          <div>${fromCents(serviceCents)}</div>
+          <div>${fromCents(serviceCents + taxCents)}</div>
+          <div>${e.paymentMethod || "-"}</div>
+          <div>${fromCents(tipCents)}</div>
+        </div>
+      `;
+    }).join("")
+  }
+</div>
+
 
           <div class="mgr-divider"></div>
 
@@ -4686,12 +4711,7 @@ function renderManagerDailyReport() {
             </div>
 
             <!-- TIPS -->
-            <div class="mgr-row-inline">
-              <div class="mgr-pair">
-                <span>Prev Tips</span>
-                <span>0</span>
-              </div>
-
+            
               <div class="mgr-pair">
                 <span>Today Tips</span>
                 <span>0</span>
@@ -5212,25 +5232,30 @@ if (entry?.pendingSplit?.length > 0) {
   const parentServiceCents = Number(entry.serviceAmount) || 0;
   const totalTipCents = Number(entry.tip) || 0;
 
-  let totalServiceCents = parentServiceCents;
+  let childrenTotalServiceCents = 0;
 
   entry.pendingSplit.forEach(r => {
-    totalServiceCents += toCents(r.amount);
+    childrenTotalServiceCents += toCents(r.amount);
   });
 
-  // пересчитываем parent tip
+  const totalServiceCents =
+    parentServiceCents + childrenTotalServiceCents;
+
+  // ----- parent tip -----
   const parentTipShare = Math.round(
     (parentServiceCents / totalServiceCents) * totalTipCents
   );
 
+  // обновляем parent
   await updateDoc(doc(db, "DayEntries", id), {
     tip: parentTipShare,
     splitGroupId: splitGroupId,
     isParent: true,
-    lockedSplit: true
+    lockedSplit: true,
+    pendingSplit: null
   });
 
-  // создаём children
+  // ----- children -----
   for (const row of entry.pendingSplit) {
 
     const serviceCents = toCents(row.amount);
@@ -5252,8 +5277,8 @@ if (entry?.pendingSplit?.length > 0) {
       createdAt: serverTimestamp()
     });
   }
-
 }
+
 
   await updateDoc(doc(db, "DayEntries", id), {
     status: "closed"
@@ -5341,7 +5366,7 @@ window.updateSplitStaff = (index, value) => {
 window.updateSplitAmount = (index, value) => {
   splitRows[index].amount = value;
 };
-window.confirmSplitService = () => {
+window.confirmSplitService = async () => {
 
   if (!currentSplitParent) return;
 
@@ -5351,15 +5376,21 @@ window.confirmSplitService = () => {
     return;
   }
 
-  // сохраняем split временно в родительскую строку
-  currentSplitParent.pendingSplit = [...splitRows];
+  // сохраняем split в Firestore
+  await updateDoc(
+    doc(db, "DayEntries", currentSplitParent.id),
+    {
+      pendingSplit: splitRows
+    }
+  );
 
   splitRows = [];
+  currentSplitParent = null;
 
   document.getElementById("splitModal")
     .classList.add("hidden");
-
 };
+
 
 
 //=============================================================================================================//
