@@ -1206,7 +1206,16 @@ textarea {
 }
 .dr-locked {
   opacity: 0.5;
+}
+
+.dr-locked button,
+.dr-locked input,
+.dr-locked select {
   pointer-events: none;
+  background-color: #f3f3f3 !important;
+  color: #999 !important;
+  border-color: #ddd !important;
+  cursor: not-allowed !important;
 }
 </style>
 
@@ -4465,7 +4474,7 @@ const serviceWithTax = fromCents(serviceCents + taxCents);
 
 
     const editingAllowed = isDrEditingAllowed();
-
+const disabledAttr = editingAllowed ? "" : "disabled";
 html += `
       <div class="dr-row ${!editingAllowed ? 'dr-locked' : ''}">
         <div>${index + 1}</div>
