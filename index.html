@@ -4401,6 +4401,17 @@ function isDrEditingAllowed() {
 
   return isSameDay && !isLocked;
 }
+      function isDrDeletingAllowed() {
+
+  const [y, m, d] = getDrDateString().split('-').map(Number);
+  const selected = new Date(y, m - 1, d);
+  const today = new Date();
+
+  selected.setHours(0,0,0,0);
+  today.setHours(0,0,0,0);
+
+  return selected.getTime() === today.getTime();
+}
 function renderDailyReport() {
   if (currentUserRole === 'manager' || currentUserRole === 'reception') {
   renderManagerDailyReport();
@@ -4422,6 +4433,7 @@ const dayClosed = drDayStatus?.some(d =>
 
   let entries = drEntries.filter(e => e.date === dateStr);
 const editingAllowed = isDrEditingAllowed();
+      const deletingAllowed = isDrDeletingAllowed();
   if (currentUserRole === 'staff' && currentUserStaffId) {
     entries = entries.filter(e => e.staffId === currentUserStaffId);
   }
@@ -4551,7 +4563,7 @@ html += `
       <span onclick="closeDrEntry('${e.id}')" style="cursor:pointer;">✅</span>
   ` : ''}
 
-  ${ editingAllowed ? `
+    ${deletingAllowed ? `
       <span onclick="deleteDrEntry('${e.id}')" style="cursor:pointer;">🗑</span>
   ` : ''}
 
