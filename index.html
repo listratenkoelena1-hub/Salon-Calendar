@@ -1217,6 +1217,17 @@ textarea {
   border-color: #ddd !important;
   cursor: not-allowed !important;
 }
+      .dr-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dr-select:disabled,
+.dr-input:disabled {
+  background:#f3f3f3;
+  color:#999;
+  cursor:not-allowed;
+}
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -4374,7 +4385,18 @@ function isDrDayLocked() {
 }
 
 function isDrEditingAllowed() {
-  return isDrToday() && !isDrDayLocked();
+
+  const selected = new Date(getDrDateString());
+  const today = new Date();
+
+  // обнуляем время
+  selected.setHours(0,0,0,0);
+  today.setHours(0,0,0,0);
+
+  const isSameDay = selected.getTime() === today.getTime();
+  const isLocked = isDrDayLocked();
+
+  return isSameDay && !isLocked;
 }
 function renderDailyReport() {
   if (currentUserRole === 'manager' || currentUserRole === 'reception') {
@@ -4401,14 +4423,15 @@ const editingAllowed = isDrEditingAllowed();
     entries = entries.filter(e => e.staffId === currentUserStaffId);
   }
 
-  if (
-    currentUserRole === 'staff' &&
-    currentUserStaffId &&
-    entries.length === 0
-  ) {
-    addDrEntry();
-    return;
-  }
+ if (
+  currentUserRole === 'staff' &&
+  currentUserStaffId &&
+  entries.length === 0 &&
+  isDrEditingAllowed()
+) {
+  addDrEntry();
+  return;
+}
 
   entries = entries
     .slice()
