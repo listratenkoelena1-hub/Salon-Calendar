@@ -4545,15 +4545,15 @@ html += `
 
        <div class="dr-action" style="display:flex; gap:6px; align-items:center;">
 
-  ${!isClosed && !e.lockedSplit && editingAllowed ? `
+  ${!isClosed && editingAllowed ? `
       <span onclick="openSplitModal('${e.id}')" style="cursor:pointer;">🔀</span>
       <span onclick="openPaymentPanel('${e.id}')" style="cursor:pointer;">💳</span>
       <span onclick="closeDrEntry('${e.id}')" style="cursor:pointer;">✅</span>
   ` : ''}
 
-  ${isClosed && !e.lockedSplit && editingAllowed ? `
-    <span onclick="deleteDrEntry('${e.id}')" style="cursor:pointer;">🗑</span>
-` : ''}
+  ${isClosed && editingAllowed ? `
+      <span onclick="deleteDrEntry('${e.id}')" style="cursor:pointer;">🗑</span>
+  ` : ''}
 
 </div>
 
