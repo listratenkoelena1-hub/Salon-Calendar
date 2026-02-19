@@ -4497,7 +4497,7 @@ return;
   `;
 
   entries.forEach((e, index) => {
-    const isClosed = e.status === "closed" || dayClosed || e.lockedSplit === true;
+    const isClosed = e.status === "closed" || e.lockedSplit === true;
     const serviceAmount = e.serviceAmount != null
   ? fromCents(e.serviceAmount)
   : "";
