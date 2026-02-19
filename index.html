@@ -5038,11 +5038,13 @@ function renderRightTotalsBlock() {
 
     const totalWithTax = serviceCents + taxCents;
 
-    if (e.paymentMethod === "card") totalCardCents += totalWithTax;
-    if (e.paymentMethod === "cash") totalCashCents += totalWithTax;
-    if (e.paymentMethod === "giftcard") totalGiftCents += totalWithTax;
-    if (e.paymentMethod === "check") totalCheckCents += totalWithTax;
-  });
+    (e.payments || []).forEach(p => {
+  if (p.method === "card") totalCardCents += p.amount;
+  if (p.method === "cash") totalCashCents += p.amount;
+  if (p.method === "giftcard") totalGiftCents += p.amount;
+  if (p.method === "check") totalCheckCents += p.amount;
+});
+
 
   // ===== SPRING HELP =====
   springToday.forEach(s => {
@@ -5506,6 +5508,10 @@ function removePaymentRow(index) {
     alert("Payments must equal Service + Tax");
     return;
   }
+if (tempPayments[0].amount < 0) {
+  alert("Invalid split");
+  return;
+}
 
   await updateDoc(
     doc(db, "DayEntries", currentPaymentParent.id),
