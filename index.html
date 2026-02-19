@@ -4474,7 +4474,6 @@ const serviceWithTax = fromCents(serviceCents + taxCents);
 
 
     const editingAllowed = isDrEditingAllowed();
-const disabledAttr = editingAllowed ? "" : "disabled";
 html += `
       <div class="dr-row ${!editingAllowed ? 'dr-locked' : ''}">
         <div>${index + 1}</div>
@@ -4485,7 +4484,7 @@ html += `
             min="0"
             step="0.01"
             value="${serviceAmount}"
-            ${isClosed ? 'disabled' : ''}
+            ${(isClosed || !editingAllowed) ? 'disabled' : ''}
             onchange="updateDrField('${e.id}','serviceAmount',this.value)">
         </div>
 
@@ -4506,13 +4505,13 @@ html += `
             min="0"
             step="0.01"
             value="${tip}"
-            ${isClosed ? 'disabled' : ''}
+            ${(isClosed || !editingAllowed) ? 'disabled' : ''}
             onchange="updateDrField('${e.id}','tip',this.value)">
         </div>
 
         <div>
           <select class="dr-select"
-            ${isClosed ? 'disabled' : ''}
+            ${(isClosed || !editingAllowed) ? 'disabled' : ''}
             onchange="updateDrField('${e.id}','paymentMethod',this.value)">
             <option value="card" ${paymentMethod==='card'?'selected':''}>Card</option>
             <option value="cash" ${paymentMethod==='cash'?'selected':''}>Cash</option>
@@ -4523,17 +4522,17 @@ html += `
 
        <div class="dr-action" style="display:flex; gap:6px; align-items:center;">
 
-  ${!isClosed && !e.lockedSplit ? `
+  ${!isClosed && !e.lockedSplit && editingAllowed ? `
       <span onclick="openSplitModal('${e.id}')" style="cursor:pointer;">🔀</span>
       <span onclick="openPaymentPanel('${e.id}')" style="cursor:pointer;">💳</span>
       <span onclick="closeDrEntry('${e.id}')" style="cursor:pointer;">✅</span>
   ` : ''}
 
-  ${isClosed && !e.lockedSplit ? `
+  ${isClosed && !e.lockedSplit && editingAllowed ? `
       <span onclick="reopenDrEntry('${e.id}')" style="cursor:pointer;">✏️</span>
   ` : ''}
 
-  ${e.lockedSplit ? `
+  ${e.lockedSplit && editingAllowed ? `
       <span onclick="deleteDrEntry('${e.id}')" style="cursor:pointer;">🗑</span>
   ` : ''}
 
@@ -4644,12 +4643,12 @@ html += `
     margin-top:16px;
     justify-content:flex-end;
   ">
-    <button class="dr-button" ${withdrawalDisabled}
+    <button class="dr-button" ${(withdrawalDisabled || !editingAllowed) ? 'disabled' : ''}
   onclick="openWithdrawal()">
       Tips Withdrawal
     </button>
 
-    <button class="dr-button" ${!isToday || dayClosed ? 'disabled' : ''}
+    <button class="dr-button" ${(!editingAllowed) ? 'disabled' : ''}
   onclick="openCloseDayModal()">
   Close Day
 </button>
