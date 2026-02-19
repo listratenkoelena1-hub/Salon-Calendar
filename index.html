@@ -4715,9 +4715,11 @@ function renderManagerDailyReport() {
                     <div>${fromCents(serviceCents + taxCents)}</div>
                     <div>
   ${
-    (e.payments || []).map(p =>
-      p.method + " " + fromCents(p.amount)
-    ).join("<br>")
+    e.payments && e.payments.length > 1
+      ? "Split"
+      : e.payments && e.payments.length === 1
+        ? e.payments[0].method
+        : "-"
   }
 </div>
 
@@ -5447,13 +5449,14 @@ function renderPaymentRows() {
   `).join("");
 }
 
-function updatePaymentAmount(index, value) {
-
-  const newAmount = toCents(value);
-  tempPayments[index].amount = newAmount;
-
+window.updatePaymentAmount = function(index, value) {
+  tempPayments[index].amount = toCents(value);
   autoRecalculatePayments();
-}
+};
+     window.updatePaymentMethod = function(index, value) {
+  tempPayments[index].method = value;
+  autoRecalculatePayments();
+}; 
 function autoRecalculatePayments() {
 
   if (!currentPaymentParent) return;
@@ -5485,15 +5488,13 @@ function autoRecalculatePayments() {
 
 window.addPaymentRow = function () {
 
-
   tempPayments.push({
     method: "cash",
     amount: 0
   });
 
-  renderPaymentRows();
-}
-
+  autoRecalculatePayments();
+};
 
 function removePaymentRow(index) {
   tempPayments.splice(index, 1);
