@@ -4458,7 +4458,14 @@ const serviceWithTax = fromCents(serviceCents + taxCents);
             onchange="updateDrField('${e.id}','serviceAmount',this.value)">
         </div>
 
-       <div>${serviceWithTax}</div>
+       <div>
+  ${serviceWithTax}
+  ${e.payments && e.payments.length > 1
+    ? '<span style="color:green; margin-left:4px;">●</span>'
+    : ''
+  }
+</div>
+
 
 
         <div>
@@ -5476,7 +5483,8 @@ function autoRecalculatePayments() {
 
 
 
-function addPaymentRow() {
+window.addPaymentRow = function () {
+
 
   tempPayments.push({
     method: "cash",
@@ -5524,7 +5532,8 @@ if (tempPayments[0].amount < 0) {
   closePaymentPanel();
 };
 
-function closePaymentPanel() {
+window.closePaymentPanel = function () {
+
   document.getElementById("paymentPanel")
     .classList.add("hidden");
 
