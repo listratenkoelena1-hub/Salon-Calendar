@@ -4396,7 +4396,7 @@ const dayClosed = drDayStatus?.some(d =>
 );
 
   let entries = drEntries.filter(e => e.date === dateStr);
-
+const editingAllowed = isDrEditingAllowed();
   if (currentUserRole === 'staff' && currentUserStaffId) {
     entries = entries.filter(e => e.staffId === currentUserStaffId);
   }
@@ -4471,9 +4471,6 @@ return;
 const taxCents = Math.round(serviceCents * 0.05);
 const serviceWithTax = fromCents(serviceCents + taxCents);
 
-
-
-    const editingAllowed = isDrEditingAllowed();
 html += `
       <div class="dr-row ${!editingAllowed ? 'dr-locked' : ''}">
         <div>${index + 1}</div>
