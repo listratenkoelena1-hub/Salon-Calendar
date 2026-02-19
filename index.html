@@ -4551,11 +4551,14 @@ html += `
       <span onclick="closeDrEntry('${e.id}')" style="cursor:pointer;">✅</span>
   ` : ''}
 
-  ${isClosed && editingAllowed ? `
+  ${isClosed && !e.lockedSplit && editingAllowed ? `
     <span onclick="reopenDrEntry('${e.id}')" style="cursor:pointer;">✏️</span>
     <span onclick="deleteDrEntry('${e.id}')" style="cursor:pointer;">🗑</span>
 ` : ''}
 
+${e.lockedSplit && editingAllowed ? `
+    <span onclick="deleteDrEntry('${e.id}')" style="cursor:pointer;">🗑</span>
+` : ''}
 </div>
 
 
