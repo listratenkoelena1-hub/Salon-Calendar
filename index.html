@@ -4458,11 +4458,12 @@ const serviceWithTax = fromCents(serviceCents + taxCents);
             onchange="updateDrField('${e.id}','serviceAmount',this.value)">
         </div>
 
-       <div>
+       <div style="white-space:nowrap;">
   ${serviceWithTax}
-  ${e.payments && e.payments.length > 1
-    ? '<span style="color:green; margin-left:4px;">●</span>'
-    : ''
+  ${
+    e.payments && e.payments.length > 1
+      ? '<span style="color:#2e7d32; font-size:10px; margin-left:4px; vertical-align:middle;">●</span>'
+      : ''
   }
 </div>
 
