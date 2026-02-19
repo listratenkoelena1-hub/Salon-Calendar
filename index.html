@@ -4325,6 +4325,7 @@ function formatDrDate(date) {
 }
 
 window.openDailyReport = () => {
+      drCurrentDate = new Date(currentDate);
       console.log("Opening DR with role:", currentUserRole);
 console.log("StaffId:", currentUserStaffId);
 
