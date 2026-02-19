@@ -4386,10 +4386,11 @@ function isDrDayLocked() {
 
 function isDrEditingAllowed() {
 
-  const selected = new Date(getDrDateString());
+  const [y, m, d] = getDrDateString().split('-').map(Number);
+
+  const selected = new Date(y, m - 1, d); // ЛОКАЛЬНАЯ дата
   const today = new Date();
 
-  // обнуляем время
   selected.setHours(0,0,0,0);
   today.setHours(0,0,0,0);
 
