@@ -4563,7 +4563,7 @@ html += `
       <span onclick="closeDrEntry('${e.id}')" style="cursor:pointer;">✅</span>
   ` : ''}
 
-    ${deletingAllowed ? `
+     ${isClosed && deletingAllowed ? `
       <span onclick="deleteDrEntry('${e.id}')" style="cursor:pointer;">🗑</span>
   ` : ''}
 
