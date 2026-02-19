@@ -1204,7 +1204,10 @@ textarea {
 .flatpickr-calendar {
   z-index: 10000 !important;
 }
-
+.dr-locked {
+  opacity: 0.5;
+  pointer-events: none;
+}
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -4346,7 +4349,24 @@ window.drNextDay = () => {
  function getDrDateString() {
   return drCurrentDate.toISOString().slice(0, 10);
 }
+function isDrToday() {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  return getDrDateString() === todayStr;
+}
 
+function isDrDayLocked() {
+  const dateStr = getDrDateString();
+
+  return drDayStatus?.some(d =>
+    d.date === dateStr &&
+    d.staffId === currentUserStaffId &&
+    d.locked === true
+  );
+}
+
+function isDrEditingAllowed() {
+  return isDrToday() && !isDrDayLocked();
+}
 function renderDailyReport() {
   if (currentUserRole === 'manager' || currentUserRole === 'reception') {
   renderManagerDailyReport();
@@ -4444,8 +4464,10 @@ const serviceWithTax = fromCents(serviceCents + taxCents);
 
 
 
-    html += `
-      <div class="dr-row">
+    const editingAllowed = isDrEditingAllowed();
+
+html += `
+      <div class="dr-row ${!editingAllowed ? 'dr-locked' : ''}">
         <div>${index + 1}</div>
 
         <div>
@@ -5205,6 +5227,7 @@ function fromCents(cents) {
 // ===== DAILY REPORT ACTIONS =====
 
 window.addDrEntry = async () => {
+      if (!isDrEditingAllowed()) return;
   const dateStr = getDrDateString();
 
   const sameDay = drEntries.filter(e =>
@@ -5231,7 +5254,7 @@ window.addDrEntry = async () => {
 
 
 window.updateDrField = async (id, field, value) => {
-
+if (!isDrEditingAllowed()) return;
   const data = {};
 
   if (field === "serviceAmount") {
@@ -5256,7 +5279,7 @@ window.updateDrField = async (id, field, value) => {
 
 
 window.deleteDrEntry = async (id) => {
-
+if (!isDrEditingAllowed()) return;
   const entry = drEntries.find(e => e.id === id);
   if (!entry) return;
 
@@ -5279,6 +5302,7 @@ window.deleteDrEntry = async (id) => {
 
 
 window.closeDrEntry = async (id) => {
+      if (!isDrEditingAllowed()) return;
  const snap = await getDoc(doc(db, "DayEntries", id));
 if (!snap.exists()) return;
 
@@ -5373,12 +5397,13 @@ const totalServiceCents =
 
 
 window.reopenDrEntry = async (id) => {
+     if (!isDrEditingAllowed()) return; 
   await updateDoc(doc(db, "DayEntries", id), {
     status: "open"
   });
 };
 window.openSplitModal = (parentId) => {
-
+if (!isDrEditingAllowed()) return;
   const entry = drEntries.find(e => e.id === parentId);
   if (!entry) return;
 
@@ -5392,7 +5417,7 @@ window.openSplitModal = (parentId) => {
 };
 
 window.openPaymentPanel = (entryId) => {
-
+if (!isDrEditingAllowed()) return;
   const entry = drEntries.find(e => e.id === entryId);
   if (!entry) return;
 
@@ -5502,7 +5527,7 @@ function removePaymentRow(index) {
   renderPaymentRows();
 }
   window.confirmPaymentSplit = async () => {
-
+if (!isDrEditingAllowed()) return;
   if (!currentPaymentParent) return;
 
   const serviceCents = Number(currentPaymentParent.serviceAmount) || 0;
@@ -5593,7 +5618,7 @@ window.updateSplitAmount = (index, value) => {
   splitRows[index].amount = value;
 };
 window.confirmSplitService = async () => {
-
+if (!isDrEditingAllowed()) return;
   if (!currentSplitParent) return;
 
   if (splitRows.length === 0) {
