@@ -5390,29 +5390,58 @@ const totalServiceCents =
     lockedSplit: true,
     pendingSplit: null
   });
+// ===== пересчёт payments для parent =====
+const parentTaxCents = Math.round(parentServiceCents * 0.05);
+const parentTotalWithTax = parentServiceCents + parentTaxCents;
 
-  // ----- children -----
-  for (const row of entry.pendingSplit) {
+const originalTotalWithTax =
+  totalServiceCents + Math.round(totalServiceCents * 0.05);
 
-    const serviceCents = Number(row.amount) || 0;
+const parentRatio = parentTotalWithTax / originalTotalWithTax;
 
-    const tipShare = Math.round(
-      (serviceCents / totalServiceCents) * totalTipCents
-    );
+const parentPayments = (entry.payments || []).map(p => ({
+  method: p.method,
+  amount: Math.round(p.amount * parentRatio)
+}));
 
-    await addDoc(collection(db, "DayEntries"), {
-      date: entry.date,
-      staffId: row.staffId,
-      serviceAmount: serviceCents,
-      tip: tipShare,
-      payments: entry.payments || [],
-      status: "closed",
-      splitGroupId: splitGroupId,
-      isParent: false,
-      lockedSplit: true,
-      createdAt: serverTimestamp()
-    });
-  }
+await updateDoc(doc(db, "DayEntries", id), {
+  payments: parentPayments
+});
+// ----- children -----
+for (const row of entry.pendingSplit) {
+
+  const serviceCents = Number(row.amount) || 0;
+
+  const tipShare = Math.round(
+    (serviceCents / totalServiceCents) * totalTipCents
+  );
+
+  const childTaxCents = Math.round(serviceCents * 0.05);
+  const childTotalWithTax = serviceCents + childTaxCents;
+
+  const originalTotalWithTax =
+    totalServiceCents + Math.round(totalServiceCents * 0.05);
+
+  const childRatio = childTotalWithTax / originalTotalWithTax;
+
+  const childPayments = (entry.payments || []).map(p => ({
+    method: p.method,
+    amount: Math.round(p.amount * childRatio)
+  }));
+
+  await addDoc(collection(db, "DayEntries"), {
+    date: entry.date,
+    staffId: row.staffId,
+    serviceAmount: serviceCents,
+    tip: tipShare,
+    payments: childPayments,
+    status: "closed",
+    splitGroupId: splitGroupId,
+    isParent: false,
+    lockedSplit: true,
+    createdAt: serverTimestamp()
+  });
+}
 }
 
 
