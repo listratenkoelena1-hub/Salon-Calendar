@@ -5479,9 +5479,28 @@ if (!isDrEditingAllowed()) return;
 
   currentPaymentParent = entry;
 
+  let totalWithTax = 0;
+
+// 🔹 если это split service — считаем всю группу
+if (entry.splitGroupId) {
+
+  const groupEntries = drEntries.filter(e =>
+    e.splitGroupId === entry.splitGroupId
+  );
+
+  totalWithTax = groupEntries.reduce((sum, e) => {
+    const s = Number(e.serviceAmount) || 0;
+    const t = Math.round(s * 0.05);
+    return sum + s + t;
+  }, 0);
+
+} else {
+
   const serviceCents = Number(entry.serviceAmount) || 0;
   const taxCents = Math.round(serviceCents * 0.05);
-  const totalWithTax = serviceCents + taxCents;
+  totalWithTax = serviceCents + taxCents;
+
+}
 
   // если уже есть payments — берём их
   if (entry.payments && entry.payments.length > 0) {
