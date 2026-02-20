@@ -5634,10 +5634,45 @@ if (!currentPaymentParent) return;
 
 const parentEntry = currentPaymentParent;
 
-const serviceCents = Number(parentEntry.serviceAmount) || 0;
-const taxCents = Math.round(serviceCents * 0.05);
-const totalWithTax = serviceCents + taxCents;
+let totalWithTax = 0;
 
+if (parentEntry.splitGroupId) {
+
+  const groupEntries = drEntries.filter(e =>
+    e.splitGroupId === parentEntry.splitGroupId
+  );
+
+  totalWithTax = groupEntries.reduce((sum, e) => {
+    const s = Number(e.serviceAmount) || 0;
+    const t = Math.round(s * 0.05);
+    return sum + s + t;
+  }, 0);
+
+} else {
+
+  let totalWithTax = 0;
+
+if (parentEntry.splitGroupId) {
+
+  const groupEntries = drEntries.filter(e =>
+    e.splitGroupId === parentEntry.splitGroupId
+  );
+
+  totalWithTax = groupEntries.reduce((sum, e) => {
+    const s = Number(e.serviceAmount) || 0;
+    const t = Math.round(s * 0.05);
+    return sum + s + t;
+  }, 0);
+
+} else {
+
+  const serviceCents = Number(parentEntry.serviceAmount) || 0;
+  const taxCents = Math.round(serviceCents * 0.05);
+  totalWithTax = serviceCents + taxCents;
+
+}
+
+}
 const totalPayments = tempPayments.reduce(
   (sum, p) => sum + (Number(p.amount) || 0),
   0
