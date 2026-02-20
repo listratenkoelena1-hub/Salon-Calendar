@@ -5571,9 +5571,27 @@ function autoRecalculatePayments() {
 
   if (!currentPaymentParent) return;
 
+  let totalWithTax = 0;
+
+if (currentPaymentParent.splitGroupId) {
+
+  const groupEntries = drEntries.filter(e =>
+    e.splitGroupId === currentPaymentParent.splitGroupId
+  );
+
+  totalWithTax = groupEntries.reduce((sum, e) => {
+    const s = Number(e.serviceAmount) || 0;
+    const t = Math.round(s * 0.05);
+    return sum + s + t;
+  }, 0);
+
+} else {
+
   const serviceCents = Number(currentPaymentParent.serviceAmount) || 0;
   const taxCents = Math.round(serviceCents * 0.05);
-  const totalWithTax = serviceCents + taxCents;
+  totalWithTax = serviceCents + taxCents;
+
+}
 
   // считаем сумму всех кроме первой строки
   let otherTotal = 0;
