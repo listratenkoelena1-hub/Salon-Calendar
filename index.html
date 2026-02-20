@@ -4683,9 +4683,6 @@ const alreadyWithdrawnToday = drWithdrawals.some(w =>
 );
 
 const withdrawalDisabled =
-  (!isToday || dayClosed || alreadyWithdrawnToday)
-    ? 'disabled'
-    : '';
 
 
 html += `
@@ -5914,8 +5911,6 @@ window.openCloseDayModal = () => {
   const dateStr = getDrDateString();
   const todayStr = new Date().toISOString().slice(0, 10);
 
-  if (dateStr !== todayStr) return;
-
   const dayClosed = drDayStatus?.some(d =>
     d.date === dateStr &&
     d.staffId === currentUserStaffId &&
@@ -5958,15 +5953,13 @@ window.confirmCloseDay = async () => {
   );
 
   cancelCloseDay();
+  renderDailyReport();  
 };
 
 
 window.openWithdrawal = () => {
   const dateStr = getDrDateString();
   const todayStr = new Date().toISOString().slice(0, 10);
-
-  // разрешено только сегодня
-  if (dateStr !== todayStr) return;
 
   const dayClosed = drDayStatus?.some(d =>
     d.date === dateStr &&
@@ -5988,7 +5981,6 @@ window.confirmWithdrawal = async () => {
     const dateStr = getDrDateString();
   const todayStr = new Date().toISOString().slice(0, 10);
 
-  if (dateStr !== todayStr) return;
 
   const amount = toCents(document.getElementById('withdrawAmount').value);
   if (isNaN(amount) || amount <= 0) return;
