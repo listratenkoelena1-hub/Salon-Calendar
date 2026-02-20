@@ -4419,7 +4419,19 @@ function isDrEditingAllowed() {
   selected.setHours(0,0,0,0);
   today.setHours(0,0,0,0);
 
-  return selected.getTime() === today.getTime();
+  const isSameDay = selected.getTime() === today.getTime();
+
+  const dayStatus = drDayStatus?.find(d =>
+    d.date === getDrDateString() &&
+    d.staffId === currentUserStaffId
+  );
+
+  // Если день явно открыт менеджером
+  if (dayStatus && dayStatus.locked === false) {
+    return true;
+  }
+
+  return isSameDay;
 }
 function renderDailyReport() {
   if (currentUserRole === 'manager' || currentUserRole === 'reception') {
