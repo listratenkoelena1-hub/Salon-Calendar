@@ -4389,17 +4389,26 @@ function isDrDayLocked() {
 function isDrEditingAllowed() {
 
   const [y, m, d] = getDrDateString().split('-').map(Number);
-
-  const selected = new Date(y, m - 1, d); // ЛОКАЛЬНАЯ дата
+  const selected = new Date(y, m - 1, d);
   const today = new Date();
 
   selected.setHours(0,0,0,0);
   today.setHours(0,0,0,0);
 
   const isSameDay = selected.getTime() === today.getTime();
-  const isLocked = isDrDayLocked();
 
-  return isSameDay && !isLocked;
+  const dayStatus = drDayStatus?.find(d =>
+    d.date === getDrDateString() &&
+    d.staffId === currentUserStaffId
+  );
+
+  // Если день явно открыт менеджером — разрешаем
+  if (dayStatus && dayStatus.locked === false) {
+    return true;
+  }
+
+  // Иначе работает обычная логика
+  return isSameDay && !isDrDayLocked();
 }
       function isDrDeletingAllowed() {
 
