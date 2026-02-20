@@ -4472,43 +4472,7 @@ const editingAllowed = isDrEditingAllowed();
   entries = entries
     .slice()
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  // ===== BUTTONS =====
-// проверка: сегодня ли выбранный день
-const todayStr = new Date().toISOString().slice(0, 10);
-const isToday = dateStr === todayStr;
-
-// withdrawal доступен только сегодня и если день не закрыт
-const alreadyWithdrawnToday = drWithdrawals.some(w =>
-  w.staffId === currentUserStaffId &&
-  w.date === dateStr
-);
-
-const withdrawalDisabled =
-
-
-html += `
-  <div style="
-    display:flex;
-    gap:8px;
-    margin-top:16px;
-    justify-content:flex-end;
-  ">
-    <button class="dr-button" ${(withdrawalDisabled || !editingAllowed) ? 'disabled' : ''}
-  onclick="openWithdrawal()">
-      Tips Withdrawal
-    </button>
-
-    <button class="dr-button" ${(!editingAllowed) ? 'disabled' : ''}
-  onclick="openCloseDayModal()">
-  Close Day
-</button>
-
-          <button class="dr-button" onclick="closeDailyReport()">Close</button>
-
-  </div>
-`;
-  body.innerHTML = html;
-}
+ 
   // ===== TOTALS =====
   let totalServiceCents = 0;
 let totalTaxCents = 0;
@@ -4939,7 +4903,46 @@ function renderManagerDailyReport() {
       </button>
     </div>
   `;
+// ===== BUTTONS =====
 
+const todayStr = new Date().toISOString().slice(0, 10);
+const isToday = dateStr === todayStr;
+
+const alreadyWithdrawnToday = drWithdrawals.some(w =>
+  w.staffId === currentUserStaffId &&
+  w.date === dateStr
+);
+
+const withdrawalDisabled =
+  !isToday ||
+  dayClosed ||
+  alreadyWithdrawnToday;
+
+html += `
+  <div style="
+    display:flex;
+    gap:8px;
+    margin-top:16px;
+    justify-content:flex-end;
+  ">
+    <button class="dr-button"
+      ${(withdrawalDisabled || !editingAllowed) ? 'disabled' : ''}
+      onclick="openWithdrawal()">
+      Tips Withdrawal
+    </button>
+
+    <button class="dr-button"
+      ${(!editingAllowed) ? 'disabled' : ''}
+      onclick="openCloseDayModal()">
+      Close Day
+    </button>
+
+    <button class="dr-button"
+      onclick="closeDailyReport()">
+      Close
+    </button>
+  </div>
+`;
   body.innerHTML = html;
 }
 
