@@ -5502,15 +5502,24 @@ if (entry.splitGroupId) {
 
 }
 
-  // если уже есть payments — берём их
+  // ===== ЕСЛИ split service → создаём новую общую сумму =====
+if (entry.splitGroupId) {
+
+  tempPayments = [
+    { method: "card", amount: totalWithTax }
+  ];
+
+} else {
+
   if (entry.payments && entry.payments.length > 0) {
     tempPayments = [...entry.payments];
   } else {
-    // иначе создаём одну строку
     tempPayments = [
       { method: "card", amount: totalWithTax }
     ];
   }
+
+}
 
   renderPaymentRows();
 
