@@ -5472,61 +5472,52 @@ if (!isDrEditingAllowed()) return;
   renderSplitRows();
 };
 
-window.openPaymentPanel = (entryId) => {
+window.openPaymentPanel = async (entryId) => {
 if (!isDrEditingAllowed()) return;
-  const entry = drEntries.find(e => e.id === entryId);
-  if (!entry) return;
 
-  currentPaymentParent = entry;
+const entrySnap = await getDoc(doc(db, "DayEntries", entryId));
+if (!entrySnap.exists()) return;
 
-  let totalWithTax = 0;
+const entry = entrySnap.data();
+currentPaymentParent = { id: entryId, ...entry };
 
-// 🔹 если это split service — считаем всю группу
+let totalWithTax = 0;
+
 if (entry.splitGroupId) {
 
-  const groupEntries = drEntries.filter(e =>
-    e.splitGroupId === entry.splitGroupId
+  // 🔥 берём свежие данные из базы
+  const q = query(
+    collection(db, "DayEntries"),
+    where("splitGroupId", "==", entry.splitGroupId)
   );
 
-  totalWithTax = groupEntries.reduce((sum, e) => {
+  const snap = await getDocs(q);
+
+  snap.forEach(docSnap => {
+    const e = docSnap.data();
     const s = Number(e.serviceAmount) || 0;
     const t = Math.round(s * 0.05);
-    return sum + s + t;
-  }, 0);
+    totalWithTax += s + t;
+  });
 
 } else {
 
-  const serviceCents = Number(entry.serviceAmount) || 0;
-  const taxCents = Math.round(serviceCents * 0.05);
-  totalWithTax = serviceCents + taxCents;
+  const s = Number(entry.serviceAmount) || 0;
+  const t = Math.round(s * 0.05);
+  totalWithTax = s + t;
 
 }
 
-  // ===== ЕСЛИ split service → создаём новую общую сумму =====
-if (entry.splitGroupId) {
+// всегда создаём новую общую сумму
+tempPayments = [
+  { method: "card", amount: totalWithTax }
+];
 
-  tempPayments = [
-    { method: "card", amount: totalWithTax }
-  ];
+renderPaymentRows();
 
-} else {
-
-  if (entry.payments && entry.payments.length > 0) {
-    tempPayments = [...entry.payments];
-  } else {
-    tempPayments = [
-      { method: "card", amount: totalWithTax }
-    ];
-  }
-
-}
-
-  renderPaymentRows();
-
-  document.getElementById("paymentPanel")
-    .classList.remove("hidden");
+document.getElementById("paymentPanel")
+  .classList.remove("hidden");
 };
-
 
 function renderPaymentRows() {
 
