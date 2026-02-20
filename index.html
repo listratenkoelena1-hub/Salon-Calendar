@@ -4620,10 +4620,6 @@ const todayWithdrawn = drWithdrawals
 
 // balance
 const balanceTips = totalEarnedTips - totalWithdrawnTips;
-
-
-html += `
-  <div style="margin-top:16px; font-size:13px; border-top:1px solid #eee; padding-top:12px;">
 // ===== ADD ENTRY BUTTON =====
 html += `
   <div style="margin-top:14px; margin-bottom:6px;">
@@ -4632,6 +4628,10 @@ html += `
     </button>
   </div>
 `;
+
+html += `
+  <div style="margin-top:16px; font-size:13px; border-top:1px solid #eee; padding-top:12px;">
+
    <!-- 1️⃣ Total Service Row -->
 <div>
   <b>Total Service:</b> $${fromCents(totalServiceCents)}
