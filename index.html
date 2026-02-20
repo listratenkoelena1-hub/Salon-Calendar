@@ -5375,39 +5375,31 @@ entry.pendingSplit.forEach(r => {
 
 const totalServiceCents =
   parentServiceCents + childrenTotalServiceCents;
-
+// ===== сохраняем оригинальные payments =====
+const originalPayments = entry.payments || [];
 
   // ----- parent tip -----
   const parentTipShare = Math.round(
     (parentServiceCents / totalServiceCents) * totalTipCents
   );
 
-  // обновляем parent
-  await updateDoc(doc(db, "DayEntries", id), {
-    tip: parentTipShare,
-    splitGroupId: splitGroupId,
-    isParent: true,
-    lockedSplit: true,
-    pendingSplit: null
-  });
-// ===== пересчёт payments для parent =====
-const parentTaxCents = Math.round(parentServiceCents * 0.05);
-const parentTotalWithTax = parentServiceCents + parentTaxCents;
+  const parentRatio =
+  parentServiceCents / totalServiceCents;
 
-const originalServiceCents = Number(entry.serviceAmount) || 0;
-const originalTaxCents = Math.round(originalServiceCents * 0.05);
-const originalTotalWithTax = originalServiceCents + originalTaxCents;
-
-const parentRatio = parentTotalWithTax / originalTotalWithTax;
-
-const parentPayments = (entry.payments || []).map(p => ({
+const parentPayments = originalPayments.map(p => ({
   method: p.method,
   amount: Math.round(p.amount * parentRatio)
 }));
 
 await updateDoc(doc(db, "DayEntries", id), {
+  tip: parentTipShare,
+  splitGroupId: splitGroupId,
+  isParent: true,
+  lockedSplit: true,
+  pendingSplit: null,
   payments: parentPayments
 });
+
 // ----- children -----
 for (const row of entry.pendingSplit) {
 
@@ -5417,15 +5409,10 @@ for (const row of entry.pendingSplit) {
     (serviceCents / totalServiceCents) * totalTipCents
   );
 
-  const childTaxCents = Math.round(serviceCents * 0.05);
-  const childTotalWithTax = serviceCents + childTaxCents;
+  const childRatio =
+    serviceCents / totalServiceCents;
 
-  const originalTotalWithTax =
-    totalServiceCents + Math.round(totalServiceCents * 0.05);
-
-  const childRatio = childTotalWithTax / originalTotalWithTax;
-
-  const childPayments = (entry.payments || []).map(p => ({
+  const childPayments = originalPayments.map(p => ({
     method: p.method,
     amount: Math.round(p.amount * childRatio)
   }));
@@ -5646,6 +5633,7 @@ function renderSplitRows() {
     <div style="display:flex; gap:8px; margin-bottom:6px;">
 
       <select onchange="updateSplitStaff(${index}, this.value)">
+      <option value="">Select staff</option>
         ${staff
           .filter(s =>
   s.id !== ANYONE_ID &&
@@ -5671,9 +5659,9 @@ function renderSplitRows() {
 }
 window.addSplitRow = () => {
   splitRows.push({
-    staffId: staff[0].id,
-    amount: 0
-  });
+  staffId: "",
+  amount: 0
+});
   renderSplitRows();
 };
 
