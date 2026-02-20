@@ -5456,19 +5456,6 @@ for (const row of entry.pendingSplit) {
   await updateDoc(doc(db, "DayEntries", id), {
     status: "closed"
   });
-
-  if (!hasOpen) {
-    await addDoc(collection(db, "DayEntries"), {
-      date: dateStr,
-      staffId: currentUserStaffId,
-      serviceAmount: null,
-      tip: null,
-      paymentMethod: "card",
-      status: "open",
-      order: sameDay.length,
-      createdAt: serverTimestamp()
-    });
-  }
 };
 
 
