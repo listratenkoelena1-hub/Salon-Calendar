@@ -5394,8 +5394,9 @@ const totalServiceCents =
 const parentTaxCents = Math.round(parentServiceCents * 0.05);
 const parentTotalWithTax = parentServiceCents + parentTaxCents;
 
-const originalTotalWithTax =
-  totalServiceCents + Math.round(totalServiceCents * 0.05);
+const originalServiceCents = Number(entry.serviceAmount) || 0;
+const originalTaxCents = Math.round(originalServiceCents * 0.05);
+const originalTotalWithTax = originalServiceCents + originalTaxCents;
 
 const parentRatio = parentTotalWithTax / originalTotalWithTax;
 
@@ -5646,7 +5647,10 @@ function renderSplitRows() {
 
       <select onchange="updateSplitStaff(${index}, this.value)">
         ${staff
-          .filter(s => s.id !== ANYONE_ID)
+          .filter(s =>
+  s.id !== ANYONE_ID &&
+  s.id !== currentSplitParent.staffId
+)
           .map(s => `
             <option value="${s.id}" ${row.staffId === s.id ? 'selected' : ''}>
               ${s.name}
