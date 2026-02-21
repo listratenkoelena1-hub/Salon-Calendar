@@ -5607,116 +5607,81 @@ function removePaymentRow(index) {
   tempPayments.splice(index, 1);
   renderPaymentRows();
 }
-  window.confirmPaymentSplit = async () => {
-if (!isDrEditingAllowed()) return;
-if (!currentPaymentParent) return;
+window.confirmPaymentSplit = async () => {
 
-const parentEntry = currentPaymentParent;
+  if (!isDrEditingAllowed()) return;
+  if (!currentPaymentParent) return;
 
-let totalWithTax = 0;
+  const parentEntry = currentPaymentParent;
 
-if (parentEntry.splitGroupId) {
+  // ✅ используем зафиксированную общую сумму
+  const totalWithTax = currentPaymentTotalWithTax;
+
+  const totalPayments = tempPayments.reduce(
+    (sum, p) => sum + (Number(p.amount) || 0),
+    0
+  );
+
+  if (totalPayments !== totalWithTax) {
+    alert("Payments must equal Service + Tax");
+    return;
+  }
+
+  if (tempPayments[0].amount < 0) {
+    alert("Invalid split");
+    return;
+  }
+
+  // ===== ЕСЛИ НЕТ splitGroup → обычный split payment =====
+  if (!parentEntry.splitGroupId) {
+
+    await updateDoc(
+      doc(db, "DayEntries", parentEntry.id),
+      {
+        payments: tempPayments,
+        paymentMethod: null
+      }
+    );
+
+    closePaymentPanel();
+    return;
+  }
+
+  // ===== ЕСЛИ ЕСТЬ splitGroup → распределяем пропорционально =====
 
   const groupEntries = drEntries.filter(e =>
     e.splitGroupId === parentEntry.splitGroupId
   );
 
-  totalWithTax = groupEntries.reduce((sum, e) => {
+  const totalGroupWithTax = groupEntries.reduce((sum, e) => {
     const s = Number(e.serviceAmount) || 0;
     const t = Math.round(s * 0.05);
     return sum + s + t;
   }, 0);
 
-} else {
+  for (const entry of groupEntries) {
 
-  let totalWithTax = 0;
-
-if (parentEntry.splitGroupId) {
-
-  const groupEntries = drEntries.filter(e =>
-    e.splitGroupId === parentEntry.splitGroupId
-  );
-
-  totalWithTax = groupEntries.reduce((sum, e) => {
-    const s = Number(e.serviceAmount) || 0;
+    const s = Number(entry.serviceAmount) || 0;
     const t = Math.round(s * 0.05);
-    return sum + s + t;
-  }, 0);
+    const entryTotal = s + t;
 
-} else {
+    const ratio = entryTotal / totalGroupWithTax;
 
-  const serviceCents = Number(parentEntry.serviceAmount) || 0;
-  const taxCents = Math.round(serviceCents * 0.05);
-  totalWithTax = serviceCents + taxCents;
+    const newPayments = tempPayments.map(p => ({
+      method: p.method,
+      amount: Math.round(p.amount * ratio)
+    }));
 
-}
-
-}
-const totalPayments = tempPayments.reduce(
-  (sum, p) => sum + (Number(p.amount) || 0),
-  0
-);
-
-if (totalPayments !== totalWithTax) {
-  alert("Payments must equal Service + Tax");
-  return;
-}
-
-if (tempPayments[0].amount < 0) {
-  alert("Invalid split");
-  return;
-}
-
-// ===== ЕСЛИ НЕТ splitGroup → обычный split payment =====
-if (!parentEntry.splitGroupId) {
-
-  await updateDoc(
-    doc(db, "DayEntries", parentEntry.id),
-    {
-      payments: tempPayments,
-      paymentMethod: null
-    }
-  );
+    await updateDoc(
+      doc(db, "DayEntries", entry.id),
+      {
+        payments: newPayments,
+        paymentMethod: null
+      }
+    );
+  }
 
   closePaymentPanel();
-  return;
-}
-
-// ===== ЕСЛИ ЕСТЬ splitGroup → распределяем пропорционально =====
-
-const groupEntries = drEntries.filter(e =>
-  e.splitGroupId === parentEntry.splitGroupId
-);
-
-const totalGroupWithTax = groupEntries.reduce((sum, e) => {
-  const s = Number(e.serviceAmount) || 0;
-  const t = Math.round(s * 0.05);
-  return sum + s + t;
-}, 0);
-
-for (const entry of groupEntries) {
-
-  const s = Number(entry.serviceAmount) || 0;
-  const t = Math.round(s * 0.05);
-  const entryTotal = s + t;
-
-  const ratio = entryTotal / totalGroupWithTax;
-
-  const newPayments = tempPayments.map(p => ({
-    method: p.method,
-    amount: Math.round(p.amount * ratio)
-  }));
-
-  await updateDoc(
-    doc(db, "DayEntries", entry.id),
-    {
-      payments: newPayments,
-      paymentMethod: null
-    }
-  );
-}
-
-closePaymentPanel();
 };
 
 window.closePaymentPanel = function () {
