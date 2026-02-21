@@ -4551,13 +4551,28 @@ html += `
         </div>
 
         <div>
-          <div>
+         <div>
   ${
-    e.payments && e.payments.length > 1
-      ? "Split"
-      : e.payments && e.payments.length === 1
-        ? e.payments[0].method
-        : "-"
+    !isClosed &&
+    editingAllowed &&
+    !e.pendingSplit &&
+    !e.splitGroupId
+      ? `
+        <select class="dr-select"
+          onchange="updateDrField('${e.id}','paymentMethod',this.value)">
+          <option value="card" ${e.payments?.[0]?.method==="card"?"selected":""}>Card</option>
+          <option value="cash" ${e.payments?.[0]?.method==="cash"?"selected":""}>Cash</option>
+          <option value="giftcard" ${e.payments?.[0]?.method==="giftcard"?"selected":""}>Gift</option>
+          <option value="check" ${e.payments?.[0]?.method==="check"?"selected":""}>Check</option>
+        </select>
+      `
+      : (
+          e.payments && e.payments.length > 1
+            ? "Split"
+            : e.payments && e.payments.length === 1
+              ? e.payments[0].method
+              : "-"
+        )
   }
 </div>
         </div>
