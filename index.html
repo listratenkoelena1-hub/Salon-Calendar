@@ -4525,14 +4525,14 @@ html += `
         <div>${index + 1}</div>
 
         <div>
-          <input class="dr-input"
-            type="number"
-            min="0"
-            step="0.01"<select class="dr-select"
-            value="${serviceAmount}"
-            ${(isClosed || !editingAllowed) ? 'disabled' : ''}
-            onchange="updateDrField('${e.id}','serviceAmount',this.value)">
-        </div>
+  <input class="dr-input"
+    type="number"
+    min="0"
+    step="0.01"
+    value="${serviceAmount}"
+    ${(isClosed || !editingAllowed) ? 'disabled' : ''}
+    onchange="updateDrField('${e.id}','serviceAmount',this.value)">
+</div>
 
       <div>
   ${serviceWithTax}
@@ -5483,9 +5483,9 @@ currentPaymentParent = { id: entryId, ...entry };
 
 let totalWithTax = 0;
 
+// 1️⃣ если split уже создан
 if (entry.splitGroupId) {
 
-  // 🔥 берём свежие данные из базы
   const q = query(
     collection(db, "DayEntries"),
     where("splitGroupId", "==", entry.splitGroupId)
@@ -5500,15 +5500,28 @@ if (entry.splitGroupId) {
     totalWithTax += s + t;
   });
 
+// 2️⃣ если split ещё pending (до Done)
+} else if (entry.pendingSplit && entry.pendingSplit.length > 0) {
+
+  const parentService = Number(entry.serviceAmount) || 0;
+  const parentTax = Math.round(parentService * 0.05);
+
+  totalWithTax = parentService + parentTax;
+
+  entry.pendingSplit.forEach(r => {
+    const s = Number(r.amount) || 0;
+    const t = Math.round(s * 0.05);
+    totalWithTax += s + t;
+  });
+
+// 3️⃣ обычный сервис
 } else {
 
   const s = Number(entry.serviceAmount) || 0;
   const t = Math.round(s * 0.05);
   totalWithTax = s + t;
-
 }
 
-// всегда создаём новую общую сумму
 tempPayments = [
   { method: "card", amount: totalWithTax }
 ];
