@@ -5651,9 +5651,17 @@ window.confirmPaymentSplit = async () => {
 
   // ===== ЕСЛИ ЕСТЬ splitGroup → распределяем пропорционально =====
 
- const groupEntries = drEntries.filter(e =>
-  e.splitGroupId === parentEntry.splitGroupId
+ const snapshot = await getDocs(
+  query(
+    collection(db, "DayEntries"),
+    where("splitGroupId", "==", parentEntry.splitGroupId)
+  )
 );
+
+const groupEntries = snapshot.docs.map(doc => ({
+  id: doc.id,
+  ...doc.data()
+}));
 
 const totalGroupWithTax = groupEntries.reduce((sum, e) => {
   const s = Number(e.serviceAmount) || 0;
