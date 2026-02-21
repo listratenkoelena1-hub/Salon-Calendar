@@ -5430,10 +5430,12 @@ for (const row of entry.pendingSplit) {
     staffId: row.staffId,
     serviceAmount: serviceCents,
     tip: tipShare,
-    payments: [
+    payments: entry.payments && entry.payments.length > 0
+  ? entry.payments
+  : [
       {
-        method: entry.payments?.[0]?.method || "card",
-        amount: totalWithTax
+        method: "card",
+        amount: parentTotalWithTax
       }
     ],
     status: "closed",
