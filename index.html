@@ -4315,7 +4315,7 @@ window.closeMenu = () => {
  // ========================================================== DAILY REPORT =========================================================//
 
 let drCurrentDate = new Date();
-
+let currentPaymentTotalWithTax = 0;
 function formatDrDate(date) {
   return date.toLocaleDateString(undefined, {
     weekday: 'long',
@@ -5521,7 +5521,7 @@ if (entry.splitGroupId) {
   const t = Math.round(s * 0.05);
   totalWithTax = s + t;
 }
-
+currentPaymentTotalWithTax = totalWithTax;
 tempPayments = [
   { method: "card", amount: totalWithTax }
 ];
@@ -5575,29 +5575,8 @@ function autoRecalculatePayments() {
 
   if (!currentPaymentParent) return;
 
-  let totalWithTax = 0;
+  const totalWithTax = currentPaymentTotalWithTax;
 
-if (currentPaymentParent.splitGroupId) {
-
-  const groupEntries = drEntries.filter(e =>
-    e.splitGroupId === currentPaymentParent.splitGroupId
-  );
-
-  totalWithTax = groupEntries.reduce((sum, e) => {
-    const s = Number(e.serviceAmount) || 0;
-    const t = Math.round(s * 0.05);
-    return sum + s + t;
-  }, 0);
-
-} else {
-
-  const serviceCents = Number(currentPaymentParent.serviceAmount) || 0;
-  const taxCents = Math.round(serviceCents * 0.05);
-  totalWithTax = serviceCents + taxCents;
-
-}
-
-  // считаем сумму всех кроме первой строки
   let otherTotal = 0;
 
   tempPayments.forEach((p, i) => {
@@ -5606,16 +5585,12 @@ if (currentPaymentParent.splitGroupId) {
     }
   });
 
-  // первая строка = остаток
-  tempPayments[0].amount = totalWithTax - otherTotal;
+  const newFirstAmount = totalWithTax - otherTotal;
 
-  if (tempPayments[0].amount < 0) {
-    tempPayments[0].amount = 0;
-  }
+  tempPayments[0].amount = newFirstAmount > 0 ? newFirstAmount : 0;
 
   renderPaymentRows();
 }
-
 
 
 window.addPaymentRow = function () {
