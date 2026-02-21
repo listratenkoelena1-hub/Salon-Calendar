@@ -5651,38 +5651,62 @@ window.confirmPaymentSplit = async () => {
 
   // ===== ЕСЛИ ЕСТЬ splitGroup → распределяем пропорционально =====
 
-  const groupEntries = drEntries.filter(e =>
-    e.splitGroupId === parentEntry.splitGroupId
-  );
+ const groupEntries = drEntries.filter(e =>
+  e.splitGroupId === parentEntry.splitGroupId
+);
 
-  const totalGroupWithTax = groupEntries.reduce((sum, e) => {
-    const s = Number(e.serviceAmount) || 0;
-    const t = Math.round(s * 0.05);
-    return sum + s + t;
-  }, 0);
+const totalGroupWithTax = groupEntries.reduce((sum, e) => {
+  const s = Number(e.serviceAmount) || 0;
+  const t = Math.round(s * 0.05);
+  return sum + s + t;
+}, 0);
 
-  for (const entry of groupEntries) {
+// сначала распределяем всем кроме первого
+let distributedTotals = tempPayments.map(() => 0);
 
-    const s = Number(entry.serviceAmount) || 0;
-    const t = Math.round(s * 0.05);
-    const entryTotal = s + t;
+for (let i = 1; i < groupEntries.length; i++) {
 
-    const ratio = entryTotal / totalGroupWithTax;
+  const entry = groupEntries[i];
 
-    const newPayments = tempPayments.map(p => ({
+  const s = Number(entry.serviceAmount) || 0;
+  const t = Math.round(s * 0.05);
+  const entryTotal = s + t;
+
+  const ratio = entryTotal / totalGroupWithTax;
+
+  const newPayments = tempPayments.map((p, index) => {
+    const amount = Math.round(p.amount * ratio);
+    distributedTotals[index] += amount;
+    return {
       method: p.method,
-      amount: Math.round(p.amount * ratio)
-    }));
+      amount: amount
+    };
+  });
 
-    await updateDoc(
-      doc(db, "DayEntries", entry.id),
-      {
-        payments: newPayments,
-        paymentMethod: null
-      }
-    );
+  await updateDoc(
+    doc(db, "DayEntries", entry.id),
+    {
+      payments: newPayments,
+      paymentMethod: null
+    }
+  );
+}
+
+// первый получает остаток
+const firstEntry = groupEntries[0];
+
+const firstPayments = tempPayments.map((p, index) => ({
+  method: p.method,
+  amount: p.amount - distributedTotals[index]
+}));
+
+await updateDoc(
+  doc(db, "DayEntries", firstEntry.id),
+  {
+    payments: firstPayments,
+    paymentMethod: null
   }
-
+);
   closePaymentPanel();
 };
 
