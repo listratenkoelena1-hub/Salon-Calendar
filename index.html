@@ -5390,7 +5390,28 @@ entry.pendingSplit.forEach(r => {
 
 const totalServiceCents =
   parentServiceCents + childrenTotalServiceCents;
+const originalPayments = entry.payments || [];
 
+function distributePayments(serviceCents) {
+
+  const taxCents = Math.round(serviceCents * 0.05);
+  const totalWithTax = serviceCents + taxCents;
+
+  const totalGroupWithTax =
+    (parentServiceCents + Math.round(parentServiceCents * 0.05)) +
+    entry.pendingSplit.reduce((sum, r) => {
+      const s = Number(r.amount) || 0;
+      const t = Math.round(s * 0.05);
+      return sum + s + t;
+    }, 0);
+
+  const ratio = totalWithTax / totalGroupWithTax;
+
+  return originalPayments.map(p => ({
+    method: p.method,
+    amount: Math.round(p.amount * ratio)
+  }));
+}
   // ----- parent tip -----
   const parentTipShare = Math.round(
     (parentServiceCents / totalServiceCents) * totalTipCents
@@ -5405,12 +5426,7 @@ await updateDoc(doc(db, "DayEntries", id), {
   isParent: true,
   lockedSplit: true,
   pendingSplit: null,
-  payments: [
-    {
-      method: entry.payments?.[0]?.method || "card",
-      amount: parentTotalWithTax
-    }
-  ]
+  payments: distributePayments(parentServiceCents),
 });
 
 // ----- children -----
@@ -5430,14 +5446,7 @@ for (const row of entry.pendingSplit) {
     staffId: row.staffId,
     serviceAmount: serviceCents,
     tip: tipShare,
-    payments: entry.payments && entry.payments.length > 0
-  ? entry.payments
-  : [
-      {
-        method: "card",
-        amount: parentTotalWithTax
-      }
-    ],
+    payments: distributePayments(serviceCents),
     status: "closed",
     splitGroupId: splitGroupId,
     isParent: false,
