@@ -4498,8 +4498,8 @@ const dayClosed = drDayStatus?.some(d =>
 const editingAllowed = isDrEditingAllowed();
       const deletingAllowed = isDrDeletingAllowed();
   if (currentUserRole === 'staff' && currentUserStaffId) {
-    entries = entries.filter(e => e.staffId === currentUserStaffId);
-  }
+  entries = entries.filter(e => e.staffId === getActiveDrStaffId());
+}
 
   entries = entries
     .slice()
@@ -4935,30 +4935,10 @@ function renderManagerDailyReport() {
     getDrStaffList()
     .forEach(s => {
 
-           // ===== SPRING CARD DATA (from SpringServices) =====
-      const isSpring = s.id === SPRING_ID;
-
-      // Для обычных staff: берём DayEntries
-      // Для Spring: берём SpringServices и приводим к формату "как entry"
-      const staffEntries = isSpring
-        ? springServices
-            .filter(x => x.date === dateStr)
-            .map(x => {
-              const serviceCents = toCents(x.serviceAmount);
-              const taxCents = Math.round(serviceCents * 0.05);
-              const tipCents = toCents(x.tip || 0);
-              const totalWithTax = serviceCents + taxCents;
-
-              return {
-                serviceAmount: serviceCents,
-                tip: tipCents,
-                payments: [{ method: x.paymentMethod || "card", amount: totalWithTax }],
-                status: "closed"
-              };
-            })
-        : dayEntries
-            .filter(e => e.staffId === s.id && e.status === "closed")
-            .sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+          const staffEntries = dayEntries
+  .filter(e => e.staffId === s.id && e.status === "closed")
+  .sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+           
       // ===== TOTALS CALCULATION =====
       let totalServiceCents = 0;
       let totalTaxCents = 0;
@@ -5090,7 +5070,7 @@ function renderManagerDailyReport() {
             </div>
 
                         ${
-              s.id === SPRING_ID
+              s.id === SPRING_HELP_ID
                 ? ``
                 : `
             <div class="mgr-row-inline">
@@ -5336,7 +5316,7 @@ function renderRightTotalsBlock() {
   e.status === "closed"
 );
 
-  const springToday = springServices.filter(s => s.date === dateStr);
+  
   const extrasToday = drExtras.filter(e => e.date === dateStr);
 
   let totalServiceCents = 0;
@@ -5366,22 +5346,6 @@ function renderRightTotalsBlock() {
 });
 });
 
-  // ===== SPRING HELP =====
-  springToday.forEach(s => {
-
-    const serviceCents = toCents(s.serviceAmount);
-    const taxCents = Math.round(serviceCents * 0.05);
-
-    totalServiceCents += serviceCents;
-    totalTaxCents += taxCents;
-
-    const totalWithTax = serviceCents + taxCents;
-
-    if (s.paymentMethod === "card") totalCardCents += totalWithTax;
-    if (s.paymentMethod === "cash") totalCashCents += totalWithTax;
-    if (s.paymentMethod === "giftcard") totalGiftCents += totalWithTax;
-    if (s.paymentMethod === "check") totalCheckCents += totalWithTax;
-  });
 
   // ===== PRODUCTS & GIFTS =====
   extrasToday.forEach(e => {
@@ -5433,7 +5397,7 @@ function renderSoldTodayBlock() {
 
   const dateStr = getDrDateString();
 
-  const springToday = springServices.filter(s => s.date === dateStr);
+  
   const extrasToday = drExtras.filter(e => e.date === dateStr);
 
   let totalProducts = 0;
@@ -5448,19 +5412,9 @@ function renderSoldTodayBlock() {
     }
   });
 
-  if (springToday.length === 0 && extrasToday.length === 0) {
-    return `<div style="opacity:0.5;">No activity</div>`;
-  }
-
-  const springHtml = springToday.map(s => `
-  <div class="mgr-sold-row">
-    <span>Spring Service ${Number(s.serviceAmount).toFixed(2)}</span>
-    <span class="mgr-trash"
-      onclick="deleteSpringService('${s.id}')">
-      🗑
-    </span>
-  </div>
-`).join('');
+ if (extrasToday.length === 0) {
+  return `<div style="opacity:0.5;">No activity</div>`;
+}
 
 
   const extrasHtml = extrasToday.map(e => `
@@ -5478,7 +5432,6 @@ function renderSoldTodayBlock() {
 
 
   return `
-    ${springHtml}
     ${extrasHtml}
 
     <div style="margin-top:12px; border-top:1px solid #eee; padding-top:8px;">
@@ -5490,12 +5443,6 @@ function renderSoldTodayBlock() {
   `;
 }
 
-window.deleteSpringService = async (id) => {
-  const ok = confirm("Delete this entry?");
-  if (!ok) return;
-
-  await deleteDoc(doc(db, "SpringServices", id));
-};
   window.deleteDayExtra = async (id) => {
   const ok = confirm("Delete this item?");
   if (!ok) return;
@@ -5513,22 +5460,27 @@ function fromCents(cents) {
 }
 
 // ===== DAILY REPORT ACTIONS =====
-
+function getActiveDrStaffId() {
+  // В Spring режиме работаем как будто "staff = SPRING_HELP_ID"
+  return springMode ? SPRING_HELP_ID : currentUserStaffId;
+}
 window.addDrEntry = async () => {
       if (!isDrEditingAllowed()) return;
   const dateStr = getDrDateString();
 
-  const sameDay = drEntries.filter(e =>
-    e.date === dateStr &&
-    e.staffId === currentUserStaffId
-  );
+  const activeStaffId = getActiveDrStaffId();
+
+const sameDay = drEntries.filter(e =>
+  e.date === dateStr &&
+  e.staffId === activeStaffId
+);
 
   const hasOpen = sameDay.some(e => e.status !== 'closed');
   if (hasOpen) return;
 
   await addDoc(collection(db, "DayEntries"), {
     date: dateStr,
-    staffId: currentUserStaffId,
+    staffId: activeStaffId,
     serviceAmount: null,
     tip: null,
     payments: [
@@ -5623,10 +5575,12 @@ const entry = snap.data();
 
   const dateStr = getDrDateString();
 
-  const sameDay = drEntries.filter(e =>
-    e.date === dateStr &&
-    e.staffId === currentUserStaffId
-  );
+  const activeStaffId = getActiveDrStaffId();
+
+const sameDay = drEntries.filter(e =>
+  e.date === dateStr &&
+  e.staffId === activeStaffId
+);
 
   const hasOpen = sameDay.some(e =>
     e.id !== id && e.status !== 'closed'
