@@ -4369,8 +4369,9 @@ console.log("StaffId:", currentUserStaffId);
 };
 
 window.closeDailyReport = () => {
+  springMode = false;
+
   document.getElementById('dailyReportModal')
-         springMode = false; 
     .classList.add('hidden');
 
   // сброс режима
@@ -4379,7 +4380,6 @@ window.closeDailyReport = () => {
   const title = document.getElementById('drTitle');
   if (title) title.textContent = 'Daily Report';
 };
-
 window.drPrevDay = () => {
   drCurrentDate.setDate(drCurrentDate.getDate() - 1);
   document.getElementById('drDateLabel').textContent =
