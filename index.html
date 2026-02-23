@@ -2030,7 +2030,59 @@ let springServices = [];
 let springMode = false;      
 let currentPaymentParent = null;
 let tempPayments = [];
+// ===== EXTRAS SPLIT PAYMENT (Sell Product / Gift) =====
+let paymentContext = null; // { mode:"extra", extraType:"product"|"gift", totalWithTaxCents:number }
+let extraSplitPayments = {
+  product: null, // array of {method, amount(cents)}
+  gift: null
+};
 
+function setExtraSplitUI(extraType, isSplit) {
+  if (extraType === 'product') {
+    const sel = document.getElementById('productPayment');
+    const lbl = document.getElementById('productPaymentSplitLabel');
+    if (!sel || !lbl) return;
+    sel.classList.toggle('hidden', isSplit);
+    lbl.classList.toggle('hidden', !isSplit);
+  } else {
+    const sel = document.getElementById('giftPayment');
+    const lbl = document.getElementById('giftPaymentSplitLabel');
+    if (!sel || !lbl) return;
+    sel.classList.toggle('hidden', isSplit);
+    lbl.classList.toggle('hidden', !isSplit);
+  }
+}
+
+window.openExtraSplitPayment = (extraType) => {
+  // amount must exist
+  const amountInput = extraType === 'product'
+    ? document.getElementById('productAmount')
+    : document.getElementById('giftAmount');
+
+  if (!amountInput) return;
+
+  const amount = Number(amountInput.value);
+  if (!amount || amount <= 0) return;
+
+  const totalCents = toCents(amount);
+
+  // context for paymentPanel
+  paymentContext = {
+    mode: "extra",
+    extraType: extraType,
+    totalWithTaxCents: totalCents
+  };
+
+  // стартуем с 1 строкой card на всю сумму
+  currentPaymentTotalWithTax = totalCents;
+  tempPayments = [{ method: "card", amount: totalCents }];
+
+  renderPaymentRows();
+  document.getElementById("paymentPanel").classList.remove("hidden");
+
+  // сразу показываем Split label в основном модальном окне
+  setExtraSplitUI(extraType, true);
+};
 // ===== SPLIT SERVICE TEMP STORAGE =====
 let splitRows = [];
 let currentSplitParent = null;
@@ -5210,7 +5262,16 @@ window.sellProduct = () => {
 
   document.getElementById('productName').value = '';
   document.getElementById('productAmount').value = '';
+extraSplitPayments.product = null;
+setExtraSplitUI('product', false);
 
+const pa = document.getElementById('productAmount');
+if (pa) {
+  pa.addEventListener('input', () => {
+  extraSplitPayments.product = null;
+  setExtraSplitUI('product', false);
+}, { once: true });
+}
   document.getElementById('sellProductModal')
     .classList.remove('hidden');
 };
@@ -5221,20 +5282,27 @@ window.closeSellProduct = () => {
 };
 
 window.confirmSellProduct = async () => {
-  const name = document.getElementById('productName').value;
+  const name = document.getElementById('productName').value.trim();
   const amount = Number(document.getElementById('productAmount').value);
   const payment = document.getElementById('productPayment').value;
 
-  if (!name || amount <= 0) return;
+  if (!name || !amount || amount <= 0) return;
+
+  const split = extraSplitPayments.product;
 
   await addDoc(collection(db, "DayExtras"), {
     date: getDrDateString(),
     type: "product",
     name: name,
     amount: amount,
-    paymentMethod: payment,
+    paymentMethod: split ? null : payment,
+    payments: split ? split : null, // cents
     createdAt: serverTimestamp()
   });
+
+  // reset
+  extraSplitPayments.product = null;
+  setExtraSplitUI('product', false);
 
   closeSellProduct();
   renderDailyReport();
@@ -5247,7 +5315,16 @@ window.sellGiftCertificate = () => {
   if (currentUserRole !== 'reception') return;
 
   document.getElementById('giftAmount').value = '';
+extraSplitPayments.gift = null;
+setExtraSplitUI('gift', false);
 
+const ga = document.getElementById('giftAmount');
+if (ga) {
+  ga.addEventListener('input', () => {
+  extraSplitPayments.gift = null;
+  setExtraSplitUI('gift', false);
+}, { once: true });
+}
   document.getElementById('sellGiftModal')
     .classList.remove('hidden');
 };
@@ -5261,15 +5338,22 @@ window.confirmSellGift = async () => {
   const amount = Number(document.getElementById('giftAmount').value);
   const payment = document.getElementById('giftPayment').value;
 
-  if (amount <= 0) return;
+  if (!amount || amount <= 0) return;
+
+  const split = extraSplitPayments.gift;
 
   await addDoc(collection(db, "DayExtras"), {
     date: getDrDateString(),
     type: "gift",
     amount: amount,
-    paymentMethod: payment,
+    paymentMethod: split ? null : payment,
+    payments: split ? split : null, // cents
     createdAt: serverTimestamp()
   });
+
+  // reset
+  extraSplitPayments.gift = null;
+  setExtraSplitUI('gift', false);
 
   closeSellGift();
   renderDailyReport();
@@ -5346,17 +5430,27 @@ function renderRightTotalsBlock() {
 });
 
 
-  // ===== PRODUCTS & GIFTS =====
-  extrasToday.forEach(e => {
+ // ===== PRODUCTS & GIFTS =====
+extrasToday.forEach(e => {
 
-    const amountCents = toCents(e.amount);
+  // split payments (cents)
+  if (e.payments && Array.isArray(e.payments) && e.payments.length > 0) {
+    e.payments.forEach(p => {
+      if (p.method === "card") totalCardCents += Number(p.amount) || 0;
+      if (p.method === "cash") totalCashCents += Number(p.amount) || 0;
+      if (p.method === "giftcard") totalGiftCents += Number(p.amount) || 0;
+      if (p.method === "check") totalCheckCents += Number(p.amount) || 0;
+    });
+    return;
+  }
 
-    if (e.paymentMethod === "card") totalCardCents += amountCents;
-    if (e.paymentMethod === "cash") totalCashCents += amountCents;
-    if (e.paymentMethod === "giftcard") totalGiftCents += amountCents;
-    if (e.paymentMethod === "check") totalCheckCents += amountCents;
-  });
-
+  // single payment (dollars -> cents)
+  const amountCents = toCents(e.amount);
+  if (e.paymentMethod === "card") totalCardCents += amountCents;
+  if (e.paymentMethod === "cash") totalCashCents += amountCents;
+  if (e.paymentMethod === "giftcard") totalGiftCents += amountCents;
+  if (e.paymentMethod === "check") totalCheckCents += amountCents;
+});
   // ===== WITHDRAWALS =====
   const withdrawalsToday = drWithdrawals.filter(w => w.date === dateStr);
 
@@ -5831,7 +5925,8 @@ function removePaymentRow(index) {
 window.confirmPaymentSplit = async () => {
 
   if (!isDrEditingAllowed()) return;
-  if (!currentPaymentParent) return;
+  // allow extra-mode without currentPaymentParent
+if (!currentPaymentParent && !(paymentContext && paymentContext.mode === "extra")) return;
 
   const parentEntry = currentPaymentParent;
 
@@ -5852,7 +5947,17 @@ window.confirmPaymentSplit = async () => {
     alert("Invalid split");
     return;
   }
+// ===== EXTRA MODE (Sell Product / Gift): just store split and close =====
+if (paymentContext && paymentContext.mode === "extra") {
+  extraSplitPayments[paymentContext.extraType] = tempPayments.map(p => ({
+    method: p.method,
+    amount: Number(p.amount) || 0
+  }));
 
+  closePaymentPanel();
+  paymentContext = null;
+  return;
+}
   // ===== ЕСЛИ НЕТ splitGroup → обычный split payment =====
   if (!parentEntry.splitGroupId) {
 
@@ -5944,6 +6049,7 @@ window.closePaymentPanel = function () {
 
   currentPaymentParent = null;
   tempPayments = [];
+  paymentContext = null;    
 }
     
 function renderSplitRows() {
@@ -6459,48 +6565,88 @@ window.closeOffWorkHardConflict = () => {
 <!-- ===================== -->
 
 <div id="sellProductModal" class="modal hidden">
-  <div class="modal-content" style="max-width:320px;">
+  <div class="modal-content" style="max-width:520px;">
     <h4>Sell Product</h4>
 
-    <label>Product Name</label>
-    <input id="productName" type="text" style="width:100%;">
+    <!-- HEADERS -->
+    <div style="display:grid; grid-template-columns: 1.6fr 0.7fr 1fr auto; gap:10px; margin-top:10px; font-size:12px; font-weight:600; opacity:0.75;">
+      <div>Product name</div>
+      <div>Amount</div>
+      <div>Payment</div>
+      <div></div>
+    </div>
 
-    <label style="margin-top:8px;">Amount</label>
-    <input id="productAmount" type="number" min="0" step="0.01" style="width:100%;">
-<label style="margin-top:8px;">Payment</label>
-<select id="productPayment" style="width:100%;">
-  <option value="card">Card</option>
-  <option value="cash">Cash</option>
-  <option value="giftcard">Gift</option>
-  <option value="check">Check</option>
-</select>
+    <!-- INPUTS -->
+    <div style="display:grid; grid-template-columns: 1.6fr 0.7fr 1fr auto; gap:10px; margin-top:6px; align-items:center;">
+      <input id="productName" type="text" placeholder="Product name" style="width:100%;">
 
-    <div class="modal-actions">
+      <input id="productAmount" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;">
+
+      <!-- payment select OR Split label -->
+      <div style="position:relative;">
+        <select id="productPayment" style="width:100%;">
+          <option value="card">Card</option>
+          <option value="cash">Cash</option>
+          <option value="giftcard">Gift</option>
+          <option value="check">Check</option>
+        </select>
+
+        <div id="productPaymentSplitLabel"
+             class="hidden"
+             style="width:100%; padding:6px 8px; border:1px solid #ccc; border-radius:6px; background:#f3f3f3; font-size:14px; opacity:0.8;">
+          Split
+        </div>
+      </div>
+
+      <button class="dr-button" onclick="openExtraSplitPayment('product')">Split payment</button>
+    </div>
+
+    <div class="modal-actions" style="margin-top:14px;">
       <button onclick="confirmSellProduct()">Save</button>
       <button onclick="closeSellProduct()">Cancel</button>
     </div>
   </div>
 </div>
 
-
 <!-- ===================== -->
 <!-- SELL GIFT CERTIFICATE MODAL -->
 <!-- ===================== -->
 
 <div id="sellGiftModal" class="modal hidden">
-  <div class="modal-content" style="max-width:320px;">
+  <div class="modal-content" style="max-width:520px;">
     <h4>Sell Gift Certificate</h4>
 
-    <label>Amount</label>
-    <input id="giftAmount" type="number" min="0" step="0.01" style="width:100%;">
-<label style="margin-top:8px;">Payment</label>
-<select id="giftPayment" style="width:100%;">
-  <option value="card">Card</option>
-  <option value="cash">Cash</option>
-  <option value="check">Check</option>
-</select>
+    <!-- HEADERS -->
+    <div style="display:grid; grid-template-columns: 0.8fr 1fr auto; gap:10px; margin-top:10px; font-size:12px; font-weight:600; opacity:0.75;">
+      <div>Amount</div>
+      <div>Payment</div>
+      <div></div>
+    </div>
 
-    <div class="modal-actions">
+    <!-- INPUTS -->
+    <div style="display:grid; grid-template-columns: 0.8fr 1fr auto; gap:10px; margin-top:6px; align-items:center;">
+      <input id="giftAmount" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;">
+
+      <!-- payment select OR Split label -->
+      <div style="position:relative;">
+        <select id="giftPayment" style="width:100%;">
+          <option value="card">Card</option>
+          <option value="cash">Cash</option>
+          <option value="giftcard">Gift</option>
+          <option value="check">Check</option>
+        </select>
+
+        <div id="giftPaymentSplitLabel"
+             class="hidden"
+             style="width:100%; padding:6px 8px; border:1px solid #ccc; border-radius:6px; background:#f3f3f3; font-size:14px; opacity:0.8;">
+          Split
+        </div>
+      </div>
+
+      <button class="dr-button" onclick="openExtraSplitPayment('gift')">Split payment</button>
+    </div>
+
+    <div class="modal-actions" style="margin-top:14px;">
       <button onclick="confirmSellGift()">Save</button>
       <button onclick="closeSellGift()">Cancel</button>
     </div>
