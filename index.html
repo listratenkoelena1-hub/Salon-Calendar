@@ -1062,6 +1062,9 @@ padding:10px 14px;
   padding: 0;
   line-height: 1;
   opacity: 0.9;
+  pointer-events: auto;
+  position: relative;
+  z-index: 2;    
 }
 
 .pay-split-icon:hover {
@@ -1249,7 +1252,7 @@ textarea {
   cursor:not-allowed;
 }
       /* ===== Make Split Payment panel always on top ===== */
-#paymentPanel { z-index: 9000 !important; }
+#paymentPanel { z-index: 11000 !important; }
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -2099,10 +2102,15 @@ window.openExtraSplitPayment = (extraType) => {
   currentPaymentTotalWithTax = totalCents;
 
 const existing = extraSplitPayments[extraType];
+// взять текущий метод оплаты из селекта (если split ещё не выбран)
+const defaultMethod = (extraType === 'product'
+  ? document.getElementById('productPayment')?.value
+  : document.getElementById('giftPayment')?.value
+) || "card";
+
 tempPayments = (existing && Array.isArray(existing) && existing.length)
   ? existing.map(p => ({ method: p.method, amount: Number(p.amount) || 0 }))
-  : [{ method: "card", amount: totalCents }];
-
+  : [{ method: defaultMethod, amount: totalCents }];
   renderPaymentRows();
   document.getElementById("paymentPanel").classList.remove("hidden");
 
@@ -6784,11 +6792,10 @@ window.closeOffWorkHardConflict = () => {
 
     <div id="paymentRows"></div>
 
-    <button onclick="addPaymentRow()">+ Add Payment</button>
-
+<button type="button" onclick="addPaymentRow()">+ Add Payment</button>
     <div style="margin-top:12px; text-align:right;">
-      <button onclick="closePaymentPanel()">Cancel</button>
-      <button onclick="confirmPaymentSplit()">Confirm</button>
+     <button type="button" onclick="closePaymentPanel()">Cancel</button>
+<button type="button" onclick="confirmPaymentSplit()">Confirm</button>
     </div>
 
   </div>
