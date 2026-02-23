@@ -2076,6 +2076,7 @@ function setExtraSplitUI(extraType, isSplit) {
 }
 
 window.openExtraSplitPayment = (extraType) => {
+      currentPaymentParent = null;
   // amount must exist
   const amountInput = extraType === 'product'
     ? document.getElementById('productAmount')
@@ -5912,7 +5913,7 @@ window.updatePaymentAmount = function(index, value) {
 }; 
 function autoRecalculatePayments() {
 
-  if (!currentPaymentParent) return;
+  if (!currentPaymentParent && !(paymentContext && paymentContext.mode === "extra")) return;
 
   const totalWithTax = currentPaymentTotalWithTax;
 
@@ -5939,9 +5940,8 @@ window.addPaymentRow = function () {
     amount: 0
   });
 
-  autoRecalculatePayments();
+  renderPaymentRows();
 };
-
 function removePaymentRow(index) {
   tempPayments.splice(index, 1);
   renderPaymentRows();
