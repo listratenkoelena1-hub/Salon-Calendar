@@ -2117,6 +2117,22 @@ const MORNING_SLOTS = 8;
 let morningExpanded = false; 
 
 const ANYONE_ID="anyone";
+      // ===== SPRING (virtual staff for Daily Report only) =====
+const SPRING_ID = "__spring__";
+const SPRING_STAFF = {
+  id: SPRING_ID,
+  name: "Spring Help",
+  color: "#e8f0ff",
+  role: "staff",
+  order: 9999
+};
+
+// staff list for DAILY REPORT (does NOT affect calendar columns)
+function getDrStaffList() {
+  // staff[] already includes {id:"anyone"} + real staff from Firestore
+  const list = staff.filter(s => s.id !== ANYONE_ID);
+  return [...list, SPRING_STAFF];
+}
 aStaff.onchange = () => {
   handleAnyone();
   checkTimeAvailability();
@@ -4733,14 +4749,33 @@ function renderManagerDailyReport() {
       <div class="mgr-staff-scroll">
   `;
 
-  staff
-    .filter(s => s.id !== "anyone")
+    getDrStaffList()
     .forEach(s => {
 
-      const staffEntries = dayEntries
-        .filter(e => e.staffId === s.id && e.status === "closed")
-        .sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+           // ===== SPRING CARD DATA (from SpringServices) =====
+      const isSpring = s.id === SPRING_ID;
 
+      // Для обычных staff: берём DayEntries
+      // Для Spring: берём SpringServices и приводим к формату "как entry"
+      const staffEntries = isSpring
+        ? springServices
+            .filter(x => x.date === dateStr)
+            .map(x => {
+              const serviceCents = toCents(x.serviceAmount);
+              const taxCents = Math.round(serviceCents * 0.05);
+              const tipCents = toCents(x.tip || 0);
+              const totalWithTax = serviceCents + taxCents;
+
+              return {
+                serviceAmount: serviceCents,
+                tip: tipCents,
+                payments: [{ method: x.paymentMethod || "card", amount: totalWithTax }],
+                status: "closed"
+              };
+            })
+        : dayEntries
+            .filter(e => e.staffId === s.id && e.status === "closed")
+            .sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
       // ===== TOTALS CALCULATION =====
       let totalServiceCents = 0;
       let totalTaxCents = 0;
@@ -4871,6 +4906,10 @@ function renderManagerDailyReport() {
               </div>
             </div>
 
+                        ${
+              s.id === SPRING_ID
+                ? ``
+                : `
             <div class="mgr-row-inline">
               <div class="mgr-pair">
                 <span>Tips Withdr</span>
@@ -4882,6 +4921,8 @@ function renderManagerDailyReport() {
                 <span>${fromCents(tipsBalanceCents)}</span>
               </div>
             </div>
+                `
+            }
 
           </div>
 
@@ -5761,7 +5802,7 @@ function renderSplitRows() {
 
       <select onchange="updateSplitStaff(${index}, this.value)">
       <option value="">Select staff</option>
-        ${staff
+        ${getDrStaffList()
           .filter(s =>
   s.id !== ANYONE_ID &&
   s.id !== currentSplitParent.staffId
