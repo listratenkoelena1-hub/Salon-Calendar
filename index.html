@@ -4329,7 +4329,10 @@ window.closeMenu = () => {
   document.getElementById('topMenu').classList.add('hidden');
 };
  // ========================================================== DAILY REPORT =========================================================//
-
+// ===== DAILY REPORT VIEW MODE =====
+let drViewMode = "normal"; // "normal" | "spring"
+const SPRING_HELP_ID = "spring_help"; // должно совпадать с тем, что ты добавила в staff на шаге 0
+      
 let drCurrentDate = new Date();
 let currentPaymentTotalWithTax = 0;
 function formatDrDate(date) {
@@ -4367,6 +4370,12 @@ console.log("StaffId:", currentUserStaffId);
 window.closeDailyReport = () => {
   document.getElementById('dailyReportModal')
     .classList.add('hidden');
+
+  // сброс режима
+  drViewMode = "normal";
+
+  const title = document.getElementById('drTitle');
+  if (title) title.textContent = 'Daily Report';
 };
 
 window.drPrevDay = () => {
@@ -4450,6 +4459,11 @@ function isDrEditingAllowed() {
   return isSameDay;
 }
 function renderDailyReport() {
+       // ===== SPRING MODE: показываем staff-таблицу для Spring Help =====
+  if (drViewMode === "spring") {
+    renderSpringDailyReport();
+    return;
+  } 
   if (currentUserRole === 'manager' || currentUserRole === 'reception') {
   renderManagerDailyReport();
   return;
@@ -4734,7 +4748,164 @@ html += `
 `;   
   body.innerHTML = html;
 }
+function renderSpringDailyReport() {
 
+  const body = document.getElementById('dailyReportBody');
+  if (!body) return;
+
+  const dateStr = getDrDateString();
+
+  // берём DayEntries только Spring Help и только выбранную дату
+  let entries = drEntries
+    .filter(e => e.date === dateStr && e.staffId === SPRING_HELP_ID)
+    .slice()
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+  // Разрешаем редактировать только сегодня (чтобы было безопасно)
+  const editingAllowed = isDrToday();
+
+  // ===== TOTALS (для отображения сверху/снизу, как у staff) =====
+  let totalServiceCents = 0;
+  let totalTaxCents = 0;
+  let totalTipsCents = 0;
+
+  entries
+    .filter(e => e.status === "closed")
+    .forEach(e => {
+      const service = Number(e.serviceAmount) || 0;
+      const tip = Number(e.tip) || 0;
+      const tax = Math.round(service * 0.05);
+
+      totalServiceCents += service;
+      totalTaxCents += tax;
+      totalTipsCents += tip;
+    });
+
+  let html = `
+    <div class="dr-head">
+      <div>#</div>
+      <div>Service</div>
+      <div>Tax</div>
+      <div>Tip</div>
+      <div>Payment</div>
+      <div></div>
+    </div>
+
+    <div class="dr-rows-wrapper">
+  `;
+
+  entries.forEach((e, index) => {
+
+    const isClosed = e.status === "closed" || e.lockedSplit === true;
+
+    const serviceAmount = e.serviceAmount != null ? fromCents(e.serviceAmount) : "";
+    const tip = e.tip != null ? fromCents(e.tip) : "";
+
+    const serviceCents = Number(e.serviceAmount) || 0;
+    const taxCents = Math.round(serviceCents * 0.05);
+    const serviceWithTax = fromCents(serviceCents + taxCents);
+
+    html += `
+      <div class="dr-row ${!editingAllowed ? 'dr-locked' : ''}">
+        <div>${index + 1}</div>
+
+        <div>
+          <input class="dr-input"
+            type="number"
+            min="0"
+            step="0.01"
+            value="${serviceAmount}"
+            ${(isClosed || !editingAllowed) ? 'disabled' : ''}
+            onchange="updateDrField('${e.id}','serviceAmount',this.value)">
+        </div>
+
+        <div>${serviceWithTax}</div>
+
+        <div>
+          <input class="dr-input"
+            type="number"
+            min="0"
+            step="0.01"
+            value="${tip}"
+            ${(isClosed || !editingAllowed) ? 'disabled' : ''}
+            onchange="updateDrField('${e.id}','tip',this.value)">
+        </div>
+
+        <div>
+          <div>
+            ${
+              !isClosed && editingAllowed && !e.pendingSplit && !e.splitGroupId
+                ? `
+                  <select class="dr-select"
+                    onchange="updateDrField('${e.id}','paymentMethod',this.value)">
+                    <option value="card" ${e.payments?.[0]?.method==="card"?"selected":""}>Card</option>
+                    <option value="cash" ${e.payments?.[0]?.method==="cash"?"selected":""}>Cash</option>
+                    <option value="giftcard" ${e.payments?.[0]?.method==="giftcard"?"selected":""}>Gift</option>
+                    <option value="check" ${e.payments?.[0]?.method==="check"?"selected":""}>Check</option>
+                  </select>
+                `
+                : (
+                    e.payments && e.payments.length > 1
+                      ? "Split"
+                      : e.payments && e.payments.length === 1
+                        ? e.payments[0].method
+                        : "-"
+                  )
+            }
+          </div>
+        </div>
+
+        <div class="dr-action" style="display:flex; gap:6px; align-items:center;">
+          ${!isClosed && editingAllowed ? `
+            <span onclick="openSplitModal('${e.id}')" style="cursor:pointer;">🔀</span>
+            <span onclick="openPaymentPanel('${e.id}')" style="cursor:pointer;">💳</span>
+            <span onclick="closeDrEntry('${e.id}')" style="cursor:pointer;">✅</span>
+          ` : ''}
+
+          ${isClosed && editingAllowed ? `
+            <span onclick="deleteDrEntry('${e.id}')" style="cursor:pointer;">🗑</span>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  });
+
+  html += `</div>`;
+
+  // ===== Add Entry =====
+  html += `
+    <div style="margin-top:14px; margin-bottom:6px;">
+      <button class="dr-button" ${!editingAllowed ? 'disabled' : ''} onclick="addSpringEntry()">
+        + Add Entry
+      </button>
+    </div>
+  `;
+
+  // ===== Totals block (простое) =====
+  html += `
+    <div style="margin-top:16px; font-size:13px; border-top:1px solid #eee; padding-top:12px;">
+      <div><b>Total Service:</b> $${fromCents(totalServiceCents)}</div>
+      <div style="margin-top:6px;"><b>Total Service+Tax:</b> $${fromCents(totalServiceCents + totalTaxCents)}</div>
+      <div style="margin-top:6px;"><b>Today Tips:</b> $${fromCents(totalTipsCents)}</div>
+    </div>
+  `;
+
+  // ===== Buttons: только Close =====
+  html += `
+    <div style="
+      display:flex;
+      gap:8px;
+      margin-top:16px;
+      justify-content:flex-end;
+    ">
+      <button class="dr-button" onclick="closeDailyReport()">
+        Close
+      </button>
+    </div>
+  `;
+
+  body.innerHTML = html;
+}
 
 function renderManagerDailyReport() {
 
@@ -5118,36 +5289,30 @@ window.confirmSellGift = async () => {
 window.openSpringHelp = () => {
   if (currentUserRole !== 'manager') return;
 
-  document.getElementById('springServiceAmount').value = '';
-  document.getElementById('springTipAmount').value = '';
-  document.getElementById('springPaymentMethod').value = 'card';
+  // включаем специальный режим Spring
+  drViewMode = "spring";
 
-  document.getElementById('springHelpModal')
-    .classList.remove('hidden');
+  // открываем тот же Daily Report modal
+  drCurrentDate = new Date();
+  drCurrentDate.setHours(0,0,0,0);
+
+  const modal = document.getElementById('dailyReportModal');
+  const content = document.getElementById('dailyReportContent');
+
+  // Spring — это “как staff интерфейс”, поэтому НЕ wide
+  content.classList.remove('daily-report-wide');
+
+  // заголовок
+  const title = document.getElementById('drTitle');
+  if (title) title.textContent = 'Spring Help';
+
+  // дата сверху
+  document.getElementById('drDateLabel').textContent = formatDrDate(drCurrentDate);
+
+  modal.classList.remove('hidden');
+  renderDailyReport();
 };
 
-window.closeSpringHelp = () => {
-  document.getElementById('springHelpModal')
-    .classList.add('hidden');
-};
-
-window.confirmSpringHelp = async () => {
-  const service = Number(document.getElementById('springServiceAmount').value);
-  const tip = Number(document.getElementById('springTipAmount').value);
-  const payment = document.getElementById('springPaymentMethod').value;
-
-  if (service <= 0) return;
-
-  await addDoc(collection(db, "SpringServices"), {
-    date: getDrDateString(),
-    serviceAmount: service,
-    tip: tip || 0,
-    paymentMethod: payment,
-    createdAt: serverTimestamp()
-  });
-
-  closeSpringHelp();
-};
 
 function renderRightTotalsBlock() {
 
@@ -5362,7 +5527,30 @@ window.addDrEntry = async () => {
   });
 };
 
+window.addSpringEntry = async () => {
+  if (!isDrToday()) return;
 
+  const dateStr = getDrDateString();
+
+  const sameDay = drEntries.filter(e =>
+    e.date === dateStr &&
+    e.staffId === SPRING_HELP_ID
+  );
+
+  const hasOpen = sameDay.some(e => e.status !== 'closed');
+  if (hasOpen) return;
+
+  await addDoc(collection(db, "DayEntries"), {
+    date: dateStr,
+    staffId: SPRING_HELP_ID,
+    serviceAmount: null,
+    tip: null,
+    payments: [{ method: "card", amount: 0 }],
+    status: "open",
+    order: sameDay.length,
+    createdAt: serverTimestamp()
+  });
+};
 window.updateDrField = async (id, field, value) => {
 if (!isDrEditingAllowed()) return;
   const data = {};
@@ -6186,7 +6374,7 @@ window.closeOffWorkHardConflict = () => {
 <div id="dailyReportModal" class="modal hidden">
   <div id="dailyReportContent" class="modal-content daily-report-content">
 
-    <h3>Daily Report</h3>
+    <h3 id="drTitle">Daily Report</h3>
 
     <div class="dr-header">
       <button class="nav-btn" onclick="drPrevDay()"><</button>
