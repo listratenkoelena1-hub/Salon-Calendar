@@ -2073,15 +2073,16 @@ window.openExtraSplitPayment = (extraType) => {
     totalWithTaxCents: totalCents
   };
 
-  // стартуем с 1 строкой card на всю сумму
   currentPaymentTotalWithTax = totalCents;
-  tempPayments = [{ method: "card", amount: totalCents }];
+
+const existing = extraSplitPayments[extraType];
+tempPayments = (existing && Array.isArray(existing) && existing.length)
+  ? existing.map(p => ({ method: p.method, amount: Number(p.amount) || 0 }))
+  : [{ method: "card", amount: totalCents }];
 
   renderPaymentRows();
   document.getElementById("paymentPanel").classList.remove("hidden");
 
-  // сразу показываем Split label в основном модальном окне
-  setExtraSplitUI(extraType, true);
 };
 // ===== SPLIT SERVICE TEMP STORAGE =====
 let splitRows = [];
@@ -5262,18 +5263,19 @@ window.sellProduct = () => {
 
   document.getElementById('productName').value = '';
   document.getElementById('productAmount').value = '';
-extraSplitPayments.product = null;
-setExtraSplitUI('product', false);
 
-const pa = document.getElementById('productAmount');
-if (pa) {
-  pa.addEventListener('input', () => {
   extraSplitPayments.product = null;
   setExtraSplitUI('product', false);
-}, { once: true });
-}
-  document.getElementById('sellProductModal')
-    .classList.remove('hidden');
+
+  const pa = document.getElementById('productAmount');
+  if (pa) {
+    pa.oninput = () => {
+      extraSplitPayments.product = null;
+      setExtraSplitUI('product', false);
+    };
+  }
+
+  document.getElementById('sellProductModal').classList.remove('hidden');
 };
 
 window.closeSellProduct = () => {
@@ -5315,20 +5317,20 @@ window.sellGiftCertificate = () => {
   if (currentUserRole !== 'reception') return;
 
   document.getElementById('giftAmount').value = '';
-extraSplitPayments.gift = null;
-setExtraSplitUI('gift', false);
 
-const ga = document.getElementById('giftAmount');
-if (ga) {
-  ga.addEventListener('input', () => {
   extraSplitPayments.gift = null;
   setExtraSplitUI('gift', false);
-}, { once: true });
-}
-  document.getElementById('sellGiftModal')
-    .classList.remove('hidden');
-};
 
+  const ga = document.getElementById('giftAmount');
+  if (ga) {
+    ga.oninput = () => {
+      extraSplitPayments.gift = null;
+      setExtraSplitUI('gift', false);
+    };
+  }
+
+  document.getElementById('sellGiftModal').classList.remove('hidden');
+};
 window.closeSellGift = () => {
   document.getElementById('sellGiftModal')
     .classList.add('hidden');
@@ -5949,13 +5951,17 @@ if (!currentPaymentParent && !(paymentContext && paymentContext.mode === "extra"
   }
 // ===== EXTRA MODE (Sell Product / Gift): just store split and close =====
 if (paymentContext && paymentContext.mode === "extra") {
-  extraSplitPayments[paymentContext.extraType] = tempPayments.map(p => ({
+  const extraType = paymentContext.extraType;
+
+  extraSplitPayments[extraType] = tempPayments.map(p => ({
     method: p.method,
     amount: Number(p.amount) || 0
   }));
 
+  // ✅ показываем Split только после успешного сохранения split
+  setExtraSplitUI(extraType, true);
+
   closePaymentPanel();
-  paymentContext = null;
   return;
 }
   // ===== ЕСЛИ НЕТ splitGroup → обычный split payment =====
@@ -6044,13 +6050,20 @@ await updateDoc(
 
 window.closePaymentPanel = function () {
 
-  document.getElementById("paymentPanel")
-    .classList.add("hidden");
+  document.getElementById("paymentPanel").classList.add("hidden");
+
+  // ✅ если это extra-mode и split НЕ был сохранён — возвращаем select обратно
+  if (paymentContext && paymentContext.mode === "extra") {
+    const extraType = paymentContext.extraType;
+    if (!extraSplitPayments[extraType]) {
+      setExtraSplitUI(extraType, false);
+    }
+  }
 
   currentPaymentParent = null;
   tempPayments = [];
-  paymentContext = null;    
-}
+  paymentContext = null;
+};
     
 function renderSplitRows() {
 
@@ -6569,18 +6582,38 @@ window.closeOffWorkHardConflict = () => {
     <h4>Sell Product</h4>
 
     <!-- HEADERS -->
-    <div style="display:grid; grid-template-columns: 1.6fr 0.7fr 1fr auto; gap:10px; margin-top:10px; font-size:12px; font-weight:600; opacity:0.75;">
-      <div>Product name</div>
-      <div>Amount</div>
-      <div>Payment</div>
-      <div></div>
-    </div>
+<div style="display:grid; grid-template-columns: 1.6fr 0.7fr 1fr; gap:10px; margin-top:10px; font-size:12px; font-weight:600; opacity:0.75;">
+  <div>Product name</div>
+  <div>Amount</div>
+
+  <div style="display:flex; align-items:center; gap:6px;">
+    <span>Payment</span>
+    <span onclick="openExtraSplitPayment('product')" style="cursor:pointer;">💳</span>
+  </div>
+</div>
 
     <!-- INPUTS -->
-    <div style="display:grid; grid-template-columns: 1.6fr 0.7fr 1fr auto; gap:10px; margin-top:6px; align-items:center;">
-      <input id="productName" type="text" placeholder="Product name" style="width:100%;">
+<div style="display:grid; grid-template-columns: 1.6fr 0.7fr 1fr; gap:10px; margin-top:6px; align-items:center;">
+  <input id="productName" type="text" placeholder="Product name" style="width:100%;">
 
-      <input id="productAmount" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;">
+  <input id="productAmount" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;">
+
+  <!-- payment select OR Split label -->
+  <div style="position:relative;">
+    <select id="productPayment" style="width:100%;">
+      <option value="card">Card</option>
+      <option value="cash">Cash</option>
+      <option value="giftcard">Gift</option>
+      <option value="check">Check</option>
+    </select>
+
+    <div id="productPaymentSplitLabel"
+         class="hidden"
+         style="width:100%; padding:6px 8px; border:1px solid #ccc; border-radius:6px; background:#f3f3f3; font-size:14px; opacity:0.8;">
+      Split
+    </div>
+  </div>
+</div>
 
       <!-- payment select OR Split label -->
       <div style="position:relative;">
@@ -6617,16 +6650,35 @@ window.closeOffWorkHardConflict = () => {
     <h4>Sell Gift Certificate</h4>
 
     <!-- HEADERS -->
-    <div style="display:grid; grid-template-columns: 0.8fr 1fr auto; gap:10px; margin-top:10px; font-size:12px; font-weight:600; opacity:0.75;">
-      <div>Amount</div>
-      <div>Payment</div>
-      <div></div>
-    </div>
+<div style="display:grid; grid-template-columns: 0.8fr 1fr; gap:10px; margin-top:10px; font-size:12px; font-weight:600; opacity:0.75;">
+  <div>Amount</div>
+
+  <div style="display:flex; align-items:center; gap:6px;">
+    <span>Payment</span>
+    <span onclick="openExtraSplitPayment('gift')" style="cursor:pointer;">💳</span>
+  </div>
+</div>
 
     <!-- INPUTS -->
-    <div style="display:grid; grid-template-columns: 0.8fr 1fr auto; gap:10px; margin-top:6px; align-items:center;">
-      <input id="giftAmount" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;">
+<div style="display:grid; grid-template-columns: 0.8fr 1fr; gap:10px; margin-top:6px; align-items:center;">
+  <input id="giftAmount" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;">
 
+  <!-- payment select OR Split label -->
+  <div style="position:relative;">
+    <select id="giftPayment" style="width:100%;">
+      <option value="card">Card</option>
+      <option value="cash">Cash</option>
+      <option value="giftcard">Gift</option>
+      <option value="check">Check</option>
+    </select>
+
+    <div id="giftPaymentSplitLabel"
+         class="hidden"
+         style="width:100%; padding:6px 8px; border:1px solid #ccc; border-radius:6px; background:#f3f3f3; font-size:14px; opacity:0.8;">
+      Split
+    </div>
+  </div>
+</div>
       <!-- payment select OR Split label -->
       <div style="position:relative;">
         <select id="giftPayment" style="width:100%;">
