@@ -4395,12 +4395,22 @@ window.drNextDay = () => {
   renderDailyReport();
 };
 
- function getDrDateString() {
-  return drCurrentDate.toISOString().slice(0, 10);
+ function drLocalDateToYMD(dateObj) {
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const d = String(dateObj.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
+
+function getDrDateString() {
+  // ✅ local YYYY-MM-DD (без UTC сдвига)
+  return drLocalDateToYMD(drCurrentDate);
+}
+
 function isDrToday() {
-  const todayStr = new Date().toISOString().slice(0, 10);
-  return getDrDateString() === todayStr;
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  return drLocalDateToYMD(drCurrentDate) === drLocalDateToYMD(today);
 }
 
 function isDrDayLocked() {
