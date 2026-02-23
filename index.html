@@ -2027,6 +2027,7 @@ let drExtras = [];
 let drWithdrawals = [];
 let drDayStatus = null;
 let springServices = [];
+let springMode = false;      
 let currentPaymentParent = null;
 let tempPayments = [];
 
@@ -4369,6 +4370,7 @@ console.log("StaffId:", currentUserStaffId);
 
 window.closeDailyReport = () => {
   document.getElementById('dailyReportModal')
+         springMode = false; 
     .classList.add('hidden');
 
   // сброс режима
@@ -4412,7 +4414,7 @@ function isDrDayLocked() {
 }
 
 function isDrEditingAllowed() {
-
+  if (springMode) return true;
   const [y, m, d] = getDrDateString().split('-').map(Number);
   const selected = new Date(y, m - 1, d);
   const today = new Date();
@@ -4436,7 +4438,7 @@ function isDrEditingAllowed() {
   return isSameDay && !isDrDayLocked();
 }
       function isDrDeletingAllowed() {
-
+  if (springMode) return true;
   const [y, m, d] = getDrDateString().split('-').map(Number);
   const selected = new Date(y, m - 1, d);
   const today = new Date();
@@ -5287,6 +5289,7 @@ window.confirmSellGift = async () => {
 // ---------- SPRING HELP ----------
 
 window.openSpringHelp = () => {
+      springMode = true;
   if (currentUserRole !== 'manager') return;
 
   // включаем специальный режим Spring
