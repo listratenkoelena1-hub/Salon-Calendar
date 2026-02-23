@@ -2119,7 +2119,7 @@ let morningExpanded = false;
 
 const ANYONE_ID="anyone";
       // ===== SPRING (virtual staff for Daily Report only) =====
-const SPRING_HELP_ID = "__spring__";
+const SPRING_HELP_ID = "spring_help";
 const SPRING_STAFF = {
   id: SPRING_HELP_ID,
   name: "Spring Help",
@@ -4332,7 +4332,6 @@ window.closeMenu = () => {
  // ========================================================== DAILY REPORT =========================================================//
 // ===== DAILY REPORT VIEW MODE =====
 let drViewMode = "normal"; // "normal" | "spring"
-const SPRING_HELP_ID = "spring_help"; // должно совпадать с тем, что ты добавила в staff на шаге 0
       
 let drCurrentDate = new Date();
 let currentPaymentTotalWithTax = 0;
