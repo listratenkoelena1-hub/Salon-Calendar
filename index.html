@@ -1388,6 +1388,57 @@ button:disabled{
 #appointmentModal .modal-content {
   opacity: 1 !important;
 }
+   /* =========================
+   CHIP TOGGLE (checkbox -> chip)
+   ========================= */
+.chip-row{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+
+.chip-toggle{
+  display:inline-flex;
+  align-items:center;
+}
+
+/* прячем настоящий checkbox, но оставляем рабочим */
+.chip-toggle input[type="checkbox"]{
+  position:absolute;
+  opacity:0;
+  pointer-events:none;
+}
+
+/* видимая "пилюля" */
+.chip-toggle label{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid rgba(0,0,0,0.15);
+  background:#fff;
+  font-size:13px;
+  line-height:1;
+  cursor:pointer;
+  user-select:none;
+  transition:transform .12s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.chip-toggle label:active{
+  transform:scale(0.98);
+}
+
+.chip-toggle input[type="checkbox"]:focus + label{
+  box-shadow:0 0 0 3px rgba(0,0,0,0.08);
+}
+
+/* включено */
+.chip-toggle input[type="checkbox"]:checked + label{
+  background:rgba(0,0,0,0.06);
+  border-color:rgba(0,0,0,0.22);
+}   
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -1580,7 +1631,10 @@ button:disabled{
 </div>
 
 <div style="margin-top:12px; display:flex; align-items:center; gap:6px;">
+  <div class="chip-toggle">
   <input type="checkbox" id="aNoShow">
+  <label for="aNoShow">No-show</label>
+</div>
   <label for="aNoShow" style="font-size:13px; cursor:pointer;">
     No-show
   </label>
@@ -1611,57 +1665,35 @@ button:disabled{
 <!-- ===================== -->
 
 <div id="offWorkModal" class="modal hidden">
-
-
-
 <div class="modal-content">
-
-
-
 <h3>Off work</h3>
-
-
-
 <label>Date</label>
-
-
-
 <input id="offDate" type="date" readonly disabled>
-
-
-
 <label>Staff</label>
-
-
-
 <select id="offStaff"></select>
 
+<div class="chip-row">
 
-
-<div class="off-checkbox-row">
-  <label class="off-checkbox">
+  <div class="chip-toggle">
     <input type="checkbox" id="offAllDay" checked>
-    <span>All day</span>
-  </label>
+    <label for="offAllDay">All day</label>
+  </div>
 
-  <label class="off-checkbox">
+  <div class="chip-toggle">
     <input type="checkbox" id="offWeekly">
-    <span>Weekly Off</span>
-  </label>
-  <label class="off-checkbox">
-  <input type="checkbox" id="offVacation">
-  <span>Vacation</span>
-</label>
+    <label for="offWeekly">Weekly Off</label>
+  </div>
+
+  <div class="chip-toggle">
+    <input type="checkbox" id="offVacation">
+    <label for="offVacation">Vacation</label>
+  </div>
 
 </div>
-
-
-
 
 <div id="offTimeRange" style="display:none">
   <label>From</label>
   <select id="offStart"></select>
-
   <label>To</label>
   <select id="offEnd"></select>
 </div>
@@ -1671,42 +1703,22 @@ button:disabled{
   <input id="vacationPicker" placeholder="Select vacation period">
 </div>
 
-
 <div class="modal-actions">
 
-
-
 <button disabled id="offSaveBtn">Save</button>
-
-
-
 <button disabled id="offRemoveBtn">Remove</button>
-
 <button id="removeWeeklyDayBtn" class="hidden">
   Remove this day
 </button>
-
 <button id="removeWeeklyAllBtn" class="hidden">
   Remove weekly
 </button>
-
 <button id="removeVacationBtn" class="hidden">
   Remove vacation
 </button>
-
-
 <button onclick="closeOffWork()">Close</button>
-
-
-
 </div>
-
-
-
 </div>
-
-
-
 </div>
 
 
