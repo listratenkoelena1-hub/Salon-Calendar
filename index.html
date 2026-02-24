@@ -1523,6 +1523,18 @@ button:disabled{
   left: 26px;
   opacity: 0.9;
 }
+   /* ===== Smooth expand for sections inside modals ===== */
+.smooth-section {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 220ms ease, opacity 180ms ease;
+  will-change: max-height, opacity;
+}
+
+.smooth-section.show {
+  opacity: 1;
+}   
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -1782,14 +1794,14 @@ button:disabled{
 
 </div>
 
-<div id="offTimeRange" style="display:none">
+<div id="offTimeRange" class="smooth-section" style="display:none">
   <label>From</label>
   <select id="offStart"></select>
   <label>To</label>
   <select id="offEnd"></select>
 </div>
 
-<div id="vacationRange" style="display:none; margin-top:12px;">
+<div id="vacationRange" class="smooth-section" style="display:none; margin-top:12px;">
   <label>Vacation dates</label>
   <input id="vacationPicker" placeholder="Select vacation period">
 </div>
@@ -3674,7 +3686,7 @@ if (currentUserRole === 'staff') {
 }
 
   offAllDay.checked = false;
-offTimeRange.style.display = 'block';
+toggleSmoothSection(offTimeRange, true);
 offSaveBtn.disabled = false;
 
 
@@ -3879,16 +3891,33 @@ if (vacationPicker) {
 };
 
 
+function toggleSmoothSection(el, show) {
+  if (!el) return;
 
+  if (show) {
+    el.style.display = 'block';          // чтобы измерить высоту
+    el.classList.add('show');
+    // сброс на 0, потом плавно до реальной высоты
+    el.style.maxHeight = '0px';
+    requestAnimationFrame(() => {
+      el.style.maxHeight = el.scrollHeight + 'px';
+    });
+  } else {
+    el.style.maxHeight = '0px';
+    el.classList.remove('show');
+    setTimeout(() => {
+      el.style.display = 'none';
+    }, 230);
+  }
+}
 
 offAllDay.onchange = () => {
-  offTimeRange.style.display = offAllDay.checked ? 'none' : 'block';
+  toggleSmoothSection(offTimeRange, !offAllDay.checked);
   offSaveBtn.disabled = false;
 };
+      
 offVacation.onchange = () => {
   if (offVacation.checked) {
-   
-
     // выключаем остальные режимы
     offWeekly.checked = false;
     offWeekly.disabled = true;
@@ -3897,9 +3926,9 @@ offVacation.onchange = () => {
     offAllDay.checked = true;
     offAllDay.disabled = true;
 
-    offTimeRange.style.display = 'none';
+    toggleSmoothSection(offTimeRange, false);
 
-    vacationRange.style.display = 'block';
+    toggleSmoothSection(vacationRange, true);
     initVacationPicker();
 
     vacationFrom = null;
@@ -3910,7 +3939,7 @@ offVacation.onchange = () => {
     offWeekly.disabled = false;
     offAllDay.disabled = false;
 
-    vacationRange.style.display = 'none';
+    toggleSmoothSection(vacationRange, false);
 
     if (vacationPicker) {
       vacationPicker.destroy();
