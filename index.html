@@ -1361,67 +1361,6 @@ button:disabled{
   margin-top: var(--space-3);
   gap: 10px;
 }
-    /* =========================================================
-   MODAL ANIMATION (safe)
-========================================================= */
-
-/* по умолчанию модалки скрыты через .hidden {display:none} */
-
-/* overlay fade */
-.modal{
-  opacity: 1;
-  transition: opacity 160ms ease;
-}
-
-/* card pop */
-.modal-content{
-  transform: translateY(8px) scale(0.985);
-  opacity: 0;
-  transition: transform 170ms ease, opacity 170ms ease;
-  will-change: transform, opacity;
-}
-
-/* когда модалка ОТКРЫТА (то есть НЕ hidden) */
-.modal:not(.hidden){
-  opacity: 1;
-}
-
-.modal:not(.hidden) .modal-content{
-  transform: translateY(0) scale(1);
-  opacity: 1;
-}
-
-/* уважение к настройкам accessibility */
-@media (prefers-reduced-motion: reduce){
-  .modal, .modal-content{ transition: none !important; }
-}  
-   /* =========================================================
-   APPOINTMENT MODAL: staff tint background
-========================================================= */
-#appointmentModal .modal-content{
-  background: #fff; /* fallback */
-  transition: background-color 160ms ease; /* чтобы плавно менялось */
-}   
-    /* ===== Appointment modal: solid base + tint overlay (NOT transparent) ===== */
-#appointmentModal .modal-content{
-  background: #fff !important;     /* непрозрачная база */
-  position: relative;
-  overflow: hidden;
-}
-
-#appointmentModal .modal-content::before{
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: rgba(var(--appt-tint-rgb, 217,217,217), 0.14); /* слабый tint */
-  pointer-events: none;
-  z-index: 0;
-}
-
-#appointmentModal .modal-content > *{
-  position: relative;
-  z-index: 1; /* чтобы контент был поверх tint-слоя */
-}  
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -2196,36 +2135,6 @@ const newStaffRole = document.getElementById('newStaffRole');
  
 // ===== MODALS =====
 const appointmentModal = document.getElementById('appointmentModal');
-      // ===== Appointment modal tint by staff color =====
-function hexToRgb(hex) {
-  if (!hex) return null;
-  let h = String(hex).trim().replace("#", "");
-  if (h.length === 3) h = h.split("").map(ch => ch + ch).join("");
-  if (h.length !== 6) return null;
-
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  if ([r,g,b].some(v => Number.isNaN(v))) return null;
-
-  return { r, g, b };
-}
-
-function setAppointmentTintByStaffId(staffId) {
-  const content = appointmentModal?.querySelector(".modal-content");
-  if (!content) return;
-
-  const s = staff.find(x => x.id === staffId);
-  const colorHex = s?.color || "#d9d9d9"; // Anyone/unknown -> gray
-
-  const rgb = hexToRgb(colorHex);
-  const r = rgb?.r ?? 217;
-  const g = rgb?.g ?? 217;
-  const b = rgb?.b ?? 217;
-
-  // задаём CSS-переменную, а не прозрачим весь фон
-  content.style.setProperty("--appt-tint-rgb", `${r},${g},${b}`);
-}
 const deleteModal = document.getElementById('deleteModal');
 const conflictModal = document.getElementById('conflictModal');
 const searchModal = document.getElementById('searchModal');
@@ -2414,7 +2323,6 @@ function getDrStaffList() {
 aStaff.onchange = () => {
   handleAnyone();
   checkTimeAvailability();
-  setAppointmentTintByStaffId(aStaff.value);
 };
 
 aTime.onchange = checkTimeAvailability;
@@ -3181,7 +3089,6 @@ appointmentModal.classList.remove('hidden');
 aDate.value=calendarDate.value;
 
 fillSelects();
-      setAppointmentTintByStaffId(aStaff.value);
 // обычное добавление — разрешаем менять staff и дату
 aStaff.disabled = false;
 aStaff.style.opacity = '1';
@@ -3208,7 +3115,6 @@ aNoShow.checked = false;
   aDate.value = calendarDate.value;
 
   fillSelects();
-      setAppointmentTintByStaffId(aStaff.value);
 aDuration.value = '';
   const staffIndex = +cell.dataset.staff;
 
@@ -3255,7 +3161,6 @@ editId=id;
 appointmentModal.classList.remove('hidden');
 
 fillSelects();
-      setAppointmentTintByStaffId(aStaff.value);
 // редактирование — разрешаем менять staff и дату
 aStaff.disabled = false;
 aStaff.style.opacity = '1';
@@ -3834,7 +3739,6 @@ staffDeleteModal.classList.add('hidden');
 
 window.closeAppointment = () => {
   appointmentModal.classList.add('hidden');
-const content = appointmentModal?.querySelector(".modal-content");
 
   // ===== RESET WALK-IN LOCKS =====
   aStaff.disabled = false;
@@ -6431,7 +6335,6 @@ document.getElementById('durationError').style.display = 'none';
   aDate.value = calendarDate.value;
 
   fillSelects();
-      setAppointmentTintByStaffId(aStaff.value);
 // ===== WALK-IN LOCK STAFF =====
 aStaff.value = currentUserStaffId;
 aStaff.disabled = true;
