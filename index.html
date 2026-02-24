@@ -1361,6 +1361,33 @@ button:disabled{
   margin-top: var(--space-3);
   gap: 10px;
 }
+      /* ===== MODAL ANIMATION (safe) ===== */
+.modal {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+.modal:not(.hidden) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* animated pop for content */
+.modal .modal-content {
+  transform: translateY(6px) scale(0.985);
+  transition: transform 160ms ease;
+  background: #fff;             /* IMPORTANT: always opaque */
+}
+
+.modal:not(.hidden) .modal-content {
+  transform: translateY(0) scale(1);
+}
+
+/* ensure we NEVER fade the whole appointment content */
+#appointmentModal .modal-content {
+  opacity: 1 !important;
+}
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -2323,6 +2350,9 @@ function getDrStaffList() {
 aStaff.onchange = () => {
   handleAnyone();
   checkTimeAvailability();
+  if (!isWalkInDraftOpenNow()) {
+  applyAppointmentTintNow();
+}    
 };
 
 aTime.onchange = checkTimeAvailability;
@@ -2836,6 +2866,7 @@ if (!o.allDay) {
 
   );
 
+      
 
 
   const anyoneGroups = {};
@@ -3085,7 +3116,7 @@ editId=null;
 
 
 appointmentModal.classList.remove('hidden');
-
+applyAppointmentTintNow();
 aDate.value=calendarDate.value;
 
 fillSelects();
@@ -3111,7 +3142,7 @@ aPhone.value = '';
 aNote.value = '';
 aNoShow.checked = false;
   appointmentModal.classList.remove('hidden');
-
+applyAppointmentTintNow();
   aDate.value = calendarDate.value;
 
   fillSelects();
@@ -3159,7 +3190,7 @@ if(!a) return;
 editId=id;
 
 appointmentModal.classList.remove('hidden');
-
+applyAppointmentTintNow();
 fillSelects();
 // редактирование — разрешаем менять staff и дату
 aStaff.disabled = false;
@@ -3739,6 +3770,7 @@ staffDeleteModal.classList.add('hidden');
 
 window.closeAppointment = () => {
   appointmentModal.classList.add('hidden');
+      resetAppointmentModalTint();
 
   // ===== RESET WALK-IN LOCKS =====
   aStaff.disabled = false;
@@ -6277,6 +6309,69 @@ if (!isDrEditingAllowed()) return;
 };
 
 //=============================================================================================================//
+      
+// ============================================
+// APPOINTMENT MODAL COLOR SYSTEM
+// ============================================
+
+const WALKIN_TINT = "#fff3e0"; // light orange
+const ANYONE_TINT = "#f3f3f3";
+const TINT_STRENGTH = 0.18;
+
+function hexToRgb(hex) {
+  if (!hex) return { r: 255, g: 255, b: 255 };
+  let h = String(hex).trim().replace("#", "");
+  if (h.length === 3) h = h.split("").map(ch => ch + ch).join("");
+  if (h.length !== 6) return { r: 255, g: 255, b: 255 };
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16),
+  };
+}
+
+function blendWithWhite(hex, strength) {
+  const { r, g, b } = hexToRgb(hex);
+  const s = Math.max(0, Math.min(1, strength));
+  const rr = Math.round(255 * (1 - s) + r * s);
+  const gg = Math.round(255 * (1 - s) + g * s);
+  const bb = Math.round(255 * (1 - s) + b * s);
+  return `rgb(${rr}, ${gg}, ${bb})`;
+}
+
+function getStaffColorById(staffId) {
+  if (!staffId || staffId === ANYONE_ID) return ANYONE_TINT;
+  const s = staff.find(x => x.id === staffId);
+  return (s && s.color) ? s.color : ANYONE_TINT;
+}
+
+function setAppointmentModalTintSolid(colorHex) {
+  const content = appointmentModal?.querySelector(".modal-content");
+  if (!content) return;
+  content.style.backgroundColor = blendWithWhite(colorHex, TINT_STRENGTH);
+}
+
+function resetAppointmentModalTint() {
+  const content = appointmentModal?.querySelector(".modal-content");
+  if (!content) return;
+  content.style.backgroundColor = "#fff";
+}
+
+function isWalkInDraftOpenNow() {
+  return editId == null && currentUserRole === "staff" && aClient?.value === "👣";
+}
+
+function applyAppointmentTintNow() {
+  if (isWalkInDraftOpenNow()) {
+    setAppointmentModalTintSolid(WALKIN_TINT);
+    return;
+  }
+  const staffId = aStaff?.value || ANYONE_ID;
+  setAppointmentModalTintSolid(getStaffColorById(staffId));
+}
+
+// ============================================
+
 window.goPrevDay = () => {
   const d = getLocalDateFromInput(calendarDate.value);
   d.setDate(d.getDate() - 1);
@@ -6330,7 +6425,7 @@ window.openWalkIn = () => {
 document.getElementById('durationError').style.display = 'none';
 
   appointmentModal.classList.remove('hidden');
-
+applyAppointmentTintNow();
   // дата = текущая выбранная
   aDate.value = calendarDate.value;
 
