@@ -1253,6 +1253,114 @@ textarea {
 }
       /* ===== Make Split Payment panel always on top ===== */
 #paymentPanel { z-index: 11000 !important; }
+
+      /* =========================================================
+   UI SYSTEM (v1) — tokens + reusable components
+   Put at the END of <style> to override older rules
+========================================================= */
+
+:root{
+  --bg: #ffffff;
+  --text: #111;
+  --muted: rgba(0,0,0,0.6);
+
+  --border: rgba(0,0,0,0.14);
+  --border-strong: rgba(0,0,0,0.22);
+
+  --card: #fff;
+  --shadow: 0 10px 26px rgba(0,0,0,0.18);
+
+  --radius-lg: 14px;
+  --radius-md: 12px;
+  --radius-sm: 10px;
+
+  --space-1: 6px;
+  --space-2: 10px;
+  --space-3: 14px;
+  --space-4: 18px;
+
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+}
+
+/* Base */
+body{
+  color: var(--text);
+}
+
+/* Modal overlay + card */
+.modal{
+  background: rgba(0,0,0,.45);
+}
+
+.modal-content{
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+}
+
+/* Titles inside modal */
+.modal-content h3,
+.modal-content h4{
+  margin: 0 0 var(--space-2) 0;
+  font-weight: 700;
+}
+
+/* Labels */
+.modal-content label,
+.ap-label,
+.app-label{
+  color: rgba(0,0,0,0.75);
+}
+
+/* Inputs */
+input, select, textarea{
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  background: #fff;
+}
+
+input:focus, select:focus, textarea:focus{
+  outline: none;
+  border-color: var(--border-strong);
+}
+
+/* Buttons — unified */
+button{
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f3f3f3;
+  color: #111;
+}
+
+button:hover{ filter: brightness(0.98); }
+button:active{ transform: translateY(0.5px); }
+
+button:disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Primary / Danger helpers */
+.btn-primary{
+  background: #e8f0ff;
+  border-color: #b7ccff;
+}
+
+.btn-danger{
+  background: #ffeaea;
+  border-color: #ffb3b3;
+}
+
+/* Modal actions — spacing */
+.modal-actions{
+  margin-top: var(--space-3);
+  gap: 10px;
+}
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -1453,19 +1561,10 @@ textarea {
 
 
 <div class="modal-actions">
-
-
-
-<button onclick="saveAppointment()">Save</button>
-
-
-
-<button onclick="confirmDelete()">Delete</button>
-
-
-
-<button onclick="closeAppointment()">Close</button>
-
+  <button class="btn-primary" onclick="saveAppointment()">Save</button>
+  <button class="btn-danger" onclick="confirmDelete()">Delete</button>
+  <button onclick="closeAppointment()">Close</button>
+</div>
 
 
 </div>
