@@ -2088,7 +2088,10 @@ window.openExtraSplitPayment = (extraType) => {
   if (!amountInput) return;
 
   const amount = Number(amountInput.value);
-  if (!amount || amount <= 0) return;
+if (!amount || amount <= 0) {
+  alert("Enter Amount first");
+  return;
+}
 
   const totalCents = toCents(amount);
 
