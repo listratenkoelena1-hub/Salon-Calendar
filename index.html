@@ -1535,6 +1535,163 @@ button:disabled{
 .smooth-section.show {
   opacity: 1;
 }   
+    /* =========================
+   DAILY REPORT (STAFF) UI
+   ========================= */
+
+#dailyReportModal .modal-content {
+  max-width: 720px;
+}
+
+/* Header: title + compact date nav */
+.dr-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.dr-topbar h3 {
+  margin: 0;
+}
+
+.dr-date-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.dr-date-nav .dr-nav-btn {
+  border: none;
+  background: transparent;
+  padding: 4px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.dr-date-nav .dr-nav-btn:hover {
+  background: rgba(0,0,0,0.06);
+}
+
+.dr-date-nav .dr-date-text {
+  font-weight: 600;
+  padding: 0 2px;
+}
+
+/* Table grid: full width, stable columns */
+.dr-table {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.dr-head, .dr-row {
+  width: 100%;
+  display: grid;
+  align-items: center;
+  column-gap: 8px;
+
+  /* # | Service | Tax | Tip | Payment | Actions */
+  grid-template-columns:
+    28px
+    minmax(150px, 1fr)
+    72px
+    72px
+    64px
+    112px;
+}
+
+.dr-head {
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.75;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(0,0,0,0.10);
+}
+
+.dr-row {
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+.dr-cell-right {
+  text-align: right;
+}
+
+/* Inputs should not break grid */
+.dr-row input,
+.dr-row select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Actions: always stick to right edge */
+.dr-action {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+}
+
+/* "+ Add Entry" as small text-link */
+.dr-add-link {
+  margin-top: 10px;
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.85;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dr-add-link:hover {
+  opacity: 1;
+  text-decoration: none;
+}
+
+/* Totals: 2 columns (left & right) */
+.dr-totals {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0,0,0,0.10);
+  font-size: 13px;
+}
+
+.dr-totals-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 20px;
+}
+
+.dr-totals-right {
+  text-align: right;
+}
+
+/* Footer buttons: reuse modal-actions layout */
+.dr-footer {
+  margin-top: 14px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.dr-linklike-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.dr-linklike-btn:hover {
+  opacity: 1;
+}  
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -4543,18 +4700,19 @@ return;
 
   });
 
-  let html = `
+ let html = `
+  <div class="dr-table">
     <div class="dr-head">
       <div>#</div>
       <div>Service</div>
-      <div>Tax</div>
-      <div>Tip</div>
+      <div class="dr-cell-right">Tax</div>
+      <div class="dr-cell-right">Tips</div>
       <div>Payment</div>
-      <div></div>
+      <div class="dr-cell-right">Actions</div>
     </div>
 
     <div class="dr-rows-wrapper">
-  `;
+`;
 
   entries.forEach((e, index) => {
     const isClosed = e.status === "closed" || e.lockedSplit === true;
@@ -4583,13 +4741,13 @@ html += `
     onchange="updateDrField('${e.id}','serviceAmount',this.value)">
 </div>
 
-      <div>
-  ${serviceWithTax}
-</div>
+            <div class="dr-cell-right">
+        ${serviceWithTax}
+      </div>
 
 
 
-        <div>
+                <div class="dr-cell-right">
           <input class="dr-input"
             type="number"
             min="0"
@@ -4626,8 +4784,7 @@ html += `
 </div>
         </div>
 
-       <div class="dr-action" style="display:flex; gap:6px; align-items:center;">
-
+<div class="dr-action">
   ${!isClosed && editingAllowed ? `
       <span onclick="openSplitModal('${e.id}')" style="cursor:pointer;">🔀</span>
       <span onclick="openPaymentPanel('${e.id}')" style="cursor:pointer;">💳</span>
@@ -4647,7 +4804,7 @@ html += `
   });
 
   html += `</div>`; // закрываем rows wrapper
-
+html += `</div>`; // closes .dr-table
   // ===== TOTAL BLOCK =====
 
 // Total service with tax
@@ -4678,51 +4835,26 @@ const todayWithdrawn = drWithdrawals
 
 // balance
 const balanceTips = totalEarnedTips - totalWithdrawnTips;
-// ===== ADD ENTRY BUTTON =====
+// ===== ADD ENTRY LINK (text, left) =====
 html += `
-  <div style="margin-top:14px; margin-bottom:6px;">
-    <button class="dr-button" onclick="addDrEntry()">
-      + Add Entry
-    </button>
-  </div>
+  <div class="dr-add-link" onclick="addDrEntry()">+ Add Entry</div>
 `;
 
 html += `
-  <div style="margin-top:16px; font-size:13px; border-top:1px solid #eee; padding-top:12px;">
-
-   <!-- 1️⃣ Total Service Row -->
-<div>
-  <b>Total Service:</b> $${fromCents(totalServiceCents)}
-
-</div>
-
-
-    <!-- spacing -->
-    <div style="height:12px;"></div>
-
-    <!-- 2️⃣ Tips Block -->
-    <div style="display:flex; justify-content:space-between;">
-
-      <!-- LEFT COLUMN -->
-<div>
-  <div>
-    <b>Today Tips:</b> $${fromCents(totalTipsCents)}
-
-  </div>
-</div>
-
-
-      <!-- RIGHT COLUMN -->
-      <div style="text-align:right;">
-        <div><b>Withdrawal Today:</b> $${fromCents(todayWithdrawn)}</div>
-        <div style="margin-top:6px; font-weight:600;">
-          Balance: $${fromCents(balanceTips)}
-
-        </div>
+  <div class="dr-totals">
+    <div class="dr-totals-grid">
+      <div>
+        <div><b>Total service:</b> $${fromCents(totalServiceCents)}</div>
+        <div style="margin-top:6px;"><b>Today tips:</b> $${fromCents(totalTipsCents)}</div>
       </div>
 
+      <div class="dr-totals-right">
+        <div><b>Withdrawal today:</b> $${fromCents(todayWithdrawn)}</div>
+        <div style="margin-top:6px; font-weight:600;">
+          Tips balance: $${fromCents(balanceTips)}
+        </div>
+      </div>
     </div>
-
   </div>
 `;
    // ===== STAFF BUTTONS =====
@@ -4741,12 +4873,9 @@ const withdrawalDisabled =
   alreadyWithdrawnToday;
 
 html += `
-  <div style="
-    display:flex;
-    gap:8px;
-    margin-top:16px;
-    justify-content:flex-end;
-  ">
+  <div class="dr-footer">
+    <button class="dr-linklike-btn" onclick="addDrEntry()">Day entry</button>
+
     <button class="dr-button"
       ${(withdrawalDisabled || !editingAllowed) ? 'disabled' : ''}
       onclick="openWithdrawal()">
@@ -4764,7 +4893,7 @@ html += `
       Close
     </button>
   </div>
-`;   
+`;
   body.innerHTML = html;
 }
 function renderSpringDailyReport() {
@@ -6477,15 +6606,15 @@ window.closeOffWorkHardConflict = () => {
 <div id="dailyReportModal" class="modal hidden">
   <div id="dailyReportContent" class="modal-content daily-report-content">
 
-    <h3 id="drTitle">Daily Report</h3>
+    <div class="dr-topbar">
+  <h3 id="drTitle">Daily Report</h3>
 
-    <div class="dr-header">
-      <button class="nav-btn" onclick="drPrevDay()"><</button>
-
-      <div id="drDateLabel" class="dr-date-label"></div>
-
-      <button class="nav-btn" onclick="drNextDay()">></button>
-    </div>
+  <div class="dr-date-nav">
+    <button class="dr-nav-btn" onclick="drPrevDay()"><</button>
+    <div id="drDateLabel" class="dr-date-text"></div>
+    <button class="dr-nav-btn" onclick="drNextDay()">></button>
+  </div>
+</div>
 
     <div id="dailyReportBody">
       <!-- content will be injected later -->
