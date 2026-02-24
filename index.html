@@ -1759,7 +1759,7 @@ button:disabled{
   <div class="off-switch-col">
     <div class="switch-title">All day</div>
     <label class="switch" style="margin-top:6px;">
-      <input type="checkbox" id="offAllDay" checked>
+      <input type="checkbox" id="offAllDay">
       <span class="slider"></span>
     </label>
   </div>
@@ -3673,9 +3673,9 @@ if (currentUserRole === 'staff') {
   offStaff.style.opacity = '1';
 }
 
-  offAllDay.checked = true;
-  offTimeRange.style.display = 'none';
-  offSaveBtn.disabled = false;
+  offAllDay.checked = false;
+offTimeRange.style.display = 'block';
+offSaveBtn.disabled = false;
 
 
   editingOffWorkId = null;
