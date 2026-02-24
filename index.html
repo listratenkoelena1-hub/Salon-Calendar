@@ -648,7 +648,18 @@ padding:10px 14px;
   gap: 24px; /* расстояние между All day и Weekly */
   margin-top: 8px;
 }
+.off-switch-grid{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 10px;
+}
 
+.off-switch-col{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+}
 .off-checkbox {
   display: flex;
   align-items: center;
@@ -1439,89 +1450,79 @@ button:disabled{
   background:rgba(0,0,0,0.06);
   border-color:rgba(0,0,0,0.22);
 }   
-     /* ===== Switch toggle (lever) ===== */
+  /* ===== Compact Switch ===== */
 .switch-row{
   display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  margin-top:10px;
+  align-items:flex-start;
+  gap:10px;
 }
 
 .switch-title{
   font-size:13px;
   font-weight:600;
-  opacity:.85;
-  line-height:1;
+  margin-bottom:6px;
 }
 
 .switch{
-  position:relative;
-  display:inline-block;
-  width:56px;
-  height:30px;
-  flex:0 0 auto;
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 26px;
 }
 
 .switch input{
-  opacity:0;
-  width:0;
-  height:0;
+  opacity: 0;
+  width: 0;
+  height: 0;
 }
 
-.switch .slider{
+.slider{
   position:absolute;
-  inset:0;
-  border-radius:999px;
-  background:#e6e6e6;
-  border:1px solid #d1d1d1;
-  transition:background .18s ease, border-color .18s ease;
   cursor:pointer;
+  top:0; left:0; right:0; bottom:0;
+  background:#d0d0d0;
+  transition: .2s;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
 }
 
-.switch .slider::before{
+.slider:before{
   content:"";
   position:absolute;
-  width:24px;
-  height:24px;
-  left:3px;
-  top:50%;
-  transform:translateY(-50%);
-  border-radius:999px;
-  background:#fff;
-  box-shadow:0 2px 6px rgba(0,0,0,.16);
-  transition:transform .18s ease;
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  top: 3px;
+  background:white;
+  transition:.2s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.18);
 }
 
-/* icons */
-.switch .slider::after{
+/* иконки внутри свитча */
+.slider:after{
   content:"✕";
   position:absolute;
-  top:50%;
-  transform:translateY(-50%);
-  left:34px;              /* справа, когда OFF */
-  font-size:14px;
-  font-weight:700;
-  opacity:.75;
-  color:#d32f2f;
-  transition:all .18s ease;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  opacity: 0.75;
 }
 
 .switch input:checked + .slider{
-  background:#e8f5e9;
-  border-color:#b7dfbb;
+  background:#a7d9b2;
 }
 
-.switch input:checked + .slider::before{
-  transform:translate(26px,-50%);
+.switch input:checked + .slider:before{
+  transform: translateX(18px);
 }
 
-.switch input:checked + .slider::after{
+.switch input:checked + .slider:after{
   content:"✓";
-  left:9px;               /* слева, когда ON */
-  color:#2e7d32;
-  opacity:.85;
-} 
+  left: 26px;
+  opacity: 0.9;
+}
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -1713,10 +1714,10 @@ button:disabled{
   <textarea id="aNote" class="ap-textarea"></textarea>
 </div>
 
-<div class="switch-row">
+<div style="margin-top:12px;">
   <div class="switch-title">No Show</div>
 
-  <label class="switch">
+  <label class="switch" style="margin-top:6px;">
     <input type="checkbox" id="aNoShow">
     <span class="slider"></span>
   </label>
@@ -1753,28 +1754,32 @@ button:disabled{
 <label>Staff</label>
 <select id="offStaff"></select>
 
-<div class="switch-row">
-  <div class="switch-title">All day</div>
-  <label class="switch">
-    <input type="checkbox" id="offAllDay" checked>
-    <span class="slider"></span>
-  </label>
-</div>
+<div class="off-switch-grid">
 
-<div class="switch-row">
-  <div class="switch-title">Weekly Off</div>
-  <label class="switch">
-    <input type="checkbox" id="offWeekly">
-    <span class="slider"></span>
-  </label>
-</div>
+  <div class="off-switch-col">
+    <div class="switch-title">All day</div>
+    <label class="switch" style="margin-top:6px;">
+      <input type="checkbox" id="offAllDay" checked>
+      <span class="slider"></span>
+    </label>
+  </div>
 
-<div class="switch-row">
-  <div class="switch-title">Vacation</div>
-  <label class="switch">
-    <input type="checkbox" id="offVacation">
-    <span class="slider"></span>
-  </label>
+  <div class="off-switch-col">
+    <div class="switch-title">Weekly Off</div>
+    <label class="switch" style="margin-top:6px;">
+      <input type="checkbox" id="offWeekly">
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="off-switch-col">
+    <div class="switch-title">Vacation</div>
+    <label class="switch" style="margin-top:6px;">
+      <input type="checkbox" id="offVacation">
+      <span class="slider"></span>
+    </label>
+  </div>
+
 </div>
 
 <div id="offTimeRange" style="display:none">
