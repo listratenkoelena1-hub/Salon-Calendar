@@ -2395,6 +2395,7 @@ function checkCalendarConflict({
     if (a.id === excludeId) return false;
     if (a.staffId !== staffId) return false;
     if (a.date !== date) return false;
+    if (a.noShow === true) return false;
 
     const aStart = a.start;
     const aEnd = a.start + a.duration;
@@ -2460,82 +2461,36 @@ if (w.endDate) {
 function timeLabel(i){
 
   if (i === -1) return 'Morning';
-
   const t = START_MINUTES + i * SLOT_MINUTES;
-
   let h = Math.floor(t / 60);
-
   let m = t % 60;
-
   let am = h >= 12 ? 'PM' : 'AM';
-
   h = h % 12 || 12;
 
-
-
   return `${h}:${String(m).padStart(2,'0')} ${am}`;
-
 }
 
-
-
 onSnapshot(collection(db,"staff"), s => {
-
-
-
   const realStaff = s.docs
-
     .map(d => ({ id: d.id, ...d.data() }))
-
     .sort((a, b) => a.order - b.order);
-
-
-
   staff = [
-
-
-
     { id: ANYONE_ID, name: "Anyone", color: "#eaeaea" },
-
-
-
     ...realStaff
-
-
-
   ];
 
-
-
   renderStaff();
-
-
-
   renderCalendar();
-
-
-
 });
-
-
 
 onSnapshot(collection(db,"appointments"),s=>{
-
 appointments=s.docs.map(d=>({id:d.id,...d.data()}));
-
-
-
 renderCalendar();
-
-
-
 });
 
-
-
 let offWork = [];
-
 let editingOffWorkId = null;
+      
 // ===== WEEKLY OFF =====
 let weeklyOff = [];
 
@@ -2548,16 +2503,10 @@ onSnapshot(collection(db, "WeeklyOff"), s => {
 });
 
 onSnapshot(collection(db, "OffWork"), s => {
-
   offWork = s.docs.map(d => ({ id: d.id, ...d.data() }));
-
-
-
   renderCalendar();
-
-
-
 });
+      
 // ===== DAILY REPORT SNAPSHOTS =====
 
 onSnapshot(collection(db, "DayEntries"), snapshot => {
@@ -2593,103 +2542,54 @@ onSnapshot(collection(db, "DayStatus"), snapshot => {
 
 function renderCalendar(){
 
-
-
 calendar.innerHTML='';
-
 let h='<tr><th class="time">Time</th>';
-
 staff.forEach(s=>h+=`<th style="background:${s.color}">${s.name}</th>`);
-
-
-
 h+='</tr>';
-
-
-
 calendar.innerHTML += h;
-
-
-
 let morningRow = `<tr class="morning-row" onclick="toggleMorning()">
-
   <td class="time morning">Morning ▸</td>`;
-
 staff.forEach((_, s) =>
-
   morningRow += `<td class="slot morning" data-slot="-1" data-staff="${s}"></td>`
-
 );
 
 morningRow += '</tr>';
-
 calendar.innerHTML += morningRow;
-
 for (let i = 0; i < SLOTS; i++) {
-
   if (!morningExpanded && i < MORNING_SLOTS) continue;
-
   let r = `<tr>
-
     <td class="time">${timeLabel(i)}</td>`;
-
   staff.forEach((_, s) =>
-
     r += `<td class="slot" data-slot="${i}" data-staff="${s}"></td>`
-
   );
 
   r += '</tr>';
-
   calendar.innerHTML += r;
-
 }
-
-
 
 drawAppointments();
-
-
-
 }
-
-
 
 function drawAppointments(){
 
 document.querySelectorAll('.slot').forEach(c => {
-
   c.innerHTML = '';
-
   c.style.background = '';
-
   c.classList.remove('busy');
   delete c.dataset.weeklyOff;
 delete c.dataset.weeklyId;
 delete c.dataset.weeklyStaffId;
 
-
   const slot = +c.dataset.slot;
-
 if (slot === -1) {
-
   c.onclick = null;
-
   return;
-
 }
 
-
-
   if (!morningExpanded && slot >= 0 && slot < MORNING_SLOTS) {
-
     c.onclick = null;
-
     return;
-
   }
-
-
 
   c.onclick = () => {
   if (c.dataset.weeklyOff === '1') {
@@ -2698,9 +2598,6 @@ if (slot === -1) {
   }
   openAddFromCell(c);
 };
-
-
-
 });
 
 
@@ -2719,16 +2616,11 @@ weeklyOff
   .filter(w => {
 
     if (!w.startDate) return false;   // 🔴 если нет startDate — не рисуем
-
     if (w.enabled === false) return false;
-
     if (w.weekday !== weekday) return false;
-
     const checkDate = getLocalDateFromInput(calendarDate.value);
     const ruleStart = getLocalDateFromInput(w.startDate);
-
     if (checkDate < ruleStart) return false;
-
     if (w.endDate) {
       const ruleEnd = getLocalDateFromInput(w.endDate);
       if (checkDate > ruleEnd) return false;
@@ -2746,10 +2638,8 @@ weeklyOff
 );
 
 if (hasException) return;
-
     const staffIndex = staff.findIndex(s => s.id === w.staffId);
     if (staffIndex === -1) return;
-
     if (w.allDay) {
       document
         .querySelectorAll(`.slot[data-staff="${staffIndex}"]`)
@@ -2759,7 +2649,6 @@ if (hasException) return;
             cell.dataset.weeklyOff = '1';
             cell.dataset.weeklyId = w.id;
 cell.dataset.weeklyStaffId = w.staffId;
-
           }
         });
       return;
@@ -2782,186 +2671,94 @@ cell.dataset.weeklyStaffId = w.staffId;
   todayOff.forEach(o => {
 
     const staffIndex = staff.findIndex(s => s.id=== o.staffId);
-
     if (staffIndex === -1) return;
-
-
-
     if (o.allDay) {
-
       document
-
         .querySelectorAll(`.slot[data-staff="${staffIndex}"]`)
-
         .forEach(cell => {
-
           cell.style.background = '#e0e0e0';
           cell.onclick = () => {
   if (!offWork.find(x => x.id === o.id)) return;
   openOffWorkEdit(o);
 };
-
-
-
         });
-
-
-
     }
-
-
 
 if (!o.allDay) {
-
-
-
   if (o.start === -1) {
-
     const cell = document.querySelector(
-
       `.slot[data-slot="-1"][data-staff="${staffIndex}"]`
-
     );
-
     if (cell) {
-
       cell.style.background = '#e0e0e0';
-
       cell.onclick = () => openOffWorkEdit(o);
-
     }
-
   }
 
 
 
   for (let i = Math.max(o.start, 0); i < o.end; i++) {
-
     const cell = document.querySelector(
-
       `.slot[data-slot="${i}"][data-staff="${staffIndex}"]`
-
     );
 
     if (cell) {
-
       cell.style.background = '#e0e0e0';
-
       cell.onclick = () => openOffWorkEdit(o);
-
     }
-
   }
-
 }
-
-
-
   });
 
-
-
   const dayAppointments = appointments.filter(
-
-    a => a.date === calendarDate.value
-
-  );
-
-      
-
+  a => a.date === calendarDate.value && a.noShow !== true
+);
 
   const anyoneGroups = {};
-
   dayAppointments
-
     .filter(a => a.staffId === ANYONE_ID)
-
     .forEach(a => {
-
       const key = a.start;
-
       if (!anyoneGroups[key]) anyoneGroups[key] = [];
-
       anyoneGroups[key].push(a);
-
     });
 
-
-
 Object.entries(anyoneGroups).forEach(([start, group]) => {
-
   const si = staff.findIndex(s => s.id === ANYONE_ID);
-
   if (si === -1) return;
-
-
-
   const cell = document.querySelector(
-
     `.slot[data-slot="${start}"][data-staff="${si}"]`
-
   );
 
   if (!cell) return;
-
   cell.style.background = staff[si].color;
-
   cell.classList.add('busy');
-
   const firstName = group[0].client || '—';
-
   const extra = group.length - 1;
-
-
-
   cell.innerHTML = firstName;
-
-
-
   if (extra > 0) {
-
     cell.innerHTML += `<span class="anyone-count">+${extra}</span>`;
-
   }
 
-
-
   cell.onclick = (e) => {
-
   e.stopPropagation();
-
   openAnyonePopup(cell, group);
-
 };
-
 });
 
-
-
 dayAppointments
-
   .filter(a => a.staffId !== ANYONE_ID)
-
   .forEach(a => {
-
     const si = staff.findIndex(s => s.id === a.staffId);
-
     if (si === -1) return;
-
     if (a.start === -1) {
-
       const cell = document.querySelector(
-
         `.slot[data-slot="-1"][data-staff="${si}"]`
-
       );
 
       if (!cell) return;
-
       cell.style.background = staff[si].color;
-
       cell.classList.add('busy', 'block-start', 'block-end');
-
       cell.innerHTML = `
   <div class="app-client ${a.noShow ? 'no-show-text' : ''}">
     ${a.noShow ? '<span class="no-show-dot"></span>' : ''}
@@ -2969,37 +2766,20 @@ dayAppointments
   </div>
   <div class="app-service">${a.note || ''}</div>
 `;
-
-
-
       cell.onclick = () => openEdit(a.id);
-
       return;
-
     }
-
-
 
     for (let i = 0; i < (a.duration || 1); i++) {
-
       const cell = document.querySelector(
-
         `.slot[data-slot="${a.start  + i}"][data-staff="${si}"]`
-
       );
-
       if (!cell) continue;
-
       cell.style.background = staff[si].color;
-
       cell.classList.add('busy');
-
       const last = (a.duration || 1) - 1;
-
       if (i === 0 && i === last) {
-
         cell.classList.add('block-start', 'block-end');
-
         cell.innerHTML = `
   <div class="app-client ${a.noShow ? 'no-show-text' : ''}">
     ${a.noShow ? '<span class="no-show-dot"></span>' : ''}
@@ -3007,13 +2787,8 @@ dayAppointments
   </div>
   <div class="app-service">${a.note || ''}</div>
 `;
-
-
-
       } else if (i === 0) {
-
         cell.classList.add('block-start');
-
         cell.innerHTML = `
   <div class="app-client ${a.noShow ? 'no-show-text' : ''}">
     ${a.noShow ? '<span class="no-show-dot"></span>' : ''}
@@ -3021,113 +2796,64 @@ dayAppointments
   </div>
   <div class="app-service">${a.note || ''}</div>
 `;
-
-
-
       } else if (i === last) {
-
         cell.classList.add('block-end');
-
       } else {
-
         cell.classList.add('block-middle');
-
       }
-
-
-
       cell.onclick = () => openEdit(a.id);
-
     }
-
   });
-
 highlightCurrentTimeRow();
-
 }
-
-
 
 function openAnyonePopup(cell, group) {
 
   anyonePopupList.innerHTML = '';
-
   group.forEach(a => {
-
     const div = document.createElement('div');
-
     div.className = 'anyone-popup-item';
-
     div.innerHTML = `<b>${a.client || '—'}</b>`;
-
     div.onclick = () => {
-
       closeAnyonePopup();
-
       openEdit(a.id);
-
     };
 
     anyonePopupList.appendChild(div);
-
   });
 
-
-
   const rect = cell.getBoundingClientRect();
-
   anyonePopup.style.top = rect.bottom + window.scrollY + 'px';
-
   anyonePopup.style.left = rect.left + window.scrollX + 'px';
-
-
-
   anyonePopup.classList.remove('hidden');
-
 }
 
 
 
 function closeAnyonePopup() {
-
   anyonePopup.classList.add('hidden');
-
 }
 
 
 
 document.addEventListener('click', e => {
-
   if (anyonePopup && !anyonePopup.contains(e.target)) {
-
     closeAnyonePopup();
-
   }
-
 });
 
 
 
 window.openAdd=()=>{
-
-
-
 editId=null;
-
-
-
 appointmentModal.classList.remove('hidden');
-
 aDate.value=calendarDate.value;
-
 fillSelects();
 // обычное добавление — разрешаем менять staff и дату
 aStaff.disabled = false;
 aStaff.style.opacity = '1';
 changeDateBtn.style.display = '';
-
 aClient.value='';
-
 aNote.value='';
 document.getElementById('appointmentEditorLabel').textContent = '';
 applyAppointmentTintNow();
@@ -3143,133 +2869,80 @@ aPhone.value = '';
 aNote.value = '';
 aNoShow.checked = false;
   appointmentModal.classList.remove('hidden');
-
   aDate.value = calendarDate.value;
-
   fillSelects();
 aDuration.value = '';
   const staffIndex = +cell.dataset.staff;
-
   const slotIndex = +cell.dataset.slot;
-
-
-
   if (staff[staffIndex]) {
-
     aStaff.value = staff[staffIndex].id;
-
   }
 
-
-
   aTime.value = slotIndex;
-
   aClient.value = '';
 aPhone.value = '';
-
   aNote.value = '';
 aNoShow.checked = false;
-
   handleAnyone();
 document.getElementById('appointmentEditorLabel').textContent = '';
 applyAppointmentTintNow();
 }
 
 window.openEdit=id=>{
-
 const a=appointments.find(x=>x.id===id);
 const label = document.getElementById('appointmentEditorLabel');
-
 if (a.lastEditedBy) {
   label.textContent = '@' + a.lastEditedBy;
 } else {
   label.textContent = '';
 }
-
 if(!a) return;
-
 editId=id;
-
 appointmentModal.classList.remove('hidden');
-
 fillSelects();
 // редактирование — разрешаем менять staff и дату
 aStaff.disabled = false;
 aStaff.style.opacity = '1';
 changeDateBtn.style.display = '';
-
 aDate.value=a.date;
-
 aStaff.value=a.staffId;
-
 aTime.value = a.start === -1 ? -1 : a.start;
-
 aDuration.value = a.duration ?? '';
-
 aClient.value=a.client;
 aPhone.value = a.phone || '';
-
 aNote.value=a.note||'';
 aNoShow.checked = a.noShow === true;
-
 handleAnyone();
 applyAppointmentTintNow();
-
-
 };
 
 
 
 function fillSelects(){
 
-
-
 aStaff.innerHTML=staff.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-
-
-
 aTime.innerHTML =
-
   [...Array(SLOTS).keys()]
-
     .map(i => `<option value="${i}">${timeLabel(i)}</option>`)
-
     .join('');
-
 setTimeout(() => {
   checkTimeAvailability();
 }, 0);
-
-
 }
-
-
 
 window.handleAnyone=()=>{
-
 if(aStaff.value===ANYONE_ID){
-
 aDuration.value=1;
-
 aDuration.disabled=true;
-
 }else{
-
 aDuration.disabled=false;
-
-
-
 }
-
-
-
 };
 
 function checkTimeAvailability() {
 
   const timeStatus = document.getElementById('timeCheck');
   if (!timeStatus) return;
-
   // если duration не выбрана — ничего не показываем
   if (!aDuration.value) {
     timeStatus.textContent = '';
@@ -3298,7 +2971,6 @@ function checkTimeAvailability() {
   }
 
   const end = data.start + data.duration;
-
   const conflictType = checkCalendarConflict({
     staffId: data.staffId,
     date: data.date,
@@ -3400,33 +3072,17 @@ if (conflictType === "off") {
 }
 
 editId
-
 ? await updateDoc(doc(db,"appointments",editId),data)
-
 : await addDoc(collection(db,"appointments"),data);
-
-
-
 closeAppointment();
-
-
-
 };
-
-
 
 window.confirmDelete=()=>{ if(editId) deleteModal.classList.remove('hidden'); };
 
 window.deleteAppointment=async()=>{
-
 await deleteDoc(doc(db,"appointments",editId));
-
 editId=null;
-
 closeDelete(); closeAppointment();
-
-
-
 };
 
 window.login = async () => {
@@ -6959,7 +6615,7 @@ window.closeOffWorkHardConflict = () => {
     <!-- Add Button -->
     <div style="margin-top:8px;">
       <button class="dr-button" onclick="addSplitRow()">
-        + Add Master
+        + Add Tech
       </button>
     </div>
 
