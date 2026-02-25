@@ -1627,6 +1627,50 @@ button:disabled{
   gap:6px;
   white-space:nowrap;
 }   
+   /* ===== DAILY REPORT: footer buttons always right ===== */
+#dailyReportModal .dr-footer,
+#dailyReportModal .modal-actions,
+#dailyReportModal .dr-actions-row {  /* на всякий случай, если у тебя другой контейнер */
+  width: 100% !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+  flex-wrap: wrap !important;
+}
+      /* ===== DAILY REPORT: stop horizontal overflow ===== */
+#dailyReportModal .daily-report-content,
+#dailyReportModal #dailyReportBody,
+#dailyReportModal .dr-rows-wrapper {
+  overflow-x: hidden !important;
+}
+
+#dailyReportModal .dr-head,
+#dailyReportModal .dr-row{
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+
+  column-gap: 6px !important;
+
+  /* tighter phone grid */
+  grid-template-columns:
+    20px                 /* # */
+    minmax(0, 1fr)       /* Service */
+    56px                 /* Tax */
+    56px                 /* Tip */
+    64px                 /* Payment */
+    70px !important;     /* Actions */
+}
+
+/* чтобы ячейки могли сжиматься */
+#dailyReportModal .dr-row > div,
+#dailyReportModal .dr-head > div{
+  min-width: 0 !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
