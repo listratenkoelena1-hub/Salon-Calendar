@@ -1692,6 +1692,19 @@ button:disabled{
 .dr-linklike-btn:hover {
   opacity: 1;
 }  
+     /* ===== Daily Report sizes ===== */
+
+/* default = staff (compact) */
+#dailyReportContent {
+  width: calc(100% - 24px);
+  max-width: 560px;
+}
+
+/* manager/reception = wider, but still safe on phone */
+#dailyReportContent.daily-report-wide {
+  width: calc(100% - 24px);
+  max-width: 980px;
+}
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -4874,8 +4887,6 @@ const withdrawalDisabled =
 
 html += `
   <div class="dr-footer">
-    <button class="dr-linklike-btn" onclick="addDrEntry()">Day entry</button>
-
     <button class="dr-button"
       ${(withdrawalDisabled || !editingAllowed) ? 'disabled' : ''}
       onclick="openWithdrawal()">
