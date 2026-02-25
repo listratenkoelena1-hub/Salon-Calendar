@@ -1627,50 +1627,7 @@ button:disabled{
   gap:6px;
   white-space:nowrap;
 }   
-   /* ===== DAILY REPORT: footer buttons always right ===== */
-#dailyReportModal .dr-footer,
-#dailyReportModal .modal-actions,
-#dailyReportModal .dr-actions-row {  /* на всякий случай, если у тебя другой контейнер */
-  width: 100% !important;
-  display: flex !important;
-  justify-content: flex-end !important;
-  gap: 8px !important;
-  flex-wrap: wrap !important;
-}
-      /* ===== DAILY REPORT: stop horizontal overflow ===== */
-#dailyReportModal .daily-report-content,
-#dailyReportModal #dailyReportBody,
-#dailyReportModal .dr-rows-wrapper {
-  overflow-x: hidden !important;
-}
 
-#dailyReportModal .dr-head,
-#dailyReportModal .dr-row{
-  box-sizing: border-box !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  min-width: 0 !important;
-
-  column-gap: 6px !important;
-
-  /* tighter phone grid */
-  grid-template-columns:
-    20px                 /* # */
-    minmax(0, 1fr)       /* Service */
-    56px                 /* Tax */
-    56px                 /* Tip */
-    64px                 /* Payment */
-    70px !important;     /* Actions */
-}
-
-/* чтобы ячейки могли сжиматься */
-#dailyReportModal .dr-row > div,
-#dailyReportModal .dr-head > div{
-  min-width: 0 !important;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -4686,8 +4643,8 @@ return;
   });
 
  let html = `
-  <div class="dr-table">
-    <div class="dr-head">
+  <div class="dr-table" style="width:100%; max-width:100%; overflow:hidden; box-sizing:border-box;">
+        <div class="dr-head" style="display:grid; width:100%; max-width:100%; box-sizing:border-box; column-gap:8px; align-items:center; grid-template-columns: 22px minmax(0,1fr) 72px 72px 84px 96px;">
       <div>#</div>
       <div>Service</div>
       <div class="dr-cell-right">Tax</div>
@@ -4713,11 +4670,11 @@ const taxCents = Math.round(serviceCents * 0.05);
 const serviceWithTax = fromCents(serviceCents + taxCents);
 
 html += `
-      <div class="dr-row ${!editingAllowed ? 'dr-locked' : ''}">
+            <div class="dr-row ${!editingAllowed ? 'dr-locked' : ''}" style="display:grid; width:100%; max-width:100%; box-sizing:border-box; column-gap:8px; align-items:center; grid-template-columns: 22px minmax(0,1fr) 72px 72px 84px 96px;">
         <div>${index + 1}</div>
 
         <div>
-  <input class="dr-input"
+  <input class="dr-input" style="width:100%; min-width:0; box-sizing:border-box;"
     type="number"
     min="0"
     step="0.01"
@@ -4733,7 +4690,7 @@ html += `
 
 
                 <div class="dr-cell-right">
-          <input class="dr-input"
+          <input class="dr-input" style="width:100%; min-width:0; box-sizing:border-box;"
             type="number"
             min="0"
             step="0.01"
@@ -4750,7 +4707,7 @@ html += `
     !e.pendingSplit &&
     !e.splitGroupId
       ? `
-        <select class="dr-select"
+        <select class="dr-select" style="width:100%; min-width:0; box-sizing:border-box;"
           onchange="updateDrField('${e.id}','paymentMethod',this.value)">
           <option value="card" ${e.payments?.[0]?.method==="card"?"selected":""}>Card</option>
           <option value="cash" ${e.payments?.[0]?.method==="cash"?"selected":""}>Cash</option>
@@ -4769,7 +4726,7 @@ html += `
 </div>
         </div>
 
-<div class="dr-action">
+<div class="dr-action" style="display:flex; justify-content:flex-end; gap:6px; min-width:0;">
   ${!isClosed && editingAllowed ? `
       <span onclick="openSplitModal('${e.id}')" style="cursor:pointer;">🔀</span>
       <span onclick="openPaymentPanel('${e.id}')" style="cursor:pointer;">💳</span>
@@ -4858,7 +4815,7 @@ const withdrawalDisabled =
   alreadyWithdrawnToday;
 
 html += `
-  <div class="dr-footer">
+  <div class="dr-footer" style="display:flex; justify-content:flex-end; gap:8px; width:100%; flex-wrap:wrap; margin-top:16px;">
     <button class="dr-button"
       ${(withdrawalDisabled || !editingAllowed) ? 'disabled' : ''}
       onclick="openWithdrawal()">
