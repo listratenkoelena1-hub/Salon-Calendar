@@ -1678,6 +1678,27 @@ button:disabled{
 .mgr-totals-right{
   text-align:right;
 }   
+      .dr-topbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:12px;
+}
+
+.dr-date-nav{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+  /* Manager Totals typography */
+.mgr-bottom-title{
+  font-weight:700;
+}
+
+.mgr-totals-two div{
+  font-weight:400; /* тонкий текст */
+}    
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -5537,17 +5558,20 @@ extrasToday.forEach(e => {
   <div class="mgr-totals-two">
 
     <div class="mgr-totals-left">
-      <div><b>Total Service</b> ${fromCents(totalServiceCents)}</div>
-      <div style="margin-top:8px;"><b>Total Service with Tax</b> ${fromCents(totalServiceCents + totalTaxCents)}</div>
-      <div style="margin-top:8px;"><b>Cash after withdrawals</b> ${fromCents(cashAfterWithdrawalsCents)}</div>
-    </div>
+  <div>Total Service ${fromCents(totalServiceCents)}</div>
+  <div>Total Service with Tax ${fromCents(totalServiceCents + totalTaxCents)}</div>
+
+  <div style="height:10px;"></div>  <!-- вот этот пробел -->
+
+  <div>Cash after withdrawals ${fromCents(cashAfterWithdrawalsCents)}</div>
+</div>
 
     <div class="mgr-totals-right">
-      <div><b>Total Card</b> ${fromCents(totalCardCents)}</div>
-      <div style="margin-top:8px;"><b>Total Cash</b> ${fromCents(totalCashCents)}</div>
-      <div style="margin-top:8px;"><b>Total Gift</b> ${fromCents(totalGiftCents)}</div>
-      <div style="margin-top:8px;"><b>Total Check</b> ${fromCents(totalCheckCents)}</div>
-    </div>
+  <div>Total Card ${fromCents(totalCardCents)}</div>
+  <div>Total Cash ${fromCents(totalCashCents)}</div>
+  <div>Total Gift ${fromCents(totalGiftCents)}</div>
+  <div>Total Check ${fromCents(totalCheckCents)}</div>
+</div>
 
   </div>
 `;
@@ -6588,13 +6612,13 @@ window.closeOffWorkHardConflict = () => {
   <div id="dailyReportContent" class="modal-content daily-report-content">
 
     <div class="dr-topbar">
-  <h3 id="drTitle">Daily Report</h3>
+  <h3 id="drTitle" style="margin:0;">Daily Report</h3>
 
-  <div class="dr-header">
-  <span class="dr-arrow" onclick="drPrevDay()">&lsaquo;</span>
-  <div id="drDateLabel" class="dr-date-label"></div>
-  <span class="dr-arrow" onclick="drNextDay()">&rsaquo;</span>
-</div>
+  <div class="dr-date-nav">
+    <span class="dr-arrow" onclick="drPrevDay()">&lsaquo;</span>
+    <div id="drDateLabel" class="dr-date-label"></div>
+    <span class="dr-arrow" onclick="drNextDay()">&rsaquo;</span>
+  </div>
 </div>
 
     <div id="dailyReportBody">
