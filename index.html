@@ -1627,7 +1627,57 @@ button:disabled{
   gap:6px;
   white-space:nowrap;
 }   
+/* ===== DR Manager bottom blocks (mobile safe) ===== */
 
+.mgr-bottom-stack{
+  width: 100%;
+  margin-top: 20px;
+}
+
+.mgr-bottom-block{
+  width: 100%;
+  border-top: 2px solid #ccc;
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
+.mgr-bottom-title{
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.mgr-sold-list{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Totals: vertical, left aligned */
+.mgr-totals-list{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.mgr-totals-list > div{
+  margin: 0 !important;
+}
+   /* Totals block: left/right columns from 1 function output */
+.mgr-totals-two{
+  display:flex;
+  justify-content:space-between;
+  gap:16px;
+  width:100%;
+}
+
+.mgr-totals-left{
+  text-align:left;
+}
+
+.mgr-totals-right{
+  text-align:right;
+}   
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -5172,25 +5222,22 @@ function renderManagerDailyReport() {
   html += `
       </div>
 
-      <div class="mgr-global" style="
-        display:flex;
-        justify-content:space-between;
-        margin-top:20px;
-      ">
+      <div class="mgr-bottom-stack">
 
-        <div style="flex:1;">
-          <div style="font-weight:600; margin-bottom:8px;">
-            Sold Today
-          </div>
+        <div class="mgr-bottom-block">
+          <div class="mgr-bottom-title">Sold Today</div>
           ${renderSoldTodayBlock()}
         </div>
 
-        <div style="text-align:right; min-width:320px;">
-          ${renderRightTotalsBlock()}
+        <div class="mgr-bottom-block">
+          <div class="mgr-bottom-title">Totals</div>
+          <div class="mgr-totals-list">
+            ${renderRightTotalsBlock()}
+          </div>
         </div>
 
       </div>
-  `;
+`;
 // ===== ROLE BUTTONS =====
   html += `
     <div style="
@@ -5487,29 +5534,23 @@ extrasToday.forEach(e => {
   const cashAfterWithdrawalsCents = totalCashCents - totalWithdrawalsCents;
 
   return `
-    <!-- ROW 1 -->
-    <div>
-      Total Service ${fromCents(totalServiceCents)} 
-      &nbsp;&nbsp;&nbsp;
-      Total Service with Tax ${fromCents(totalServiceCents + totalTaxCents)}
+  <div class="mgr-totals-two">
+
+    <div class="mgr-totals-left">
+      <div><b>Total Service</b> ${fromCents(totalServiceCents)}</div>
+      <div style="margin-top:8px;"><b>Total Service with Tax</b> ${fromCents(totalServiceCents + totalTaxCents)}</div>
+      <div style="margin-top:8px;"><b>Cash after withdrawals</b> ${fromCents(cashAfterWithdrawalsCents)}</div>
     </div>
 
-    <!-- ROW 2 -->
-    <div style="margin-top:8px;">
-      Total Card ${fromCents(totalCardCents)} 
-      &nbsp;&nbsp;&nbsp;
-      Total Cash ${fromCents(totalCashCents)} 
-      &nbsp;&nbsp;&nbsp;
-      Total Gift ${fromCents(totalGiftCents)} 
-      &nbsp;&nbsp;&nbsp;
-      Total Check ${fromCents(totalCheckCents)}
+    <div class="mgr-totals-right">
+      <div><b>Total Card</b> ${fromCents(totalCardCents)}</div>
+      <div style="margin-top:8px;"><b>Total Cash</b> ${fromCents(totalCashCents)}</div>
+      <div style="margin-top:8px;"><b>Total Gift</b> ${fromCents(totalGiftCents)}</div>
+      <div style="margin-top:8px;"><b>Total Check</b> ${fromCents(totalCheckCents)}</div>
     </div>
 
-    <!-- ROW 3 -->
-    <div style="margin-top:8px;">
-      Cash after withdrawals ${fromCents(cashAfterWithdrawalsCents)}
-    </div>
-  `;
+  </div>
+`;
 }
 
 function renderSoldTodayBlock() {
