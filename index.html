@@ -4644,7 +4644,7 @@ return;
 
  let html = `
   <div class="dr-table" style="width:100%; max-width:100%; overflow:hidden; box-sizing:border-box;">
-        <div class="dr-head" style="display:grid; width:100%; max-width:100%; box-sizing:border-box; column-gap:8px; align-items:center; grid-template-columns: 22px minmax(0,1fr) 72px 72px 84px 96px;">
+        <div class="dr-head" style="display:grid; width:100%; max-width:100%; box-sizing:border-box; column-gap:8px; align-items:center; grid-template-columns: 22px minmax(0,1fr) 44px 44px 60px 100px;">
       <div>#</div>
       <div>Service</div>
       <div class="dr-cell-right">Tax</div>
@@ -4670,7 +4670,7 @@ const taxCents = Math.round(serviceCents * 0.05);
 const serviceWithTax = fromCents(serviceCents + taxCents);
 
 html += `
-            <div class="dr-row ${!editingAllowed ? 'dr-locked' : ''}" style="display:grid; width:100%; max-width:100%; box-sizing:border-box; column-gap:8px; align-items:center; grid-template-columns: 22px minmax(0,1fr) 72px 72px 84px 96px;">
+            <div class="dr-row ${!editingAllowed ? 'dr-locked' : ''}" style="display:grid; width:100%; max-width:100%; box-sizing:border-box; column-gap:8px; align-items:center; grid-template-columns: 22px minmax(0,1fr) 44px 44px 60px 100px;">
         <div>${index + 1}</div>
 
         <div>
@@ -4726,7 +4726,7 @@ html += `
 </div>
         </div>
 
-<div class="dr-action" style="display:flex; justify-content:flex-end; gap:6px; min-width:0;">
+<div class="dr-action" style="display:flex; justify-content:flex-end; gap:2px; min-width:0;">
   ${!isClosed && editingAllowed ? `
       <span onclick="openSplitModal('${e.id}')" style="cursor:pointer;">🔀</span>
       <span onclick="openPaymentPanel('${e.id}')" style="cursor:pointer;">💳</span>
