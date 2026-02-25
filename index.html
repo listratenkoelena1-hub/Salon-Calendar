@@ -5561,8 +5561,9 @@ extrasToday.forEach(e => {
   <div>Total Service ${fromCents(totalServiceCents)}</div>
   <div>Total Service with Tax ${fromCents(totalServiceCents + totalTaxCents)}</div>
 
-  <div style="height:10px;"></div>  <!-- вот этот пробел -->
-
+<div>&nbsp;</div> <!-- строка 3 (пустая, вместо Card) -->
+  <div>&nbsp;</div> <!-- строка 4 (пустая, вместо Cash/Gift) -->
+  
   <div>Cash after withdrawals ${fromCents(cashAfterWithdrawalsCents)}</div>
 </div>
 
