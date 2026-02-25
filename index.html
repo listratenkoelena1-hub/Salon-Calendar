@@ -935,129 +935,7 @@ padding:10px 14px;
   mask-image: linear-gradient(to right, black 80%, transparent 100%);
   -webkit-mask-image: linear-gradient(to right, black 80%, transparent 100%);
 }
-  /* ===== DAILY REPORT ===== */
 
-.daily-report-content {
-  width: 92vw;          /* как остальные модалки */
-  max-width: 380px;     /* ширина телефона */
-  max-height: 95vh;
-  overflow-y: auto;
-}
-
-.daily-report-wide {
-  width: 900px !important;
-  max-width: 900px !important;
-}
-
-
-.dr-header {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  margin-bottom: 14px;
-}
-
-.dr-date-label {
-  font-size: 13px;
-  font-weight: 600;
-  min-width: 150px;
-  text-align: center;
-}
-
-/* ===== Compact Layout ===== */
-
-.dr-head {
-  display: grid;
-  grid-template-columns: 24px 64px 44px 44px 70px 24px;
-  font-size: 11px;
-  font-weight: 600;
-  margin-bottom: 6px;
-  opacity: 0.7;
-}
-
-.dr-row {
-  display: grid;
-  grid-template-columns: 24px 64px 44px 44px 70px 24px;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 8px;
-  font-size: 13px;
-}
-
-.dr-input {
-  width: 100%;
-  border: none;
-  border-bottom: 1px solid #e0e0e0;
-  font-size: 13px;
-  padding: 2px 0;
-  background: transparent;
-}
-
-.dr-input:focus {
-  outline: none;
-  border-bottom: 1px solid #888;
-}
-
-.dr-input:disabled {
-  border-bottom: none;
-  color: #666;
-}
-
-/* убрать стрелки */
-.dr-input::-webkit-outer-spin-button,
-.dr-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.dr-input[type=number] {
-  -moz-appearance: textfield;
-}
-
-.dr-select {
-  border: none;
-  border-bottom: 1px solid #e0e0e0;
-  background: transparent;
-  font-size: 13px;
-  padding: 2px 0;
-}
-
-.dr-select:focus {
-  outline: none;
-  border-bottom: 1px solid #888;
-}
-
-.dr-select:disabled {
-  border-bottom: none;
-  color: #666;
-}
-
-.dr-action {
-  cursor: pointer;
-  font-size: 16px;
-  text-align: center;
-}
-.dr-rows-wrapper {
-  max-height: 420px;   /* примерно 10 строк */
-  overflow-y: auto;
-  padding-right: 4px;
-}
-  .dr-button {
-  padding: 6px 14px;
-  border-radius: 14px;
-  border: 1px solid #ccc;
-  background: #f3f3f3;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.dr-button:disabled {
-  background: #e0e0e0;
-  color: #999;
-  border-color: #ddd;
-  cursor: not-allowed;
-}
  /* ===== EXTRA MODALS (Sell Product / Gift) ===== */
 .pay-head {
   display: inline-flex;
@@ -1535,60 +1413,45 @@ button:disabled{
 .smooth-section.show {
   opacity: 1;
 }   
-    /* =========================
-   DAILY REPORT (STAFF) UI
-   ========================= */
+/* =========================================================
+   DAILY REPORT (single source of truth) — staff compact + manager wide
+   Put at the END of <style>
+========================================================= */
 
-#dailyReportModal .modal-content {
-  max-width: 720px;
+/* STAFF default: compact (phone-friendly) */
+#dailyReportContent{
+  width: 92vw;
+  max-width: 380px;     /* как было: компактно */
+  max-height: 95vh;
+  overflow-y: auto;
+  overflow-x: hidden;   /* важно: убираем горизонтальный скролл */
 }
 
-/* Header: title + compact date nav */
-.dr-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
+/* MANAGER/RECEPTION: wide */
+#dailyReportContent.daily-report-wide{
+  max-width: 980px;
 }
 
-.dr-topbar h3 {
-  margin: 0;
+/* Header (date + arrows) */
+.dr-header{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  margin-bottom:12px;
+}
+.dr-date-label{
+  font-size:13px;
+  font-weight:600;
+  white-space:nowrap;
 }
 
-.dr-date-nav {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-}
-
-.dr-date-nav .dr-nav-btn {
-  border: none;
-  background: transparent;
-  padding: 4px 6px;
-  border-radius: 8px;
-  cursor: pointer;
-  line-height: 1;
-}
-
-.dr-date-nav .dr-nav-btn:hover {
-  background: rgba(0,0,0,0.06);
-}
-
-.dr-date-nav .dr-date-text {
-  font-weight: 600;
-  padding: 0 2px;
-}
-
-/* Table grid: full width, stable columns */
-.dr-table {
+/* Head + rows MUST match columns exactly */
+.dr-head,
+.dr-row{
   width: 100%;
-  margin-top: 8px;
-}
+  box-sizing: border-box;
 
-.dr-head, .dr-row {
-  width: 100%;
   display: grid;
   align-items: center;
   column-gap: 8px;
@@ -1596,114 +1459,86 @@ button:disabled{
   /* # | Service | Tax | Tip | Payment | Actions */
   grid-template-columns:
     28px
-    minmax(150px, 1fr)
+    minmax(0, 1fr)
     72px
     72px
-    64px
-    112px;
+    72px
+    96px;
 }
 
-.dr-head {
-  font-size: 12px;
-  font-weight: 700;
-  opacity: 0.75;
-  padding: 6px 0;
-  border-bottom: 1px solid rgba(0,0,0,0.10);
+/* prevent grid children from forcing width */
+.dr-head > div,
+.dr-row > div{
+  min-width: 0;
 }
 
-.dr-row {
-  padding: 6px 0;
-  border-bottom: 1px solid rgba(0,0,0,0.06);
+.dr-head{
+  font-size:12px;
+  font-weight:700;
+  opacity:0.75;
+  padding:6px 0;
+  border-bottom:1px solid rgba(0,0,0,0.10);
 }
 
-.dr-cell-right {
-  text-align: right;
+.dr-row{
+  padding:6px 0;
+  border-bottom:1px solid rgba(0,0,0,0.06);
 }
 
-/* Inputs should not break grid */
+/* Inputs/selects never overflow */
 .dr-row input,
-.dr-row select {
-  width: 100%;
-  box-sizing: border-box;
+.dr-row select{
+  width:100%;
+  box-sizing:border-box;
+  min-width:0;
 }
 
-/* Actions: always stick to right edge */
-.dr-action {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 6px;
+/* Your existing dr-input/dr-select styles can stay, this just enforces layout */
+
+/* Rows scroll only vertically, never horizontally */
+.dr-rows-wrapper{
+  max-height: 420px;
+  overflow-y: auto;
+  overflow-x: hidden;   /* важно */
+  padding-right: 4px;
+}
+
+/* Actions aligned to the right, compact */
+.dr-action{
+  display:flex;
+  justify-content:flex-end;
+  align-items:center;
+  gap:6px;
   min-height: 28px;
+  text-align:right;
 }
 
-/* "+ Add Entry" as small text-link */
-.dr-add-link {
-  margin-top: 10px;
-  display: inline-block;
-  font-size: 13px;
-  font-weight: 600;
-  opacity: 0.85;
-  cursor: pointer;
-  user-select: none;
+/* + Add Entry as link */
+.dr-add-link{
+  margin-top:10px;
+  display:inline-block;
+  font-size:13px;
+  font-weight:600;
+  cursor:pointer;
+  opacity:0.85;
+  user-select:none;
 }
+.dr-add-link:hover{ opacity:1; }
 
-.dr-add-link:hover {
-  opacity: 1;
-  text-decoration: none;
+/* Totals 2 columns */
+.dr-totals{
+  margin-top:14px;
+  padding-top:12px;
+  border-top:1px solid rgba(0,0,0,0.10);
+  font-size:13px;
 }
-
-/* Totals: 2 columns (left & right) */
-.dr-totals {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(0,0,0,0.10);
-  font-size: 13px;
-}
-
-.dr-totals-grid {
-  display: grid;
+.dr-totals-grid{
+  display:grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px 20px;
 }
-
-.dr-totals-right {
-  text-align: right;
-}
-
-/* Footer buttons: reuse modal-actions layout */
-.dr-footer {
-  margin-top: 14px;
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-}
-
-.dr-linklike-btn {
-  border: none;
-  background: transparent;
-  padding: 0;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  opacity: 0.85;
-}
-
-.dr-linklike-btn:hover {
-  opacity: 1;
-}  
-     /* ===== Daily Report sizes ===== */
-
-/* default = staff (compact) */
-#dailyReportContent {
-  width: calc(100% - 24px);
-  max-width: 560px;
-}
-
-/* manager/reception = wider, but still safe on phone */
-#dailyReportContent.daily-report-wide {
-  width: calc(100% - 24px);
-  max-width: 980px;
+.dr-totals-right{
+  text-align:right;
 }
 </style>
 
@@ -4648,6 +4483,12 @@ function isDrEditingAllowed() {
   return isSameDay;
 }
 function renderDailyReport() {
+        // ===== DAILY REPORT WIDTH (staff compact / manager wide) =====
+  const drBox = document.getElementById('dailyReportContent');
+  if (drBox) {
+    const isWide = (currentUserRole === 'manager' || currentUserRole === 'reception');
+    drBox.classList.toggle('daily-report-wide', isWide);
+  }
        // ===== SPRING MODE: показываем staff-таблицу для Spring Help =====
   if (drViewMode === "spring") {
     renderSpringDailyReport();
