@@ -1142,7 +1142,29 @@ textarea {
 }
       /* ===== Make Split Payment panel always on top ===== */
 #paymentPanel { z-index: 11000 !important; }
+/* ===== Split Payment: keep rows inside modal (no horizontal overflow) ===== */
+#paymentPanel .modal-content{
+  width: 92vw;
+  max-width: 380px;
+  box-sizing: border-box;
+  overflow: hidden; /* stops any horizontal bleed */
+}
 
+#paymentPanel #paymentRows > div{
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#paymentPanel #paymentRows select,
+#paymentPanel #paymentRows input{
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
+}
+
+#paymentPanel #paymentRows span{
+  flex: 0 0 auto;
+}
       /* =========================================================
    UI SYSTEM (v1) — tokens + reusable components
    Put at the END of <style> to override older rules
