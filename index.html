@@ -1142,7 +1142,32 @@ textarea {
 }
       /* ===== Make Split Payment panel always on top ===== */
 #paymentPanel { z-index: 11000 !important; }
+/* ===== Split Payment: keep inside + compact width ===== */
+#paymentPanel .modal-content{
+  width: 92vw;
+  max-width: 320px;      /* было 400px inline — делаем компактно */
+  box-sizing: border-box;
+  overflow: hidden;      /* чтобы ничего не вылезало по бокам */
+}
 
+/* строки сплита не расширяют модалку */
+#paymentPanel #paymentRows > div{
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#paymentPanel #paymentRows select{
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
+}
+
+#paymentPanel #paymentRows input{
+  flex: 0 0 90px;
+  width: 90px;
+  min-width: 0;
+}
+      #paymentPanel #paymentRows span{ display:none !important; }
       /* =========================================================
    UI SYSTEM (v1) — tokens + reusable components
    Put at the END of <style> to override older rules
@@ -6965,7 +6990,7 @@ window.closeOffWorkHardConflict = () => {
 
 </div>
 <div id="paymentPanel" class="modal hidden">
-  <div class="modal-content" style="max-width:400px;">
+  <div class="modal-content" style="max-width:320px;">
 
     <h3>Split Payment</h3>
 
