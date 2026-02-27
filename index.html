@@ -5406,7 +5406,7 @@ window.sellProduct = () => {
 
   document.getElementById('productName').value = '';
   document.getElementById('productAmount').value = '';
-
+ document.getElementById('productPayment').value = 'card';
   extraSplitPayments.product = null;
   setExtraSplitUI('product', false);
 
@@ -5460,7 +5460,7 @@ window.sellGiftCertificate = () => {
   if (currentUserRole !== 'reception') return;
 
   document.getElementById('giftAmount').value = '';
-
+ document.getElementById('productPayment').value = 'card';
   extraSplitPayments.gift = null;
   setExtraSplitUI('gift', false);
 
