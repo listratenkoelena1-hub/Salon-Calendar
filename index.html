@@ -1749,14 +1749,7 @@ body.modal-open{
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
 }
-     /* ===== Fix Split badge width (prevent flex stretch) ===== */
-#productPaymentSplitLabel,
-#giftPaymentSplitLabel{
-  width: auto !important;
-  display: inline-block !important;
-  flex: 0 0 auto !important;
-  align-self: flex-start !important;
-} 
+     
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -6841,7 +6834,7 @@ window.closeOffWorkHardConflict = () => {
       <input id="productAmount" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;">
 
       <!-- payment select OR Split label -->
-      <div style="position:relative; width:100%;">
+      <div style="position:relative; display:flex; align-items:center;">
         <select id="productPayment" style="width:100%;">
           <option value="card">Card</option>
           <option value="cash">Cash</option>
@@ -6887,7 +6880,7 @@ window.closeOffWorkHardConflict = () => {
       <input id="giftAmount" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;">
 
       <!-- payment select OR Split label -->
-      <div style="position:relative; width:100%;">
+      <div style="position:relative; display:flex; align-items:center;">
         <select id="giftPayment" style="width:100%;">
           <option value="card">Card</option>
           <option value="cash">Cash</option>
