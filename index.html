@@ -6834,7 +6834,7 @@ window.closeOffWorkHardConflict = () => {
       <input id="productAmount" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;">
 
       <!-- payment select OR Split label -->
-      <div style="position:relative; display:flex; align-items:center;">
+      <div style="position:relative;">
         <select id="productPayment" style="width:100%;">
           <option value="card">Card</option>
           <option value="cash">Cash</option>
@@ -6844,7 +6844,7 @@ window.closeOffWorkHardConflict = () => {
 
         <div id="productPaymentSplitLabel"
              class="hidden"
-     style="width:fit-content; display:inline-block; padding:6px 8px; border:1px solid #ccc; border-radius:6px; background:#f3f3f3; font-size:14px; opacity:0.8;display:none;">
+     style="position:absolute; left:0; top:0; padding:6px 8px; border:1px solid #ccc; border-radius:6px; background:#f3f3f3; font-size:14px; opacity:0.8; z-index:2;">
           Split
         </div>
       </div>
@@ -6880,7 +6880,7 @@ window.closeOffWorkHardConflict = () => {
       <input id="giftAmount" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;">
 
       <!-- payment select OR Split label -->
-      <div style="position:relative; display:flex; align-items:center;">
+      <div style="position:relative;">
         <select id="giftPayment" style="width:100%;">
           <option value="card">Card</option>
           <option value="cash">Cash</option>
@@ -6890,7 +6890,7 @@ window.closeOffWorkHardConflict = () => {
 
         <div id="giftPaymentSplitLabel"
              class="hidden"
-             style="width:fit-content; padding:6px 8px; border:1px solid #ccc; border-radius:6px; background:#f3f3f3; font-size:14px; opacity:0.8;display:none;">
+             style="position:absolute; left:0; top:0; padding:6px 8px; border:1px solid #ccc; border-radius:6px; background:#f3f3f3; font-size:14px; opacity:0.8; z-index:2;">
           Split
         </div>
       </div>
