@@ -1749,6 +1749,14 @@ body.modal-open{
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
 }
+     /* ===== Fix Split badge width (prevent flex stretch) ===== */
+#productPaymentSplitLabel,
+#giftPaymentSplitLabel{
+  width: auto !important;
+  display: inline-block !important;
+  flex: 0 0 auto !important;
+  align-self: flex-start !important;
+} 
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
