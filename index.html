@@ -1703,10 +1703,7 @@ body.modal-open{
   width: 100%;
   overflow: hidden;
 }
-body.modal-open #todayBtn,
-body.modal-open #walkInBtn{
-  display: none !important;
-}
+
 /* чтобы iOS не “проталкивал” скролл на фон */
 .modal{
   overscroll-behavior: contain;
@@ -1725,6 +1722,10 @@ body.modal-open #walkInBtn{
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
 }
+  body.modal-open #todayBtn,
+body.modal-open #walkInBtn{
+  display: none !important;
+}    
  /* ======================================================
    STAFF MODAL — CLEAN FINAL VERSION
 ====================================================== */
