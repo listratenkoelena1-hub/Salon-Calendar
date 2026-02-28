@@ -1726,12 +1726,21 @@ body.modal-open{
    STAFF MODAL — CLEAN FINAL VERSION
 ====================================================== */
 
-/* Base modal width (manager / reception) */
-#staffModal .staff-modal-content{
-  width: 92vw;
+/* Manager/Reception: real wide card (so Close is at far right) */
+#staffModal:not(.staff-view) .staff-modal-content{
+  width: 1100px;
   max-width: 1100px;
 }
 
+/* Staff: compact */
+#staffModal.staff-view .staff-modal-content{
+  width: 92vw;
+  max-width: 360px;
+}
+#staffModal{
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 /* Staff compact mode */
 #staffModal.staff-view .staff-modal-content{
   max-width: 360px;
