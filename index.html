@@ -288,9 +288,7 @@ margin-top:8px;
   cursor: pointer;
 }
 
-.staff-row select.staff-role {
-  width: 110px !important;
-}
+
 
 
 
@@ -764,16 +762,7 @@ padding:10px 14px;
   min-width: 0;
 }
 
-.staff-role {
-  width: 110px;          /* <= ключевой момент */
-  min-width: 110px;
-  max-width: 110px;
 
-  padding: 6px 8px;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-  font-size: 13px;
-}
 
 .staff-btn {
   padding: 6px 12px;
@@ -793,10 +782,7 @@ padding:10px 14px;
   background: #ffeaea;
   border-color: #ffb3b3;
 }
-.staff-modal-content {
-  width: 92vw;
-  max-width: 1100px;
-}
+
 
 .staff-status {
   font-size: 12px;
@@ -835,20 +821,8 @@ padding:10px 14px;
   display: none !important;
 }
 
-/* компактная модалка */
-#staffModal.staff-view .staff-modal-content {
-  max-width: 360px;
-}
 
-/* компактная строка: имя + цвет */
-#staffModal.staff-view .staff-row {
-  grid-template-columns:
-    1fr
-    28px;
-}
-#staffModal.staff-view .add-staff-section {
-  display: none;
-}
+
 /* ===== APPOINTMENT MODAL NEW LAYOUT ===== */
 
 .ap-row {
@@ -1748,7 +1722,65 @@ body.modal-open{
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
 }
-     
+ /* ======================================================
+   STAFF MODAL — CLEAN FINAL VERSION
+====================================================== */
+
+/* Base modal width (manager / reception) */
+#staffModal .staff-modal-content{
+  width: 92vw;
+  max-width: 1100px;
+}
+
+/* Staff compact mode */
+#staffModal.staff-view .staff-modal-content{
+  max-width: 360px;
+}
+
+/* Staff row grid (manager full layout) */
+#staffModal .staff-row{
+  display: grid;
+  grid-template-columns:
+    120px   /* name */
+    28px    /* color */
+    200px   /* email */
+    110px   /* role */
+    64px    /* save */
+    32px    /* up */
+    32px    /* down */
+    104px   /* remove */
+    60px;   /* saved */
+  align-items: center;
+  gap: 10px;
+}
+
+/* Staff compact layout */
+#staffModal.staff-view .staff-row{
+  grid-template-columns:
+    1fr
+    28px;
+}
+
+/* Hide manager-only controls in staff mode */
+#staffModal.staff-view .staff-email,
+#staffModal.staff-view .staff-role,
+#staffModal.staff-view .staff-btn,
+#staffModal.staff-view hr,
+#staffModal.staff-view h4,
+#staffModal.staff-view #newStaffName,
+#staffModal.staff-view #newStaffEmail,
+#staffModal.staff-view #newStaffRole,
+#staffModal.staff-view button[onclick="addStaff()"],
+#staffModal.staff-view .add-staff-section{
+  display: none !important;
+}
+
+/* Role select clean width */
+#staffModal .staff-role{
+  width: 110px;
+  min-width: 110px;
+  max-width: 110px;
+}    
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
