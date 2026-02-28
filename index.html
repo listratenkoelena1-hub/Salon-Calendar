@@ -1800,6 +1800,21 @@ body.modal-open{
   display: flex;
   justify-content: flex-end;
 }    
+  /* Staff modal horizontal scroll (includes Close button) */
+#staffModal #staffScroll{
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* This sets the "real" width of the staff modal content for manager */
+#staffModal:not(.staff-view) #staffScrollInner{
+  min-width: 1100px;
+}
+
+/* Compact staff view */
+#staffModal.staff-view #staffScrollInner{
+  min-width: 360px;
+}    
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -2129,66 +2144,37 @@ body.modal-open{
 
 <h3>Staff</h3>
 
+<!-- HORIZONTAL SCROLL WRAPPER -->
+<div id="staffScroll">
 
+  <!-- INNER WIDTH (this defines the “big modal width”) -->
+  <div id="staffScrollInner">
 
-<div id="staffList"></div>
+    <div id="staffList"></div>
 
+    <div class="add-staff-section">
+      <hr>
+      <h4 style="margin: 12px 0 8px 0;">Add new staff</h4>
 
+      <div class="staff-card staff-row">
+        <input id="newStaffName" class="staff-name-input" placeholder="Name">
+        <input type="color" id="newStaffColor" class="staff-color" value="#cce5ff">
+        <input id="newStaffEmail" type="email" class="staff-email" placeholder="Email">
 
-<div class="add-staff-section">
+        <select id="newStaffRole" class="staff-role">
+          <option value="staff">Staff</option>
+          <option value="manager">Manager</option>
+        </select>
 
-  <hr>
-  <h4 style="margin: 12px 0 8px 0;">Add new staff</h4>
+        <button class="staff-btn primary" onclick="addStaff()">Add</button>
+      </div>
+    </div>
 
-  <div class="staff-card staff-row">
+    <div class="modal-actions">
+      <button onclick="closeStaff()">Close</button>
+    </div>
 
-    <!-- NAME -->
-    <input
-      id="newStaffName"
-      class="staff-name-input"
-      placeholder="Name"
-    >
-
-    <!-- COLOR -->
-    <input
-      type="color"
-      id="newStaffColor"
-      class="staff-color"
-      value="#cce5ff"
-    >
-
-    <!-- EMAIL -->
-    <input
-      id="newStaffEmail"
-      type="email"
-      class="staff-email"
-      placeholder="Email"
-    >
-
-    <!-- ROLE -->
-    <select
-      id="newStaffRole"
-      class="staff-role"
-    >
-      <option value="staff">Staff</option>
-      <option value="manager">Manager</option>
-    </select>
-
-    <!-- ADD -->
-    <button
-      class="staff-btn primary"
-      onclick="addStaff()"
-    >
-      Add
-    </button>
   </div>
-</div>
-
-
-<div class="modal-actions" id="staffModalActions">
-  <button onclick="closeStaff()">Close</button>
-</div>
-</div>
 </div>
 
 
