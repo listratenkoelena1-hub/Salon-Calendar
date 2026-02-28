@@ -692,7 +692,7 @@ padding:10px 14px;
   cursor: pointer;
 
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 5000;
+  z-index: 3500;
 }
   #walkInBtn {
   position: fixed;
@@ -712,7 +712,7 @@ padding:10px 14px;
   cursor: pointer;
 
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 5000;
+  z-index: 3500;
 }
 
 .staff-row {
@@ -1703,7 +1703,10 @@ body.modal-open{
   width: 100%;
   overflow: hidden;
 }
-
+body.modal-open #todayBtn,
+body.modal-open #walkInBtn{
+  display: none !important;
+}
 /* чтобы iOS не “проталкивал” скролл на фон */
 .modal{
   overscroll-behavior: contain;
