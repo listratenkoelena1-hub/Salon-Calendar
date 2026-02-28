@@ -186,20 +186,18 @@ cursor:pointer;
 
 
 
-.modal {
-
-position:fixed;
-inset:0;
-background:rgba(0,0,0,.4);
-display:flex;
-align-items:center;
-justify-content:center;
-z-index:6000;
-
+.modal{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.4);
+  display:flex;
+  align-items:flex-start;      /* было center */
+  justify-content:center;
+  z-index:6000;
+  overflow-y:auto;             /* ВОТ ЭТО КЛЮЧ */
+  padding: 12px;               /* чтобы сверху/снизу был зазор */
+  -webkit-overflow-scrolling: touch;
 }
-
-
-
 
 .hidden { display:none; }
 
@@ -208,8 +206,9 @@ z-index:6000;
   padding:15px;
   border-radius:12px;
   width:380px;
-  max-height:90vh;
-  overflow:visible;
+  max-height: calc(100vh - 24px);
+overflow-y: auto;
+-webkit-overflow-scrolling: touch;
   position: relative;
 }
 
@@ -2046,16 +2045,9 @@ body.modal-open{
 <!-- ===================== -->
 
 <div id="searchModal" class="modal hidden">
-
-
-
 <div class="modal-content">
 
-
-
 <h3>Search client</h3>
-
-
 
 <input id="searchInput"
        oninput="runSearch()"
@@ -2065,30 +2057,11 @@ body.modal-open{
        oninput="runSearch()"
        placeholder="Phone number"
        style="margin-top:8px; display:none;">
-
-
-
-
 <div id="searchResults"></div>
-
-
-
 <div class="modal-actions">
-
-
-
 <button onclick="closeSearch()">Close</button>
-
-
-
 </div>
-
-
-
 </div>
-
-
-
 </div>
 
 
@@ -2157,23 +2130,14 @@ body.modal-open{
     >
       Add
     </button>
-
   </div>
-
 </div>
 
 
 <div class="modal-actions">
   <button onclick="closeStaff()">Close</button>
 </div>
-
-
-
-
 </div>
-
-
-
 </div>
 
 
@@ -2183,157 +2147,44 @@ body.modal-open{
 <!-- ===================== -->
 
 <div id="deleteModal" class="modal hidden">
-
-
-
 <div class="modal-content">
-
-
-
 <p>Delete this appointment?</p>
-
-
-
 <div class="modal-actions">
-
-
-
 <button onclick="deleteAppointment()">Yes</button>
-
-
-
 <button onclick="closeDelete()">No</button>
-
-
-
 </div>
-
-
-
 </div>
-
-
-
 </div>
-
-
-
 <div id="staffDeleteModal" class="modal hidden">
-
-
-
 <div class="modal-content">
-
-
-
 <p>Delete staff member and all appointments?</p>
-
-
-
 <div class="modal-actions">
-
-
-
 <button onclick="confirmStaffDelete()">Yes</button>
-
-
-
 <button onclick="cancelStaffDelete()">Cancel</button>
-
-
-
 </div>
-
-
-
 </div>
-
-
-
 </div>
-
-
-
 <div id="conflictModal" class="modal hidden">
-
-
-
 <div class="modal-content">
-
-
-
 <h3>⚠️ TECH BUSY</h3>
-
-
-
 <p>Sorry, this staff member is busy.<br>Please choose another time.</p>
-
-
-
 <div class="modal-actions">
-
-
-
 <button onclick="closeConflict()">OK</button>
-
-
-
 </div>
-
-
-
 </div>
-
-
-
 </div>
-
-
-
 <div id="offWorkConflictModal" class="modal hidden">
-
-
-
   <div class="modal-content">
 
-
-
     <h3>🚫 Staff unavailable</h3>
-
-
-
     <p>
-
-
-
       Sorry, this staff member is off work at the selected time.<br>
-
-
-
       Please choose another time or staff member.
-
-
-
     </p>
-
-
-
     <div class="modal-actions">
-
-
-
       <button onclick="closeOffWorkConflict()">OK</button>
-
-
-
     </div>
-
-
-
   </div>
-
-
-
 </div>
 
 
@@ -2376,20 +2227,12 @@ import {
   createUserWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
-
-
-
 initializeApp({
 
 apiKey:"AIzaSyC5BecKxYxQ9V5qbmXBNkTsvnIZBtK_dx8",
 authDomain:"rosesnails-calendar.firebaseapp.com",
 projectId:"rosesnails-calendar"
-
-
-
 });
-
-
 
 const db = getFirestore();
 const auth = getAuth();
@@ -2605,17 +2448,9 @@ calendarDate.value = today.toISOString().slice(0, 10);
 
 
 const anyonePopup = document.getElementById('anyonePopup');
-
 const anyonePopupList = document.getElementById('anyonePopupList');
-
-
-
 const START_MINUTES = 8 * 60; // 08:00
-
-
-
 const END_MINUTES = 20 * 60; // 8:00 PM
-
 const SLOT_MINUTES = 15;
 
 function highlightCurrentTimeRow() {
@@ -2657,10 +2492,10 @@ const SLOTS = Math.floor((END_MINUTES - START_MINUTES) / SLOT_MINUTES) + 1;
 
 
 const MORNING_SLOTS = 8;
-
 let morningExpanded = false; 
-
 const ANYONE_ID="anyone";
+   
+      
       // ===== SPRING (virtual staff for Daily Report only) =====
 const SPRING_HELP_ID = "spring_help";
 const SPRING_STAFF = {
@@ -3356,7 +3191,9 @@ const editorLabel =
     : currentUserRole === 'reception'
       ? 'Reception'
       : staff.find(s => s.id === currentUserStaffId)?.name || 'Staff';
-// ===== DURATION VALIDATION =====
+
+      
+      // ===== DURATION VALIDATION =====
 if (aStaff.value !== ANYONE_ID && !aDuration.value) {
   document.getElementById('durationError').style.display = 'block';
   return;
@@ -3503,20 +3340,15 @@ window.runSearch = () => {
       searchResults.innerHTML += `
         <div class="search-item"
              onclick="openFromSearch('${a.id}')">
-
           <b>${a.client || '—'}</b>
           ${a.noShow ? '<span style="color:#d32f2f; font-weight:600;"> (No-show)</span>' : ''}
-
           <br>
-
           ${a.date} ${timeLabel(a.start)} — ${s.name}
-
           ${
             currentUserRole === 'manager' && a.phone
               ? `<br><span style="font-size:11px; opacity:0.6;">${a.phone}</span>`
               : ''
           }
-
         </div>
       `;
     });
@@ -3525,40 +3357,35 @@ window.runSearch = () => {
 
 
 window.openFromSearch=id=>{
-
 closeSearch();
-
 const a=appointments.find(x=>x.id===id);
-
 if(!a) return;
-
 calendarDate.value=a.date;
-
 renderCalendar();
-
 setTimeout(()=>openEdit(id),50);
-
-
-
 };
 
 
-
+//======================================stuff modal===================================================//
 window.openStaff = () => {
   if (currentUserRole === 'reception') return;
 
-  staffModal.classList.remove('hidden');
-
+  // сначала выставляем режим (чтобы ширина была правильной сразу)
   if (currentUserRole === 'staff') {
     staffModal.classList.add('staff-view');
   } else {
     staffModal.classList.remove('staff-view');
   }
+
+  staffModal.classList.remove('hidden');
 };
 
 
 
-window.closeStaff=()=>staffModal.classList.add('hidden');
+window.closeStaff = () => {
+  staffModal.classList.add('hidden');
+  staffModal.classList.remove('staff-view'); // важно: сброс режима, чтобы менеджеру не осталась "узкая" версия
+};
 
 
 
@@ -3676,9 +3503,8 @@ await ensureAuthUser(email, role, docRef.id);
   newStaffName.value = '';
   newStaffEmail.value = '';
   newStaffRole.value = 'staff';
+  newStaffColor.selectedIndex = 0;    
 };
-
-
 
 window.updateStaffColor=(id,color)=>updateDoc(doc(db,"staff",id),{color});
 
@@ -3722,9 +3548,6 @@ updateDoc(doc(db,"staff",a.id),{order:j}),
 updateDoc(doc(db,"staff",b.id),{order:i})
 
 ]);
-
-
-
 };
 
 
@@ -3753,7 +3576,7 @@ staffToDelete=null;
 staffDeleteModal.classList.add('hidden');
 };
 
-
+//====================================================================//
 
 window.closeAppointment = () => {
   appointmentModal.classList.add('hidden');
@@ -3776,15 +3599,9 @@ window.closeSearch=()=>searchModal.classList.add('hidden');
 
 
 window.closeOffWorkConflict = () => {
-
   document
-
  .getElementById('offWorkConflictModal')
-
     .classList.add('hidden');
-
-
-
 };
 
 
@@ -4480,11 +4297,8 @@ await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
 
 
 window.toggleMorning = () => {
-
   morningExpanded = !morningExpanded;
-
   renderCalendar();
-
 };
 
 const dateLabel = document.getElementById('dateLabel');
