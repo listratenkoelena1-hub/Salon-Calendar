@@ -1781,6 +1781,16 @@ body.modal-open{
   min-width: 110px;
   max-width: 110px;
 }    
+  /* Close button should align to the FULL scrollable width */
+#staffModal #staffModalActions{
+  width: max-content;
+  margin-left: auto;
+}
+
+#staffModal #staffModalActions{
+  display: flex;
+  justify-content: flex-end;
+}    
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -2166,7 +2176,7 @@ body.modal-open{
 </div>
 
 
-<div class="modal-actions">
+<div class="modal-actions" id="staffModalActions">
   <button onclick="closeStaff()">Close</button>
 </div>
 </div>
