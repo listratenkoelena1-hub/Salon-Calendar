@@ -1819,6 +1819,50 @@ body.modal-open #walkInBtn{
 #staffModal.staff-view #staffScrollInner{
   min-width: 360px;
 }    
+ /* ===== TOAST NOTIFICATION ===== */
+
+#toastContainer {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast {
+  min-width: 240px;
+  max-width: 90vw;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: #333;
+  color: #fff;
+  font-size: 14px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: all 0.25s ease;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast.success {
+  background: #2e7d32;
+}
+
+.toast.warning {
+  background: #d97706;
+}
+
+.toast.error {
+  background: #c62828;
+}     
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -5262,6 +5306,28 @@ window.confirmOpenDay = async () => {
     document.getElementById('openDayStaff').value;
 
   const dateStr = getDrDateString();
+const formattedDate = new Date(dateStr + "T00:00:00")
+  .toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric"
+  });
+  // Проверяем статус дня
+  const existing = drDayStatus?.find(d =>
+    d.date === dateStr &&
+    d.staffId === staffId
+  );
+
+  if (existing && existing.locked === false) {
+    const staffName = staff.find(s => s.id === staffId)?.name || "";
+
+showToast(
+  `Day ${formattedDate} is already open for ${staffName}`,
+  "warning"
+);
+    closeOpenDayModal();
+    return;
+  }
 
   await setDoc(
     doc(db, "DayStatus", dateStr + "_" + staffId),
@@ -5273,10 +5339,16 @@ window.confirmOpenDay = async () => {
     }
   );
 
+  const staffName = staff.find(s => s.id === staffId)?.name || "";
+
+ showToast(
+  `Day ${formattedDate} opened for ${staffName}`,
+  "success"
+);
+
   closeOpenDayModal();
   renderDailyReport();
 };
-
 
 // ---------- SELL PRODUCT ----------
 
@@ -6544,6 +6616,25 @@ window.closeOffWorkHardConflict = () => {
     .getElementById('offWorkHardConflictModal')
     .classList.add('hidden');
 };
+      window.showToast = (message, type = "success", duration = 3000) => {
+  const container = document.getElementById("toastContainer");
+  if (!container) return;
+
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+
+  container.appendChild(toast);
+
+  // trigger animation
+  setTimeout(() => toast.classList.add("show"), 10);
+
+  // auto remove
+  setTimeout(() => {
+    toast.classList.remove("show");
+    setTimeout(() => toast.remove(), 250);
+  }, duration);
+};
 // ===== iOS FIX: lock background scroll when any modal is open =====
 window.addEventListener('DOMContentLoaded', () => {
   const modals = Array.from(document.querySelectorAll('.modal'));
@@ -6911,7 +7002,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   </div>
 </div>
-
+<div id="toastContainer"></div>
 </body>
 
 
