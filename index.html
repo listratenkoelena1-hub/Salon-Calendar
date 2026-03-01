@@ -2474,7 +2474,7 @@ window.openExtraSplitPayment = (extraType) => {
 
   const amount = Number(amountInput.value);
 if (!amount || amount <= 0) {
-  alert("Enter Amount first");
+  showToast("Enter Amount first", "error");
   return;
 }
 
@@ -3345,7 +3345,7 @@ window.login = async () => {
   try {
     await signInWithEmailAndPassword(auth, email, password);
   } catch (err) {
-    alert(err.message);
+    showToast(err.message || "Login or password is not correct", "error");
   }
 };
 window.logout = async () => {
@@ -3355,15 +3355,15 @@ window.resetPassword = async () => {
   const email = document.getElementById('loginEmail').value;
 
   if (!email) {
-    alert('Please enter your email first');
+    showToast("Please enter your email first", "warning");
     return;
   }
 
   try {
     await sendPasswordResetEmail(auth, email);
-    alert('Password reset email sent. Check your inbox.');
+    showToast("Password reset email sent. Check your inbox or spam.", "success", 3500);
   } catch (err) {
-    alert(err.message);
+    showToast(err.message || "Reset password error", "error");
   }
 };
 
@@ -6031,12 +6031,12 @@ if (!currentPaymentParent && !(paymentContext && paymentContext.mode === "extra"
   );
 
   if (totalPayments !== totalWithTax) {
-    alert("Payments must equal Service + Tax");
+    showToast("Payments must equal Service + Tax", "error", 3500);
     return;
   }
 
   if (tempPayments[0].amount < 0) {
-    alert("Invalid split");
+    showToast("Invalid split", "error");
     return;
   }
 // ===== EXTRA MODE (Sell Product / Gift): just store split and close =====
@@ -6427,7 +6427,7 @@ onAuthStateChanged(auth, async (user) => {
     });
   }
 if (!userSnap.exists()) {
-  alert("User has no role assigned");
+  showToast("User role is missing. Please contact admin.", "error", 4000);
   await signOut(auth);
   return;
 }
@@ -6438,7 +6438,7 @@ currentUserRole = data.role;
 currentUserStaffId = data.staffId;
 
 if (!currentUserRole) {
-  alert("Role missing in user document");
+  showToast("User role is missing. Please contact admin.", "error", 4000);
   await signOut(auth);
   return;
 }
@@ -6521,7 +6521,7 @@ window.confirmCloseDay = async () => {
   );
 
   if (openRows.length > 0) {
-    alert("Please close all rows before closing the day.");
+    showToast("Please close all entries before closing the day.", "warning", 4000);
     return;
   }
 
@@ -6589,7 +6589,7 @@ const todayStr =
   const balance = totalEarned - totalWithdrawn;
 
   if (amount > balance) {
-    alert("Not enough balance");
+   showToast("Not enough balance", "error", 3500);
     return;
   }
 const alreadyWithdrawnToday = drWithdrawals.some(w =>
@@ -6598,7 +6598,7 @@ const alreadyWithdrawnToday = drWithdrawals.some(w =>
 );
 
 if (alreadyWithdrawnToday) {
-  alert("Withdrawal already made today");
+  showToast("Withdrawal already made today", "warning", 3500);
   return;
 }
 
