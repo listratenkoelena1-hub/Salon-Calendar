@@ -3335,11 +3335,14 @@ window.resetPassword = async () => {
     const el = document.getElementById(id);
     if (el) el.classList.add('hidden');
   });
+        // force unlock (если где-то залип modal-open)
+  document.body.classList.remove('modal-open');
+  document.body.style.top = '';
 };    
 
 window.openSearch = () => {
-  closeAllMainModals();
-  searchInput.value = '';
+window.closeAllMainModals();
+      searchInput.value = '';
   searchResults.innerHTML = '';
 
   const phoneInput = document.getElementById('searchPhone');
@@ -3424,7 +3427,7 @@ setTimeout(()=>openEdit(id),50);
 //======================================stuff modal===================================================//
 window.openStaff = () => {
   if (currentUserRole === 'reception') return;
-  closeAllMainModals();
+  window.closeAllMainModals();
   // сначала выставляем режим (чтобы ширина была правильной сразу)
   if (currentUserRole === 'staff') {
     staffModal.classList.add('staff-view');
@@ -3722,7 +3725,8 @@ offEnd.onchange = () => {
 };
 
 window.openOffWork = () => {
-    closeAllMainModals();
+    window.closeAllMainModals();
+      
 offVacation.checked = false;
 vacationRange.style.display = 'none';
 
@@ -4436,7 +4440,7 @@ function formatDrDate(date) {
 }
 
 window.openDailyReport = () => {
-      closeAllMainModals();
+      window.closeAllMainModals();
      drCurrentDate = new Date();
 drCurrentDate.setHours(0,0,0,0);
       console.log("Opening DR with role:", currentUserRole);
