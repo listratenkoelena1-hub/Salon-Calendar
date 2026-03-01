@@ -4615,7 +4615,7 @@ function renderDailyReport() {
         // ===== DAILY REPORT WIDTH (staff compact / manager wide) =====
   const drBox = document.getElementById('dailyReportContent');
   if (drBox) {
-    const isWide = (currentUserRole === 'manager' || currentUserRole === 'reception');
+    const isWide = (drViewMode !== "spring") && (currentUserRole === 'manager' || currentUserRole === 'reception');
     drBox.classList.toggle('daily-report-wide', isWide);
   }
        // ===== SPRING MODE: показываем staff-таблицу для Spring Help =====
