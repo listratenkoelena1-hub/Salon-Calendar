@@ -3322,9 +3322,23 @@ window.resetPassword = async () => {
   }
 };
 
+  window.closeAllMainModals = () => {
+  const ids = [
+    'dailyReportModal',
+    'staffModal',
+    'searchModal',
+    'appointmentModal',
+    'offWorkModal'
+  ];
+
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  });
+};    
 
 window.openSearch = () => {
-
+  closeAllMainModals();
   searchInput.value = '';
   searchResults.innerHTML = '';
 
@@ -3410,7 +3424,7 @@ setTimeout(()=>openEdit(id),50);
 //======================================stuff modal===================================================//
 window.openStaff = () => {
   if (currentUserRole === 'reception') return;
-
+  closeAllMainModals();
   // сначала выставляем режим (чтобы ширина была правильной сразу)
   if (currentUserRole === 'staff') {
     staffModal.classList.add('staff-view');
@@ -3708,7 +3722,7 @@ offEnd.onchange = () => {
 };
 
 window.openOffWork = () => {
-  // --- RESET VACATION STATE ---
+    closeAllMainModals();
 offVacation.checked = false;
 vacationRange.style.display = 'none';
 
@@ -4422,6 +4436,7 @@ function formatDrDate(date) {
 }
 
 window.openDailyReport = () => {
+      closeAllMainModals();
      drCurrentDate = new Date();
 drCurrentDate.setHours(0,0,0,0);
       console.log("Opening DR with role:", currentUserRole);
@@ -6509,7 +6524,7 @@ window.closeOffWorkHardConflict = () => {
     .classList.add('hidden');
 };
 // ===== iOS FIX: lock background scroll when any modal is open =====
-(() => {
+window.addEventListener('DOMContentLoaded', () => {
   const modals = Array.from(document.querySelectorAll('.modal'));
   if (!modals.length) return;
 
@@ -6540,7 +6555,7 @@ window.closeOffWorkHardConflict = () => {
   modals.forEach(m => obs.observe(m, { attributes: true, attributeFilter: ['class'] }));
 
   updateLock();
-})();
+});
 </script>
 <!-- ===================== -->
 <!-- DAILY REPORT MODAL -->
