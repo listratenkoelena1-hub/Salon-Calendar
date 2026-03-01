@@ -5005,37 +5005,32 @@ function renderSpringDailyReport() {
 
   html += `</div>`;
 
-  // ===== Add Entry =====
-  html += `
-    <div style="margin-top:14px; margin-bottom:6px;">
-      <button class="dr-button" ${!editingAllowed ? 'disabled' : ''} onclick="addSpringEntry()">
-        + Add Entry
-      </button>
-    </div>
-  `;
+  // ===== ADD ENTRY LINK (text, left) =====
+html += editingAllowed
+  ? `<div class="dr-add-link" onclick="addSpringEntry()">+ Add Entry</div>`
+  : `<div class="dr-add-link" style="opacity:0.4; pointer-events:none;">+ Add Entry</div>`;
 
-  // ===== Totals block (простое) =====
-  html += `
-    <div style="margin-top:16px; font-size:13px; border-top:1px solid #eee; padding-top:12px;">
-      <div><b>Total Service:</b> $${fromCents(totalServiceCents)}</div>
-      <div style="margin-top:6px;"><b>Total Service+Tax:</b> $${fromCents(totalServiceCents + totalTaxCents)}</div>
-      <div style="margin-top:6px;"><b>Today Tips:</b> $${fromCents(totalTipsCents)}</div>
+  // ===== TOTALS (staff style) =====
+html += `
+  <div class="dr-totals">
+    <div class="dr-totals-grid">
+      <div>
+        <div><b>Total service:</b> $${fromCents(totalServiceCents)}</div>
+        <div style="margin-top:6px;"><b>Total service+tax:</b> $${fromCents(totalServiceCents + totalTaxCents)}</div>
+        <div style="margin-top:6px;"><b>Today tips:</b> $${fromCents(totalTipsCents)}</div>
+      </div>
     </div>
-  `;
+  </div>
+`;
 
-  // ===== Buttons: только Close =====
-  html += `
-    <div style="
-      display:flex;
-      gap:8px;
-      margin-top:16px;
-      justify-content:flex-end;
-    ">
-      <button class="dr-button" onclick="closeDailyReport()">
-        Close
-      </button>
-    </div>
-  `;
+ // ===== FOOTER (staff style) =====
+html += `
+  <div class="dr-footer" style="display:flex; justify-content:flex-end; gap:8px; width:100%; flex-wrap:wrap; margin-top:16px;">
+    <button class="dr-button" onclick="closeDailyReport()">
+      Close
+    </button>
+  </div>
+`;
 
   body.innerHTML = html;
 }
