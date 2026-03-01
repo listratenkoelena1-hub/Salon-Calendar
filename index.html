@@ -4798,7 +4798,11 @@ html += `
 `;
    // ===== STAFF BUTTONS =====
 
-const todayStr = new Date().toISOString().slice(0, 10);
+const now = new Date();
+const todayStr =
+  now.getFullYear() + '-' +
+  String(now.getMonth() + 1).padStart(2, '0') + '-' +
+  String(now.getDate()).padStart(2, '0');
 const isToday = dateStr === todayStr;
 
 const alreadyWithdrawnToday = drWithdrawals.some(w =>
@@ -6412,7 +6416,11 @@ renderCalendar();
       
 window.openCloseDayModal = () => {
   const dateStr = getDrDateString();
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+const todayStr =
+  now.getFullYear() + '-' +
+  String(now.getMonth() + 1).padStart(2, '0') + '-' +
+  String(now.getDate()).padStart(2, '0');
 
   const dayClosed = drDayStatus?.some(d =>
     d.date === dateStr &&
@@ -6462,7 +6470,11 @@ window.confirmCloseDay = async () => {
 
 window.openWithdrawal = () => {
   const dateStr = getDrDateString();
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+const todayStr =
+  now.getFullYear() + '-' +
+  String(now.getMonth() + 1).padStart(2, '0') + '-' +
+  String(now.getDate()).padStart(2, '0');
 
   const dayClosed = drDayStatus?.some(d =>
     d.date === dateStr &&
@@ -6482,7 +6494,11 @@ window.closeWithdrawal = () => {
 
 window.confirmWithdrawal = async () => {
     const dateStr = getDrDateString();
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+const todayStr =
+  now.getFullYear() + '-' +
+  String(now.getMonth() + 1).padStart(2, '0') + '-' +
+  String(now.getDate()).padStart(2, '0');
 
 
   const amount = toCents(document.getElementById('withdrawAmount').value);
