@@ -1722,10 +1722,10 @@ body.modal-open{
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
 }
-  body.modal-open #todayBtn,
+  /* body.modal-open #todayBtn,
 body.modal-open #walkInBtn{
   display: none !important;
-}    
+}     */
  /* ======================================================
    STAFF MODAL — CLEAN FINAL VERSION
 ====================================================== */
@@ -3322,7 +3322,7 @@ window.resetPassword = async () => {
   }
 };
 
-  window.closeAllMainModals = () => {
+  function closeAllMainModals() {
   const ids = [
     'dailyReportModal',
     'staffModal',
@@ -3335,13 +3335,13 @@ window.resetPassword = async () => {
     const el = document.getElementById(id);
     if (el) el.classList.add('hidden');
   });
-        // force unlock (если где-то залип modal-open)
-  document.body.classList.remove('modal-open');
-  document.body.style.top = '';
-};    
+}
+
+// чтобы вызывать и как closeAllMainModals(), и как window.closeAllMainModals()
+window.closeAllMainModals = closeAllMainModals;
 
 window.openSearch = () => {
-window.closeAllMainModals();
+closeAllMainModals();
       searchInput.value = '';
   searchResults.innerHTML = '';
 
@@ -3427,7 +3427,7 @@ setTimeout(()=>openEdit(id),50);
 //======================================stuff modal===================================================//
 window.openStaff = () => {
   if (currentUserRole === 'reception') return;
-  window.closeAllMainModals();
+  closeAllMainModals();
   // сначала выставляем режим (чтобы ширина была правильной сразу)
   if (currentUserRole === 'staff') {
     staffModal.classList.add('staff-view');
@@ -3725,7 +3725,7 @@ offEnd.onchange = () => {
 };
 
 window.openOffWork = () => {
-    window.closeAllMainModals();
+    closeAllMainModals();
       
 offVacation.checked = false;
 vacationRange.style.display = 'none';
@@ -4440,7 +4440,7 @@ function formatDrDate(date) {
 }
 
 window.openDailyReport = () => {
-      window.closeAllMainModals();
+      closeAllMainModals();
      drCurrentDate = new Date();
 drCurrentDate.setHours(0,0,0,0);
       console.log("Opening DR with role:", currentUserRole);
@@ -6550,10 +6550,25 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateLock() {
-    const anyOpen = modals.some(m => !m.classList.contains('hidden'));
-    if (anyOpen) lockBody();
-    else unlockBody();
+  const anyOpen = modals.some(m => !m.classList.contains('hidden'));
+
+  // hide floating buttons when ANY modal is open
+  const todayBtn = document.getElementById('todayBtn');
+  const walkBtn  = document.getElementById('walkInBtn');
+
+  if (anyOpen) {
+    if (todayBtn) todayBtn.style.display = 'none';
+    if (walkBtn)  walkBtn.style.display = 'none';
+    lockBody();
+  } else {
+    unlockBody();
+    if (todayBtn) todayBtn.style.display = '';
+
+    // walk-in возвращаем как было (твоя роль-логика уже сама решает hidden/не hidden)
+    // просто не форсим display, чтобы не ломать твою логику ролей
+    if (walkBtn) walkBtn.style.display = '';
   }
+}
 
   const obs = new MutationObserver(updateLock);
   modals.forEach(m => obs.observe(m, { attributes: true, attributeFilter: ['class'] }));
