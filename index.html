@@ -1462,12 +1462,12 @@ button:disabled{
   /* # | Service | Tax(S+T) | Tips | Time | Payment | Actions */
   grid-template-columns:
   18px   /* # */
-  54px   /* Service */
-  54px   /* Tax */
-  48px   /* Tips */
-  54px   /* Time */
-  54px   /* Payment */
-  52px;  /* Actions */
+  7ch    /* Service: 999.99 (6 символов) + чуть воздуха */
+  7ch    /* Tax: 999.99 */
+  6ch    /* Tips: 99.99 (5 символов) + чуть воздуха */
+  7ch    /* Time: 10:05PM (7 символов) */
+  7ch    /* Payment: Card / Split */
+  10ch;  /* Actions: 3 иконки */
 }
 
 #dailyReportModal .dr-head{
@@ -1488,14 +1488,20 @@ button:disabled{
 #dailyReportModal .dr-row > div{
   min-width:0;
 }
-
-#dailyReportModal .dr-input,
 #dailyReportModal .dr-select{
+  width:100%;
+  font-size:13px;
+  height:24px;
+  padding: 2px 4px;
+}
+#dailyReportModal .dr-input{
   width:100%;
   box-sizing:border-box;
   font-size:13px;
+  padding: 2px 4px;      /* меньше внутренние поля */
+  height: 24px;
 }
-
+#dailyReportModal .dr-input-right{ text-align:right; }
       /* right aligned numeric cells */
 #dailyReportModal .dr-cell-right{
   text-align:right;
@@ -1514,11 +1520,17 @@ button:disabled{
 #dailyReportModal input[type=number]{
   -moz-appearance: textfield; /* Firefox */
 }
-/* actions */
 #dailyReportModal .dr-action{
   display:flex;
-  justify-content:flex-end;
+  justify-content:flex-end; /* иконки к правому краю колонки */
   gap:6px;
+  align-items:center;
+  white-space:nowrap;
+}
+#dailyReportModal .dr-action span{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
 }
 
 /* add entry */
