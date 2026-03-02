@@ -1078,12 +1078,14 @@ padding:10px 14px;
   margin-right:6px;
 }
 
+/* ✅ 16px оставляем ТОЛЬКО для Appointment modal (iOS fix),
+   а НЕ для всего сайта */
+#appointmentModal input,
+#appointmentModal select,
+#appointmentModal textarea,
 .ap-input-date,
 .ap-input-small,
-.ap-input-medium,
-input,
-select,
-textarea {
+.ap-input-medium{
   font-size: 16px !important;
 }
 .flatpickr-calendar {
@@ -1479,7 +1481,7 @@ button:disabled{
   border-bottom:1px solid rgba(0,0,0,.1);
 }
 #dailyReportModal .dr-time-gap{
-  padding-right: 4px; /* капелюшечка */
+  padding-right: 6px; /* капелюшечка */
 }      
 #dailyReportModal .dr-head > div{
   white-space: nowrap;
@@ -1505,6 +1507,22 @@ button:disabled{
   padding: 2px 4px;      /* меньше внутренние поля */
   height: 24px;
 }
+  /* ✅ Daily Report inputs/selects — полосочка, без серого фона и без округления */
+#dailyReportModal .dr-input,
+#dailyReportModal .dr-select{
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid rgba(0,0,0,.18) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}    
+   #dailyReportModal .dr-select{
+  font-size: 13px !important;
+  padding: 0 0 !important;
+  height: 22px !important;
+  line-height: 22px !important;
+}   
 #dailyReportModal .dr-input-right{ text-align:right; }
       /* right aligned numeric cells */
 #dailyReportModal .dr-cell-right{
