@@ -4515,15 +4515,17 @@ function isDrToday() {
 }
 
       function formatDrTime12(entry) {
-  // Firestore Timestamp -> local device time, 12-hour format, no space: 10:05AM
-  let dt = null;
+  // Time показываем ТОЛЬКО после закрытия строки (Done)
+  if (!entry || entry.status !== "closed") return "";
 
-  if (entry?.createdAt?.seconds) dt = new Date(entry.createdAt.seconds * 1000);
-  else if (entry?.createdAt instanceof Date) dt = entry.createdAt;
-  else return "-";
+  // Если запись закрыта, но createdAt ещё не пришёл из Firestore
+  if (!entry.createdAt) return "";
 
-  let h = dt.getHours();
-  const m = String(dt.getMinutes()).padStart(2, "0");
+  // Firestore Timestamp -> Date, или уже Date/строка
+  const d = entry.createdAt?.toDate ? entry.createdAt.toDate() : new Date(entry.createdAt);
+
+  let h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, "0");
   const ampm = h >= 12 ? "PM" : "AM";
   h = h % 12;
   if (h === 0) h = 12;
@@ -4769,9 +4771,9 @@ const totalServiceWithTax = totalServiceCents + totalTaxCents;
 // today tips (только выбранный день)
 const todayTips = totalTipsCents;
 
-// все заработанные tips за всё время
+// все заработанные tips за всё время (ТОЛЬКО закрытые строки)
 const totalEarnedTips = drEntries
-  .filter(e => e.staffId === currentUserStaffId)
+  .filter(e => e.staffId === currentUserStaffId && e.status === "closed")
   .reduce((sum, e) => sum + (Number(e.tip) || 0), 0);
 
 // все withdrawal (за всё время)
