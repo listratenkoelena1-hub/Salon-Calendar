@@ -1450,21 +1450,24 @@ button:disabled{
   white-space:nowrap;
 }
 
-/* table grid */
+/* table grid (stable, compact, 7 columns) */
 #dailyReportModal .dr-head,
 #dailyReportModal .dr-row{
   display:grid;
   width:100%;
   align-items:center;
-  column-gap:8px;
+  column-gap:6px;
+  box-sizing:border-box;
 
+  /* # | Service | Tax(S+T) | Tips | Time | Payment | Actions */
   grid-template-columns:
-    26px
-    minmax(140px, 1fr)
+    20px
     72px
     72px
-    78px
-    96px;
+    60px
+    66px
+    76px
+    90px;
 }
 
 #dailyReportModal .dr-head{
@@ -1491,6 +1494,24 @@ button:disabled{
   font-size:13px;
 }
 
+      /* right aligned numeric cells */
+#dailyReportModal .dr-cell-right{
+  text-align:right;
+  font-size:13px;
+}
+
+#dailyReportModal .dr-input-right{
+  text-align:right;
+}
+      /* remove number spinners */
+#dailyReportModal input[type=number]::-webkit-outer-spin-button,
+#dailyReportModal input[type=number]::-webkit-inner-spin-button{
+  -webkit-appearance: none;
+  margin: 0;
+}
+#dailyReportModal input[type=number]{
+  -moz-appearance: textfield; /* Firefox */
+}
 /* actions */
 #dailyReportModal .dr-action{
   display:flex;
@@ -4554,6 +4575,22 @@ function isDrToday() {
   return drLocalDateToYMD(drCurrentDate) === drLocalDateToYMD(today);
 }
 
+      function formatDrTime12(entry) {
+  // Firestore Timestamp -> local device time, 12-hour format, no space: 10:05AM
+  let dt = null;
+
+  if (entry?.createdAt?.seconds) dt = new Date(entry.createdAt.seconds * 1000);
+  else if (entry?.createdAt instanceof Date) dt = entry.createdAt;
+  else return "-";
+
+  let h = dt.getHours();
+  const m = String(dt.getMinutes()).padStart(2, "0");
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12;
+  if (h === 0) h = 12;
+
+  return `${h}:${m}${ampm}`;
+}
 function isDrDayLocked() {
   const dateStr = getDrDateString();
 
@@ -4685,11 +4722,12 @@ return;
 
  let html = `
   <div class="dr-table" style="width:100%; max-width:100%; overflow:hidden; box-sizing:border-box;">
-        <div class="dr-head" style="display:grid; width:100%; max-width:100%; box-sizing:border-box; column-gap:8px; align-items:center; grid-template-columns: 22px minmax(0,1fr) 44px 44px 60px 100px;">
+    <div class="dr-head">
       <div>#</div>
-      <div>Service</div>
+      <div class="dr-cell-right">Service</div>
       <div class="dr-cell-right">Tax</div>
       <div class="dr-cell-right">Tips</div>
+      <div class="dr-cell-right">Time</div>
       <div>Payment</div>
       <div class="dr-cell-right">Actions</div>
     </div>
@@ -4697,97 +4735,91 @@ return;
     <div class="dr-rows-wrapper">
 `;
 
-  entries.forEach((e, index) => {
-    const isClosed = e.status === "closed" || e.lockedSplit === true;
-    const serviceAmount = e.serviceAmount != null
-  ? fromCents(e.serviceAmount)
-  : "";
-    const tip = e.tip != null
-  ? fromCents(e.tip)
-  : "";
-    const paymentMethod = e.paymentMethod || "card";
-    const serviceCents = Number(e.serviceAmount) || 0;
-const taxCents = Math.round(serviceCents * 0.05);
-const serviceWithTax = fromCents(serviceCents + taxCents);
+entries.forEach((e, index) => {
 
-html += `
-            <div class="dr-row ${!editingAllowed ? 'dr-locked' : ''}" style="display:grid; width:100%; max-width:100%; box-sizing:border-box; column-gap:8px; align-items:center; grid-template-columns: 22px minmax(0,1fr) 44px 44px 60px 100px;">
-        <div>${index + 1}</div>
+  const isClosed = e.status === "closed" || e.lockedSplit === true;
 
-        <div>
-  <input class="dr-input" style="width:100%; min-width:0; box-sizing:border-box;"
-    type="number"
-    min="0"
-    step="0.01"
-    value="${serviceAmount}"
-    ${(isClosed || !editingAllowed) ? 'disabled' : ''}
-    onchange="updateDrField('${e.id}','serviceAmount',this.value)">
-</div>
+  const serviceAmount = e.serviceAmount != null ? fromCents(e.serviceAmount) : "";
+  const tip = e.tip != null ? fromCents(e.tip) : "";
 
-            <div class="dr-cell-right">
-        ${serviceWithTax}
+  const serviceCents = Number(e.serviceAmount) || 0;
+  const taxCents = Math.round(serviceCents * 0.05);
+
+  // ОСТАВЛЯЕМ как ты хочешь: Tax колонка показывает Service+Tax
+  const serviceWithTax = fromCents(serviceCents + taxCents);
+
+  const timeLabel = formatDrTime12(e);
+
+  html += `
+    <div class="dr-row ${!editingAllowed ? 'dr-locked' : ''}">
+      <div>${index + 1}</div>
+
+      <div>
+        <input class="dr-input dr-input-right"
+          type="number"
+          min="0"
+          step="0.01"
+          value="${serviceAmount}"
+          ${(isClosed || !editingAllowed) ? 'disabled' : ''}
+          onchange="updateDrField('${e.id}','serviceAmount',this.value)">
       </div>
 
+      <div class="dr-cell-right">${serviceWithTax}</div>
 
-
-                <div class="dr-cell-right">
-          <input class="dr-input" style="width:100%; min-width:0; box-sizing:border-box;"
-            type="number"
-            min="0"
-            step="0.01"
-            value="${tip}"
-            ${(isClosed || !editingAllowed) ? 'disabled' : ''}
-            onchange="updateDrField('${e.id}','tip',this.value)">
-        </div>
-
-        <div>
-         <div>
-  ${
-    !isClosed &&
-    editingAllowed &&
-    !e.pendingSplit &&
-    !e.splitGroupId
-      ? `
-        <select class="dr-select" style="width:100%; min-width:0; box-sizing:border-box;"
-          onchange="updateDrField('${e.id}','paymentMethod',this.value)">
-          <option value="card" ${e.payments?.[0]?.method==="card"?"selected":""}>Card</option>
-          <option value="cash" ${e.payments?.[0]?.method==="cash"?"selected":""}>Cash</option>
-          <option value="giftcard" ${e.payments?.[0]?.method==="giftcard"?"selected":""}>Gift</option>
-          <option value="check" ${e.payments?.[0]?.method==="check"?"selected":""}>Check</option>
-        </select>
-      `
-      : (
-          e.payments && e.payments.length > 1
-            ? "Split"
-            : e.payments && e.payments.length === 1
-              ? e.payments[0].method
-              : "-"
-        )
-  }
-</div>
-        </div>
-
-<div class="dr-action" style="display:flex; justify-content:flex-end; gap:4px; min-width:0;">
-  ${!isClosed && editingAllowed ? `
-      <span onclick="openSplitModal('${e.id}')" style="cursor:pointer;">🔀</span>
-      <span onclick="openPaymentPanel('${e.id}')" style="cursor:pointer;">💳</span>
-      <span onclick="closeDrEntry('${e.id}')" style="cursor:pointer;">✅</span>
-  ` : ''}
-
-     ${isClosed && deletingAllowed ? `
-      <span onclick="deleteDrEntry('${e.id}')" style="cursor:pointer;">🗑</span>
-  ` : ''}
-
-</div>
-
-
-
+      <div>
+        <input class="dr-input dr-input-right"
+          type="number"
+          min="0"
+          step="0.01"
+          value="${tip}"
+          ${(isClosed || !editingAllowed) ? 'disabled' : ''}
+          onchange="updateDrField('${e.id}','tip',this.value)">
       </div>
-    `;
-  });
 
-  html += `</div>`; // закрываем rows wrapper
-html += `</div>`; // closes .dr-table
+      <div class="dr-cell-right">${timeLabel}</div>
+
+      <div>
+        ${
+          !isClosed &&
+          editingAllowed &&
+          !e.pendingSplit &&
+          !e.splitGroupId
+            ? `
+              <select class="dr-select"
+                onchange="updateDrField('${e.id}','paymentMethod',this.value)">
+                <option value="card" ${e.payments?.[0]?.method==="card"?"selected":""}>Card</option>
+                <option value="cash" ${e.payments?.[0]?.method==="cash"?"selected":""}>Cash</option>
+                <option value="giftcard" ${e.payments?.[0]?.method==="giftcard"?"selected":""}>Gift</option>
+                <option value="check" ${e.payments?.[0]?.method==="check"?"selected":""}>Check</option>
+              </select>
+            `
+            : (
+                e.payments && e.payments.length > 1
+                  ? "Split"
+                  : e.payments && e.payments.length === 1
+                    ? e.payments[0].method
+                    : "-"
+              )
+        }
+      </div>
+
+      <div class="dr-action">
+        ${!isClosed && editingAllowed ? `
+          <span onclick="openSplitModal('${e.id}')" style="cursor:pointer;">🔀</span>
+          <span onclick="openPaymentPanel('${e.id}')" style="cursor:pointer;">💳</span>
+          <span onclick="closeDrEntry('${e.id}')" style="cursor:pointer;">✅</span>
+        ` : ''}
+
+        ${isClosed && deletingAllowed ? `
+          <span onclick="deleteDrEntry('${e.id}')" style="cursor:pointer;">🗑</span>
+        ` : ''}
+      </div>
+
+    </div>
+  `;
+});
+
+html += `</div></div>`; // close rows wrapper + dr-table
   // ===== TOTAL BLOCK =====
 
 // Total service with tax
@@ -4915,18 +4947,19 @@ function renderSpringDailyReport() {
     });
 
   let html = `
+  <div class="dr-table" style="width:100%; max-width:100%; overflow:hidden; box-sizing:border-box;">
     <div class="dr-head">
       <div>#</div>
-      <div>Service</div>
-      <div>Tax</div>
-      <div>Tip</div>
+      <div class="dr-cell-right">Service</div>
+      <div class="dr-cell-right">Tax</div>
+      <div class="dr-cell-right">Tips</div>
+      <div class="dr-cell-right">Time</div>
       <div>Payment</div>
-      <div></div>
+      <div class="dr-cell-right">Actions</div>
     </div>
 
     <div class="dr-rows-wrapper">
-  `;
-
+`;
   entries.forEach((e, index) => {
 
     const isClosed = e.status === "closed" || e.lockedSplit === true;
@@ -4938,79 +4971,84 @@ function renderSpringDailyReport() {
     const taxCents = Math.round(serviceCents * 0.05);
     const serviceWithTax = fromCents(serviceCents + taxCents);
 
-    html += `
-      <div class="dr-row ${!editingAllowed ? 'dr-locked' : ''}">
-        <div>${index + 1}</div>
+    const timeLabel = formatDrTime12(e);
 
-        <div>
-          <input class="dr-input"
-            type="number"
-            min="0"
-            step="0.01"
-            value="${serviceAmount}"
-            ${(isClosed || !editingAllowed) ? 'disabled' : ''}
-            onchange="updateDrField('${e.id}','serviceAmount',this.value)">
-        </div>
+html += `
+  <div class="dr-row ${!editingAllowed ? 'dr-locked' : ''}">
+    <div>${index + 1}</div>
 
-        <div>${serviceWithTax}</div>
+    <div>
+      <input class="dr-input dr-input-right"
+        type="number"
+        min="0"
+        step="0.01"
+        value="${serviceAmount}"
+        ${(isClosed || !editingAllowed) ? 'disabled' : ''}
+        onchange="updateDrField('${e.id}','serviceAmount',this.value)">
+    </div>
 
-        <div>
-          <input class="dr-input"
-            type="number"
-            min="0"
-            step="0.01"
-            value="${tip}"
-            ${(isClosed || !editingAllowed) ? 'disabled' : ''}
-            onchange="updateDrField('${e.id}','tip',this.value)">
-        </div>
+    <div class="dr-cell-right">${serviceWithTax}</div>
 
-        <div>
-          <div>
-            ${
-              !isClosed && editingAllowed && !e.pendingSplit && !e.splitGroupId
-                ? `
-                  <select class="dr-select"
-                    onchange="updateDrField('${e.id}','paymentMethod',this.value)">
-                    <option value="card" ${e.payments?.[0]?.method==="card"?"selected":""}>Card</option>
-                    <option value="cash" ${e.payments?.[0]?.method==="cash"?"selected":""}>Cash</option>
-                    <option value="giftcard" ${e.payments?.[0]?.method==="giftcard"?"selected":""}>Gift</option>
-                    <option value="check" ${e.payments?.[0]?.method==="check"?"selected":""}>Check</option>
-                  </select>
-                `
-                : (
-                    e.payments && e.payments.length > 1
-                      ? "Split"
-                      : e.payments && e.payments.length === 1
-                        ? e.payments[0].method
-                        : "-"
-                  )
-            }
-          </div>
-        </div>
+    <div>
+      <input class="dr-input dr-input-right"
+        type="number"
+        min="0"
+        step="0.01"
+        value="${tip}"
+        ${(isClosed || !editingAllowed) ? 'disabled' : ''}
+        onchange="updateDrField('${e.id}','tip',this.value)">
+    </div>
 
-        <div class="dr-action" style="display:flex; gap:6px; align-items:center;">
-          ${!isClosed && editingAllowed ? `
-            <span onclick="openSplitModal('${e.id}')" style="cursor:pointer;">🔀</span>
-            <span onclick="openPaymentPanel('${e.id}')" style="cursor:pointer;">💳</span>
-            <span onclick="closeDrEntry('${e.id}')" style="cursor:pointer;">✅</span>
-          ` : ''}
+    <div class="dr-cell-right">${timeLabel}</div>
 
-          ${isClosed && editingAllowed ? `
-            <span onclick="deleteDrEntry('${e.id}')" style="cursor:pointer;">🗑</span>
-          ` : ''}
-        </div>
-      </div>
-    `;
-  });
+    <div>
+      ${
+        !isClosed &&
+        editingAllowed &&
+        !e.pendingSplit &&
+        !e.splitGroupId
+          ? `
+            <select class="dr-select"
+              onchange="updateDrField('${e.id}','paymentMethod',this.value)">
+              <option value="card" ${e.paymentMethod==="card"?"selected":""}>Card</option>
+<option value="cash" ${e.paymentMethod==="cash"?"selected":""}>Cash</option>
+<option value="giftcard" ${e.paymentMethod==="giftcard"?"selected":""}>Gift</option>
+<option value="check" ${e.paymentMethod==="check"?"selected":""}>Check</option>
+            </select>
+          `
+          : (
+              e.payments && e.payments.length > 1
+                ? "Split"
+                : e.payments && e.payments.length === 1
+                  ? e.payments[0].method
+                  : "-"
+            )
+      }
+    </div>
 
-  html += `</div>`;
+    <div class="dr-action">
+      ${!isClosed && editingAllowed ? `
+        <span onclick="openSplitModal('${e.id}')" style="cursor:pointer;">🔀</span>
+        <span onclick="openPaymentPanel('${e.id}')" style="cursor:pointer;">💳</span>
+        <span onclick="closeDrEntry('${e.id}')" style="cursor:pointer;">✅</span>
+      ` : ''}
 
-  // ===== ADD ENTRY LINK (text, left) =====
+      ${isClosed && editingAllowed ? `
+        <span onclick="deleteDrEntry('${e.id}')" style="cursor:pointer;">🗑</span>
+      ` : ''}
+    </div>
+
+  </div>
+`;
+});
+html += `</div></div>`; // close rows wrapper + dr-table
+
+// ===== Add Entry link (like staff) =====
 html += editingAllowed
   ? `<div class="dr-add-link" onclick="addSpringEntry()">+ Add Entry</div>`
   : `<div class="dr-add-link" style="opacity:0.4; pointer-events:none;">+ Add Entry</div>`;
 
-  // ===== TOTALS (staff style) =====
+// ===== Totals (clean, same style size) =====
 html += `
   <div class="dr-totals">
     <div class="dr-totals-grid">
@@ -5023,16 +5061,14 @@ html += `
   </div>
 `;
 
- // ===== FOOTER (staff style) =====
+// ===== Footer (Close only) =====
 html += `
-  <div class="dr-footer" style="display:flex; justify-content:flex-end; gap:8px; width:100%; flex-wrap:wrap; margin-top:16px;">
-    <button class="dr-button" onclick="closeDailyReport()">
-      Close
-    </button>
+  <div style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end;">
+    <button class="dr-button" onclick="closeDailyReport()">Close</button>
   </div>
 `;
 
-  body.innerHTML = html;
+body.innerHTML = html;
 }
 
 function renderManagerDailyReport() {
