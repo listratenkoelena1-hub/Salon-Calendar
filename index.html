@@ -5531,6 +5531,20 @@ function renderRightTotalsBlock() {
   if (p.method === "giftcard") totalGiftCents += p.amount;
   if (p.method === "check") totalCheckCents += p.amount;
 });
+   // ✅ ADD TIPS to global payment totals
+const tipCents = Number(e.tip) || 0;
+
+const tipMethod =
+  e.tipMethod ||
+  e.paymentMethod ||
+  (Array.isArray(e.payments) && e.payments.length === 1 ? e.payments[0].method : null);
+
+if (tipCents > 0 && tipMethod) {
+  if (tipMethod === "card") totalCardCents += tipCents;
+  if (tipMethod === "cash") totalCashCents += tipCents;
+  if (tipMethod === "giftcard") totalGiftCents += tipCents;
+  if (tipMethod === "check") totalCheckCents += tipCents;
+}     
 });
 
 
