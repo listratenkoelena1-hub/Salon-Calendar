@@ -5828,25 +5828,83 @@ const totalServiceCents =
   parentServiceCents + childrenTotalServiceCents;
 const originalPayments = entry.payments || [];
 
-function distributePayments(serviceCents) {
+// --- helpers ---
+function sumPayments(payments){
+  return (payments || []).reduce((s,p)=> s + (Number(p.amount)||0), 0);
+}
 
+// totalGroupWithTax (как у тебя уже было внутри distributePayments)
+function calcTotalGroupWithTax(){
+  const parentWithTax = (parentServiceCents + Math.round(parentServiceCents * 0.05));
+
+  const childrenWithTax = entry.pendingSplit.reduce((sum, r) => {
+    const s = Number(r.amount) || 0;
+    const t = Math.round(s * 0.05);
+    return sum + s + t;
+  }, 0);
+
+  return parentWithTax + childrenWithTax;
+}
+
+const totalGroupWithTax = calcTotalGroupWithTax();
+const originalPaymentsTotal = sumPayments(originalPayments);
+
+// tips могли быть уже “вшиты” в payments.amount (например 125 вместо 105)
+const tipsEmbeddedInPayments = Math.max(0, originalPaymentsTotal - totalGroupWithTax);
+
+// какой метод считать “методом чаевых”
+const tipsMethod =
+  entry.tipMethod ||
+  (originalPayments[0]?.method || entry.paymentMethod || "card");
+
+// делаем “чистые” платежи: service+tax без tips
+const serviceOnlyPayments = (originalPayments || []).map(p => ({...p}));
+
+if (tipsEmbeddedInPayments > 0) {
+  // вычитаем tips из одного метода (того, куда они были добавлены)
+  const idx = serviceOnlyPayments.findIndex(p => p.method === tipsMethod);
+  const i = (idx >= 0) ? idx : 0;
+
+  serviceOnlyPayments[i] = {
+    ...serviceOnlyPayments[i],
+    amount: Math.max(0, (Number(serviceOnlyPayments[i].amount)||0) - tipsEmbeddedInPayments)
+  };
+}
+
+// распределяем ТОЛЬКО service+tax по долям
+function distributeServicePayments(serviceCents) {
   const taxCents = Math.round(serviceCents * 0.05);
   const totalWithTax = serviceCents + taxCents;
 
-  const totalGroupWithTax =
-    (parentServiceCents + Math.round(parentServiceCents * 0.05)) +
-    entry.pendingSplit.reduce((sum, r) => {
-      const s = Number(r.amount) || 0;
-      const t = Math.round(s * 0.05);
-      return sum + s + t;
-    }, 0);
-
   const ratio = totalWithTax / totalGroupWithTax;
 
-  return originalPayments.map(p => ({
+  return serviceOnlyPayments.map(p => ({
     method: p.method,
-    amount: Math.round(p.amount * ratio)
+    amount: Math.round((Number(p.amount) || 0) * ratio)
   }));
+}
+
+// добавляем чаевые обратно (уже как tipShare конкретного мастера)
+function buildFinalPayments(serviceCents, tipShareCents){
+  const payments = distributeServicePayments(serviceCents);
+
+  // добавляем tipShare в tipsMethod
+  const idx = payments.findIndex(p => p.method === tipsMethod);
+  const i = (idx >= 0) ? idx : 0;
+
+  // если вдруг payments пустые — создаём 1 метод
+  if (!payments.length) {
+    return [{ method: tipsMethod, amount: tipShareCents }];
+  }
+
+  payments[i] = {
+    ...payments[i],
+    amount: (Number(payments[i].amount)||0) + (Number(tipShareCents)||0)
+  };
+
+  // если Split Service без Split Payment — методов должен быть 1
+  // (оставляем как есть, но если вдруг оказалось больше 1, НЕ трогаем — это уже split payment кейс)
+  return payments;
 }
   // ----- parent tip -----
   const parentTipShare = Math.round(
@@ -5863,7 +5921,7 @@ await updateDoc(doc(db, "DayEntries", id), {
   isParent: true,
   lockedSplit: true,
   pendingSplit: null,
-  payments: distributePayments(parentServiceCents),
+  payments: buildFinalPayments(parentServiceCents, parentTipShare),
 });
 // ----- children -----
 for (const row of entry.pendingSplit) {
@@ -5883,7 +5941,7 @@ for (const row of entry.pendingSplit) {
     serviceAmount: serviceCents,
     tip: tipShare,
         tipMethod: entry.tipMethod || entry.paymentMethod || null,    
-    payments: distributePayments(serviceCents),
+    payments: buildFinalPayments(serviceCents, tipShare),
     status: "closed",
     splitGroupId: splitGroupId,
     isParent: false,
