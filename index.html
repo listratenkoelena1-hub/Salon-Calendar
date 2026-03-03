@@ -975,9 +975,14 @@ padding:10px 14px;
 /* общая сетка (заголовок и строки) — 5 колонок */
 .mgr-grid{
   display: grid;
-  grid-template-columns: 7ch 7ch 5ch 5ch 7ch;  /* Srv | S+T | Pay | Tip | Time */
-  column-gap: 4px;
+  grid-template-columns: 6.5ch 6.5ch 4.5ch 4.5ch 6.5ch; /* компактнее */
+  column-gap: 2px;                                      /* меньше расстояние */
   align-items: center;
+}
+
+.mgr-grid > div{
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .mgr-grid-head{
@@ -998,7 +1003,7 @@ padding:10px 14px;
 }
 
 /* выравнивание по колонкам */
-.mgr-col-num{ text-align: right; }
+.mgr-col-num{ text-align: left; }
 .mgr-col-pay{ text-align: left; text-transform: capitalize; }
 .mgr-col-time{ text-align: right; }
 
