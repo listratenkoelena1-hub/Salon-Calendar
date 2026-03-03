@@ -2015,12 +2015,33 @@ body.modal-open #walkInBtn{
 </div>
 
 <div style="margin-top:12px;">
-  <div class="switch-title">No Show</div>
+  <div style="display:flex; gap:14px; align-items:flex-start;">
 
-  <label class="switch" style="margin-top:6px;">
-    <input type="checkbox" id="aNoShow">
-    <span class="slider"></span>
-  </label>
+    <div style="min-width:90px;">
+      <div class="switch-title">No Show</div>
+      <label class="switch" style="margin-top:6px;">
+        <input type="checkbox" id="aNoShow">
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div style="min-width:90px;">
+      <div class="switch-title">Canceled</div>
+      <label class="switch" style="margin-top:6px;">
+        <input type="checkbox" id="aCanceled">
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div id="cancelCommentWrap" style="flex:1; display:none;">
+      <div class="switch-title">Comment</div>
+      <input id="aCancelComment"
+             class="ap-input-medium"
+             placeholder="Reason / comment"
+             style="margin-top:6px; width:100%;">
+    </div>
+
+  </div>
 </div>
 
 <div class="modal-actions">
@@ -2336,10 +2357,29 @@ const aDuration = document.getElementById('aDuration');
 const phoneRow = document.getElementById('phoneRow');
 const aClient = document.getElementById('aClient');
   const aNoShow = document.getElementById('aNoShow');
+  const aCanceled = document.getElementById('aCanceled');
+const aCancelComment = document.getElementById('aCancelComment');
+const cancelCommentWrap = document.getElementById('cancelCommentWrap');    
 const aNote = document.getElementById('aNote');
 const changeDateBtn = document.getElementById('changeDateBtn');
 let appointmentDatePicker = null;
+function updateCancelUI() {
+  if (!cancelCommentWrap) return;
 
+  if (aCanceled && aCanceled.checked) {
+    cancelCommentWrap.style.display = 'block';
+  } else {
+    cancelCommentWrap.style.display = 'none';
+    if (aCancelComment) aCancelComment.value = '';
+  }
+}
+
+if (aCanceled) {
+  aCanceled.addEventListener('change', () => {
+    updateCancelUI();
+    checkTimeAvailability();
+  });
+}
 function initAppointmentDatePicker() {
   if (appointmentDatePicker) {
     appointmentDatePicker.destroy();
@@ -2607,6 +2647,7 @@ function checkCalendarConflict({
     if (a.staffId !== staffId) return false;
     if (a.date !== date) return false;
     if (a.noShow === true) return false;
+    if (a.canceled === true) return false;    
 
     const aStart = a.start;
     const aEnd = a.start + a.duration;
@@ -2922,7 +2963,7 @@ if (!o.allDay) {
   });
 
   const dayAppointments = appointments.filter(
-  a => a.date === calendarDate.value && a.noShow !== true
+  a => a.date === calendarDate.value && a.noShow !== true && a.canceled !== true
 );
 
   const anyoneGroups = {};
@@ -3066,6 +3107,13 @@ aStaff.style.opacity = '1';
 changeDateBtn.style.display = '';
 aClient.value='';
 aNote.value='';
+aPhone.value = '';
+aNoShow.checked = false;
+aCanceled.checked = false;
+aCancelComment.value = '';
+updateCancelUI();
+document.getElementById('durationError').style.display = 'none';
+aDuration.value = '';     
 document.getElementById('appointmentEditorLabel').textContent = '';
 applyAppointmentTintNow();
 };
@@ -3079,6 +3127,9 @@ aClient.value = '';
 aPhone.value = '';
 aNote.value = '';
 aNoShow.checked = false;
+aCanceled.checked = false;
+aCancelComment.value = '';
+updateCancelUI();      
   appointmentModal.classList.remove('hidden');
   aDate.value = calendarDate.value;
   fillSelects();
@@ -3094,6 +3145,9 @@ aDuration.value = '';
 aPhone.value = '';
   aNote.value = '';
 aNoShow.checked = false;
+ aCanceled.checked = false;
+aCancelComment.value = '';
+updateCancelUI();     
   handleAnyone();
 document.getElementById('appointmentEditorLabel').textContent = '';
 applyAppointmentTintNow();
@@ -3123,6 +3177,9 @@ aClient.value=a.client;
 aPhone.value = a.phone || '';
 aNote.value=a.note||'';
 aNoShow.checked = a.noShow === true;
+aCanceled.checked = a.canceled === true;
+aCancelComment.value = a.cancelComment || '';
+updateCancelUI();     
 handleAnyone();
 applyAppointmentTintNow();
 };
@@ -3256,7 +3313,9 @@ const data = {
   client: aClient.value,
   note: aNote.value,
   noShow: aNoShow.checked === true,
-  lastEditedBy: editorLabel
+canceled: aCanceled.checked === true,
+cancelComment: aCanceled.checked ? (aCancelComment.value || '').trim() : null,
+lastEditedBy: editorLabel
 };
   if (isOlderThan7Days(data.date)) {
   return;
@@ -3405,6 +3464,8 @@ window.runSearch = () => {
              onclick="openFromSearch('${a.id}')">
           <b>${a.client || '—'}</b>
           ${a.noShow ? '<span style="color:#d32f2f; font-weight:600;"> (No-show)</span>' : ''}
+          ${a.canceled ? '<span style="color:#f57c00; font-weight:600;"> (Cancelled)</span>' : ''}
+${a.canceled && a.cancelComment ? `<br><span style="font-size:11px; color:#fb8c00; opacity:0.9;">${a.cancelComment}</span>` : ''}
           <br>
           ${a.date} ${timeLabel(a.start)} — ${s.name}
           ${
@@ -4161,7 +4222,8 @@ const weeklyEnd = offAllDay.checked ? SLOTS : +offEnd.value;
 const futureConflict = appointments.some(a => {
 
   if (a.staffId !== offStaff.value) return false;
-
+if (a.noShow === true) return false;
+if (a.canceled === true) return false;
   const appDate = getLocalDateFromInput(a.date);
 
   // только будущие даты
