@@ -4644,7 +4644,7 @@ let totalCheckCents = 0;
   .filter(e => e.status === "closed")
   .forEach(e => {
 
-    const service = Number(e.serviceAmount) || 0;
+const service = Number(e.serviceAmount) || 0;
 const tip = Number(e.tip) || 0;
 const tax = Math.round(service * 0.05);
 
@@ -4652,12 +4652,37 @@ totalServiceCents += service;
 totalTaxCents += tax;
 totalTipsCents += tip;
 
-if (e.paymentMethod === "cash") totalCashCents += service + tax;
-if (e.paymentMethod === "card") totalCardCents += service + tax;
-if (e.paymentMethod === "giftcard") totalGiftCents += service + tax;
-if (e.paymentMethod === "check") totalCheckCents += service + tax;
+// 1) Считаем base (service+tax) по методам оплаты
+// Если payments есть — берём их (split и обычные)
+// Если payments нет — fallback на paymentMethod
+const basePayments =
+  (Array.isArray(e.payments) && e.payments.length)
+    ? e.payments
+    : (e.paymentMethod ? [{ method: e.paymentMethod, amount: service + tax }] : []);
 
-return;
+basePayments.forEach(p => {
+  const amt = Number(p.amount) || 0;
+  if (p.method === "card") totalCardCents += amt;
+  if (p.method === "cash") totalCashCents += amt;
+  if (p.method === "giftcard") totalGiftCents += amt;
+  if (p.method === "check") totalCheckCents += amt;
+});
+
+// 2) Tips добавляем ОДНИМ методом (tipMethod)
+// tipMethod будет:
+// - обычный платеж: совпадает с paymentMethod
+// - split payment: спрашиваем в модалке и сохраняем tipMethod
+const tipMethod =
+  e.tipMethod ||
+  e.paymentMethod ||
+  (Array.isArray(e.payments) && e.payments.length === 1 ? e.payments[0].method : null);
+
+if (tip > 0 && tipMethod) {
+  if (tipMethod === "card") totalCardCents += tip;
+  if (tipMethod === "cash") totalCashCents += tip;
+  if (tipMethod === "giftcard") totalGiftCents += tip;
+  if (tipMethod === "check") totalCheckCents += tip;
+}
 
   });
 
@@ -5058,7 +5083,18 @@ function renderManagerDailyReport() {
     if (p.method === "giftcard") totalGiftCents += p.amount;
     if (p.method === "check") totalCheckCents += p.amount;
   });
+// ✅ Tips добавляем ОДНИМ методом (tipMethod)
+const tipMethod =
+  e.tipMethod ||
+  e.paymentMethod ||
+  (Array.isArray(e.payments) && e.payments.length === 1 ? e.payments[0].method : null);
 
+if (tipCents > 0 && tipMethod) {
+  if (tipMethod === "card") totalCardCents += tipCents;
+  if (tipMethod === "cash") totalCashCents += tipCents;
+  if (tipMethod === "giftcard") totalGiftCents += tipCents;
+  if (tipMethod === "check") totalCheckCents += tipCents;
+}
 });
 
       // ===== ALL TIME TIPS =====
@@ -5730,7 +5766,24 @@ if (!snap.exists()) return;
 const entry = snap.data();
 
   if (!entry) return;
+// ===== TIP METHOD PROMPT (Split Payment + tips) =====
+const tipCentsNow = Number(entry.tip) || 0;
 
+// Split Payment считаем так: payments есть и методов больше 1
+const methodsNow = Array.from(new Set((entry.payments || []).map(p => p.method).filter(Boolean)));
+const isSplitPayNow = methodsNow.length > 1;
+
+// Если tips > 0 и Split Payment и tipMethod ещё не задан — спросить и выйти
+if (tipCentsNow > 0 && isSplitPayNow && !entry.tipMethod) {
+  openTipMethodModal(id, methodsNow);
+  return;
+}
+
+// Если НЕ split payment, но есть tips и tipMethod пустой — просто приравнять к paymentMethod
+// (на случай если где-то tipMethod не заполнился)
+if (tipCentsNow > 0 && !isSplitPayNow && !entry.tipMethod && entry.paymentMethod) {
+  await updateDoc(doc(db, "DayEntries", id), { tipMethod: entry.paymentMethod });
+}
   const dateStr = getDrDateString();
 
   const activeStaffId = getActiveDrStaffId();
@@ -5791,13 +5844,13 @@ const parentTotalWithTax = parentServiceCents + parentTaxCents;
 
 await updateDoc(doc(db, "DayEntries", id), {
   tip: parentTipShare,
+  tipMethod: entry.tipMethod || entry.paymentMethod || null,
   splitGroupId: splitGroupId,
   isParent: true,
   lockedSplit: true,
   pendingSplit: null,
   payments: distributePayments(parentServiceCents),
 });
-
 // ----- children -----
 for (const row of entry.pendingSplit) {
 
@@ -5815,6 +5868,7 @@ for (const row of entry.pendingSplit) {
     staffId: row.staffId,
     serviceAmount: serviceCents,
     tip: tipShare,
+        tipMethod: entry.tipMethod || entry.paymentMethod || null,    
     payments: distributePayments(serviceCents),
     status: "closed",
     splitGroupId: splitGroupId,
@@ -6126,7 +6180,47 @@ window.closePaymentPanel = function () {
   tempPayments = [];
   paymentContext = null;
 };
-    
+let tipMethodEntryId = null;
+
+function labelPayMethod(m){
+  if (m === "card") return "Card";
+  if (m === "cash") return "Cash";
+  if (m === "giftcard") return "Gift";
+  if (m === "check") return "Check";
+  return m;
+}
+
+window.openTipMethodModal = function(entryId, methods){
+  tipMethodEntryId = entryId;
+
+  const uniq = Array.from(new Set((methods || []).filter(Boolean)));
+  const box = document.getElementById("tipMethodChoices");
+  if (box) {
+    box.innerHTML = uniq.map(m =>
+      `<button class="dr-button" type="button" onclick="confirmTipMethod('${m}')">${labelPayMethod(m)}</button>`
+    ).join("");
+  }
+
+  document.getElementById("tipMethodModal").classList.remove("hidden");
+};
+
+window.closeTipMethodModal = function(){
+  document.getElementById("tipMethodModal").classList.add("hidden");
+  tipMethodEntryId = null;
+};
+
+window.confirmTipMethod = async function(method){
+  if (!tipMethodEntryId) return;
+
+  const id = tipMethodEntryId;
+
+  await updateDoc(doc(db, "DayEntries", id), { tipMethod: method });
+
+  closeTipMethodModal();
+
+  // повторно запускаем Done — теперь tipMethod уже есть, и строка реально закроется
+  await closeDrEntry(id);
+};    
 function renderSplitRows() {
 
   const container = document.getElementById("splitRows");
@@ -6974,6 +7068,20 @@ window.addEventListener('DOMContentLoaded', () => {
 
   </div>
 </div>
+     <div id="tipMethodModal" class="modal hidden">
+  <div class="modal-content" style="width:92vw; max-width:320px;">
+    <h3 style="margin-top:0;">Tips payment</h3>
+    <div style="font-size:14px; margin-bottom:12px;">
+      Save tips as which payment method?
+    </div>
+
+    <div id="tipMethodChoices" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-start;"></div>
+
+    <div class="modal-actions" style="justify-content:flex-end; margin-top:14px;">
+      <button class="dr-button" onclick="closeTipMethodModal()">Close</button>
+    </div>
+  </div>
+</div> 
 <div id="toastContainer"></div>
 </body>
 
