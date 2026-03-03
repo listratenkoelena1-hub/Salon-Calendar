@@ -1682,10 +1682,7 @@ body.modal-open{
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
 }
-  /* body.modal-open #todayBtn,
-body.modal-open #walkInBtn{
-  display: none !important;
-}     */
+  
  /* ======================================================
    STAFF MODAL — CLEAN FINAL VERSION
 ====================================================== */
@@ -1822,7 +1819,10 @@ body.modal-open #walkInBtn{
 
 .toast.error {
   background: #c62828;
-}     
+}   
+    #appointmentStatusBlock {
+  display: none;
+}  
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -3169,6 +3169,7 @@ if(!a) return;
 editId=id;
 if (appointmentStatusBlock) appointmentStatusBlock.style.display = 'block';      
 appointmentModal.classList.remove('hidden');
+document.getElementById('appointmentStatusBlock').style.display = 'block';      
 fillSelects();
 // редактирование — разрешаем менять staff и дату
 aStaff.disabled = false;
@@ -3708,7 +3709,10 @@ staffDeleteModal.classList.add('hidden');
 //====================================================================//
 
 window.closeAppointment = () => {
+   document.getElementById('appointmentStatusBlock').style.display = 'none';
+   
   appointmentModal.classList.add('hidden');
+      
       resetAppointmentModalTint();
 
   // ===== RESET WALK-IN LOCKS =====
@@ -6534,7 +6538,7 @@ window.openWalkIn = () => {
 document.getElementById('durationError').style.display = 'none';
 
   appointmentModal.classList.remove('hidden');
-
+document.getElementById('appointmentStatusBlock').style.display = "none";
   // дата = текущая выбранная
   aDate.value = calendarDate.value;
 
