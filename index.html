@@ -932,118 +932,123 @@ padding:10px 14px;
 .pay-split-icon:hover {
   opacity: 1;
 }     
-/* ===== MANAGER DAILY REPORT ===== */
+/* ===== MANAGER DAILY REPORT (STAFF CARDS REDESIGN) ===== */
 
-.mgr-wrapper {
+.mgr-wrapper{
   width: 100%;
 }
 
-.mgr-staff-scroll {
+.mgr-staff-scroll{
   display: flex;
-  gap: 14px;
+  gap: 10px;
   overflow-x: auto;
-  padding-bottom: 10px;
+  padding: 2px 2px 10px 2px;
+  -webkit-overflow-scrolling: touch;
 }
 
-.mgr-card {
-  width: 160px;
-  flex: 0 0 160px;
-  border-right: 1px solid #e5e5e5;
-  padding-right: 6px;
+/* карточка мастера */
+.mgr-card{
+  width: 172px;
+  flex: 0 0 172px;
+
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.14);
+  border-left-width: 6px;              /* цвет мастера зададим inline */
+  box-shadow: 0 8px 18px rgba(0,0,0,0.12);
+
+  padding: 8px;
+  box-sizing: border-box;
+
+  /* фон (tint) зададим inline */
 }
 
-
-
-.mgr-card-title {
-  font-weight: 600;
+/* имя мастера сверху */
+.mgr-card-title{
+  font-weight: 700;
   font-size: 14px;
   margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.mgr-head {
+/* общая сетка (заголовок и строки) — 5 колонок */
+.mgr-grid{
   display: grid;
-  grid-template-columns: 45px 55px 45px 45px;
+  grid-template-columns: 7ch 7ch 5ch 5ch 7ch;  /* Srv | S+T | Pay | Tip | Time */
+  column-gap: 4px;
+  align-items: center;
+}
+
+.mgr-grid-head{
   font-size: 11px;
-  font-weight: 600;
-  margin-bottom: 6px;
-  opacity: 0.7;
+  font-weight: 700;
+  opacity: 0.70;
+  padding: 2px 0 6px 0;
 }
 
-.mgr-rows {
-  min-height: 60px;
-}
-
-.mgr-divider {
-  height: 1px;
-  background: #ddd;
-  margin: 8px 0;
-}
-
-.mgr-totals {
-  font-size: 12px;
-}
-
-
-.mgr-global-divider {
-  height: 2px;
-  background: #ccc;
-  margin: 16px 0;
-}
-
-.mgr-global {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  row-gap: 6px;
-  font-size: 13px;
-  font-weight: 500;
-}
-.mgr-totals-title {
-  font-weight: 600;
-  font-size: 12px;
-  margin-bottom: 6px;
-}
-
-.mgr-two-col {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  row-gap: 3px;
-  font-size: 11px;
-}
-
-.mgr-two-col > div:nth-child(odd) {
+.mgr-grid-head > div{
   white-space: nowrap;
 }
 
-.mgr-two-col > div:nth-child(even) {
-  text-align: right;
-  padding-left: 6px;
+.mgr-grid-row{
+  font-size: 11px;
+  font-weight: 400;
+  padding: 3px 0;
 }
 
+/* выравнивание по колонкам */
+.mgr-col-num{ text-align: right; }
+.mgr-col-pay{ text-align: left; text-transform: capitalize; }
+.mgr-col-time{ text-align: right; }
 
-.mgr-two-col.space-top {
-  margin-top: 8px;
-}
-.mgr-global {
-  font-size: 13px;
+/* список строк */
+.mgr-rows{
+  min-height: 60px;
 }
 
-.mgr-global-row {
-  display: flex;
-  gap: 18px;
-  flex-wrap: wrap;
+/* разделитель между верхом и Totals */
+.mgr-divider{
+  height: 1px;
+  background: rgba(0,0,0,0.16);
+  margin: 8px 0;
+}
+
+/* Totals */
+.mgr-totals{
+  font-size: 12px;
+}
+
+.mgr-totals-title{
+  font-weight: 700;
+  font-size: 12px;
   margin-bottom: 6px;
 }
-.mgr-row-inline {
-  display: flex;
-  gap: 18px;   /* расстояние между левым и правым блоком */
-  font-size: 11px;
-  margin-bottom: 4px;
+
+.mgr-totals-grid{
+  display: grid;
+  row-gap: 4px;
 }
 
+.mgr-trow{
+  display: grid;
+  grid-template-columns: 1fr 1fr;   /* левая колонка / правая колонка */
+  column-gap: 10px;
+  align-items: center;
+}
 
-.mgr-pair {
-  display: flex;
-  gap: 4px; /* расстояние между словом и цифрой */
+/* пара "слово + цифра" — цифры вплотную, но не переносится */
+.mgr-pair{
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.mgr-pair span:last-child{
+  text-align: right;
 }
 /* ===== SOLD TODAY BLOCK ===== */
 
@@ -5183,118 +5188,105 @@ if (tipCents > 0 && tipMethod) {
 const todayWithdrawnTipsCents = drWithdrawals
   .filter(w => w.staffId === s.id && w.date === dateStr)
   .reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
-      html += `
-        <div class="mgr-card">
+// ===== STAFF COLOR / TINT =====
+const staffColor = (s && s.color) ? s.color : null;
 
-          <div class="mgr-card-title">${s.name}</div>
+const tintBg = staffColor
+  ? blendWithWhite(staffColor, TINT_STRENGTH)
+  : "#ffffff";
 
-          <div class="mgr-head">
-            <div>Srv</div>
-            <div>S+T</div>
-            <div>Pay</div>
-            <div>Tip</div>
-          </div>
+const leftBorderColor = staffColor
+  ? staffColor
+  : "rgba(0,0,0,0.12)";
 
-          <div class="mgr-rows">
-            ${
-              staffEntries.map(e => {
+html += `
+  <div class="mgr-card" style="background:${tintBg}; border-left-color:${leftBorderColor};">
 
-                const serviceCents = Number(e.serviceAmount) || 0;
-                const taxCents = Math.round(serviceCents * 0.05);
-                const tipCents = Number(e.tip) || 0;
+    <div class="mgr-card-title">${s.name}</div>
 
-                return `
-                  <div class="mgr-head" style="font-weight:normal;">
-                    <div>${fromCents(serviceCents)}</div>
-                    <div>${fromCents(serviceCents + taxCents)}</div>
-                    <div>
-  ${
-    e.payments && e.payments.length > 1
-      ? "Split"
-      : e.payments && e.payments.length === 1
-        ? e.payments[0].method
-        : "-"
-  }
-</div>
+    <div class="mgr-grid mgr-grid-head">
+      <div>Srv</div>
+      <div>S+T</div>
+      <div>Pay</div>
+      <div>Tip</div>
+      <div>Time</div>
+    </div>
 
-                    <div>${fromCents(tipCents)}</div>
-                  </div>
-                `;
-              }).join("")
-            }
-          </div>
+    <div class="mgr-rows">
+      ${
+        staffEntries.map(e => {
 
-          <div class="mgr-divider"></div>
+          const serviceCents = Number(e.serviceAmount) || 0;
+          const taxCents = Math.round(serviceCents * 0.05);
+          const tipCents = Number(e.tip) || 0;
 
-          <div class="mgr-totals">
+          const payLabel =
+            (e.payments && e.payments.length > 1)
+              ? "Split"
+              : (e.payments && e.payments.length === 1)
+                ? e.payments[0].method
+                : "-";
 
-            <div class="mgr-totals-title">Totals</div>
+          const timeLabel = formatDrTime12(e);
 
-            <div class="mgr-row-inline">
-              <div class="mgr-pair">
-                <span>Service</span>
-                <span>${fromCents(totalServiceCents)}</span>
-              </div>
-
-              <div class="mgr-pair">
-                <span>Srv+Tax</span>
-                <span>${fromCents(totalServiceCents + totalTaxCents)}</span>
-              </div>
+          return `
+            <div class="mgr-grid mgr-grid-row">
+              <div class="mgr-col-num">${fromCents(serviceCents)}</div>
+              <div class="mgr-col-num">${fromCents(serviceCents + taxCents)}</div>
+              <div class="mgr-col-pay">${payLabel}</div>
+              <div class="mgr-col-num">${fromCents(tipCents)}</div>
+              <div class="mgr-col-time">${timeLabel}</div>
             </div>
+          `;
+        }).join("")
+      }
+    </div>
 
-            <div class="mgr-row-inline">
-              <div class="mgr-pair">
-                <span>Card</span>
-                <span>${fromCents(totalCardCents)}</span>
-              </div>
+    <div class="mgr-divider"></div>
 
-              <div class="mgr-pair">
-                <span>Gift</span>
-                <span>${fromCents(totalGiftCents)}</span>
-              </div>
-            </div>
+    <div class="mgr-totals">
 
-            <div class="mgr-row-inline">
-              <div class="mgr-pair">
-                <span>Cash</span>
-                <span>${fromCents(totalCashCents)}</span>
-              </div>
+      <div class="mgr-totals-title">Totals</div>
 
-              <div class="mgr-pair">
-                <span>Check</span>
-                <span>${fromCents(totalCheckCents)}</span>
-              </div>
-            </div>
+      <div class="mgr-totals-grid">
 
-            <div class="mgr-row-inline">
-              <div class="mgr-pair">
-                <span>Today Tips</span>
-                <span>${fromCents(totalTipsTodayCents)}</span>
-              </div>
-            </div>
-
-                        ${
-              s.id === SPRING_HELP_ID
-                ? ``
-                : `
-            <div class="mgr-row-inline">
-              <div class="mgr-pair">
-                <span>Tips Withdr</span>
-<span>${fromCents(todayWithdrawnTipsCents)}</span>
-              </div>
-
-              <div class="mgr-pair">
-                <span>Tips Bal</span>
-                <span>${fromCents(tipsBalanceCents)}</span>
-              </div>
-            </div>
-                `
-            }
-
-          </div>
-
+        <div class="mgr-trow">
+          <div class="mgr-pair"><span>Service</span><span>${fromCents(totalServiceCents)}</span></div>
+          <div class="mgr-pair"><span>Card</span><span>${fromCents(totalCardCents)}</span></div>
         </div>
-      `;
+
+        <div class="mgr-trow">
+          <div class="mgr-pair"><span>Srv+Tax</span><span>${fromCents(totalServiceCents + totalTaxCents)}</span></div>
+          <div class="mgr-pair"><span>Cash</span><span>${fromCents(totalCashCents)}</span></div>
+        </div>
+
+        <div class="mgr-trow">
+          <div class="mgr-pair"><span>Today Tips</span><span>${fromCents(totalTipsTodayCents)}</span></div>
+          <div class="mgr-pair"><span>Gift</span><span>${fromCents(totalGiftCents)}</span></div>
+        </div>
+
+        <div class="mgr-trow">
+          <div></div>
+          <div class="mgr-pair"><span>Check</span><span>${fromCents(totalCheckCents)}</span></div>
+        </div>
+
+        ${
+          s.id === SPRING_HELP_ID
+            ? ``
+            : `
+        <div class="mgr-trow" style="margin-top:4px;">
+          <div class="mgr-pair"><span>Tips Withdr</span><span>${fromCents(todayWithdrawnTipsCents)}</span></div>
+          <div class="mgr-pair"><span>Tips Bal</span><span>${fromCents(tipsBalanceCents)}</span></div>
+        </div>
+        `
+        }
+
+      </div>
+
+    </div>
+
+  </div>
+`;
     });
 
   html += `
