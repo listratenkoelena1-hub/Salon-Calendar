@@ -2033,13 +2033,13 @@ body.modal-open #walkInBtn{
       </label>
     </div>
 
-    <div id="cancelCommentWrap" style="flex:1; display:none; min-width:180px;">
-  <div class="switch-title" style="margin-bottom:6px;">Comment</div>
-  <input id="aCancelComment"
-         class="ap-input-medium"
-         placeholder="Reason / comment"
-         style="margin:0; width:100%; height:36px;">
-</div>
+    <div id="cancelCommentWrap" style="flex:1; display:none;">
+      <div class="switch-title">Comment</div>
+      <input id="aCancelComment"
+             class="ap-input-medium"
+             placeholder="Reason / comment"
+             style="margin-top:6px; width:100%;">
+    </div>
 
   </div>
 </div>
@@ -2359,8 +2359,7 @@ const aClient = document.getElementById('aClient');
   const aNoShow = document.getElementById('aNoShow');
   const aCanceled = document.getElementById('aCanceled');
 const aCancelComment = document.getElementById('aCancelComment');
-const cancelCommentWrap = document.getElementById('cancelCommentWrap'); 
-const appointmentStatusBlock = document.getElementById('appointmentStatusBlock');      
+const cancelCommentWrap = document.getElementById('cancelCommentWrap');    
 const aNote = document.getElementById('aNote');
 const changeDateBtn = document.getElementById('changeDateBtn');
 let appointmentDatePicker = null;
@@ -2368,11 +2367,9 @@ function updateCancelUI() {
   if (!cancelCommentWrap) return;
 
   if (aCanceled && aCanceled.checked) {
-    cancelCommentWrap.style.visibility = 'visible';
-    cancelCommentWrap.style.pointerEvents = 'auto';
+    cancelCommentWrap.style.display = 'block';
   } else {
-    cancelCommentWrap.style.visibility = 'hidden';
-    cancelCommentWrap.style.pointerEvents = 'none';
+    cancelCommentWrap.style.display = 'none';
     if (aCancelComment) aCancelComment.value = '';
   }
 }
@@ -3166,7 +3163,6 @@ if (a.lastEditedBy) {
 }
 if(!a) return;
 editId=id;
-if (appointmentStatusBlock) appointmentStatusBlock.style.display = 'block';      
 appointmentModal.classList.remove('hidden');
 fillSelects();
 // редактирование — разрешаем менять staff и дату
@@ -6529,7 +6525,6 @@ window.openWalkIn = () => {
   if (!currentUserStaffId) return;
 
   editId = null;
-  if (appointmentStatusBlock) appointmentStatusBlock.style.display = 'none';  
 document.getElementById('durationError').style.display = 'none';
 
   appointmentModal.classList.remove('hidden');
