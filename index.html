@@ -2033,7 +2033,7 @@ body.modal-open #walkInBtn{
       </label>
     </div>
 
-    <div id="cancelCommentWrap" style="flex:1; display:none; min-width:180px;">
+    <div id="cancelCommentWrap" style="flex:1; min-width:180px; visibility:hidden; pointer-events:none;">
   <div class="switch-title" style="margin-bottom:6px;">Comment</div>
   <input id="aCancelComment"
          class="ap-input-medium"
@@ -2383,6 +2383,7 @@ if (aCanceled) {
     checkTimeAvailability();
   });
 }
+ updateCancelUI();     
 function initAppointmentDatePicker() {
   if (appointmentDatePicker) {
     appointmentDatePicker.destroy();
