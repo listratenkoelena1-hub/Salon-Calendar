@@ -2359,7 +2359,8 @@ const aClient = document.getElementById('aClient');
   const aNoShow = document.getElementById('aNoShow');
   const aCanceled = document.getElementById('aCanceled');
 const aCancelComment = document.getElementById('aCancelComment');
-const cancelCommentWrap = document.getElementById('cancelCommentWrap');    
+const cancelCommentWrap = document.getElementById('cancelCommentWrap'); 
+const appointmentStatusBlock = document.getElementById('appointmentStatusBlock');      
 const aNote = document.getElementById('aNote');
 const changeDateBtn = document.getElementById('changeDateBtn');
 let appointmentDatePicker = null;
@@ -2367,9 +2368,11 @@ function updateCancelUI() {
   if (!cancelCommentWrap) return;
 
   if (aCanceled && aCanceled.checked) {
-    cancelCommentWrap.style.display = 'block';
+    cancelCommentWrap.style.visibility = 'visible';
+    cancelCommentWrap.style.pointerEvents = 'auto';
   } else {
-    cancelCommentWrap.style.display = 'none';
+    cancelCommentWrap.style.visibility = 'hidden';
+    cancelCommentWrap.style.pointerEvents = 'none';
     if (aCancelComment) aCancelComment.value = '';
   }
 }
@@ -3163,6 +3166,7 @@ if (a.lastEditedBy) {
 }
 if(!a) return;
 editId=id;
+if (appointmentStatusBlock) appointmentStatusBlock.style.display = 'block';      
 appointmentModal.classList.remove('hidden');
 fillSelects();
 // редактирование — разрешаем менять staff и дату
@@ -6525,6 +6529,7 @@ window.openWalkIn = () => {
   if (!currentUserStaffId) return;
 
   editId = null;
+  if (appointmentStatusBlock) appointmentStatusBlock.style.display = 'none';  
 document.getElementById('durationError').style.display = 'none';
 
   appointmentModal.classList.remove('hidden');
