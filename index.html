@@ -5107,7 +5107,10 @@ if (tipCents > 0 && tipMethod) {
         .reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
 
       const tipsBalanceCents = totalEarnedTips - totalWithdrawnTips;
-
+// ✅ withdrawal только за выбранный день (today for this report date)
+const todayWithdrawnTipsCents = drWithdrawals
+  .filter(w => w.staffId === s.id && w.date === dateStr)
+  .reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
       html += `
         <div class="mgr-card">
 
@@ -5205,7 +5208,7 @@ if (tipCents > 0 && tipMethod) {
             <div class="mgr-row-inline">
               <div class="mgr-pair">
                 <span>Tips Withdr</span>
-                <span>${fromCents(totalWithdrawnTips)}</span>
+<span>${fromCents(todayWithdrawnTipsCents)}</span>
               </div>
 
               <div class="mgr-pair">
