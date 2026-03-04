@@ -2446,7 +2446,6 @@ let staff=[], appointments=[], editId=null, staffToDelete=null;
 let drEntries = [];
 let drExtras = [];
 let drWithdrawals = [];
-let drDayStatus = null;
 let springServices = [];
 let springMode = false;      
 let currentPaymentParent = null;
@@ -2793,15 +2792,6 @@ onSnapshot(collection(db, "SpringServices"), snapshot => {
   }));
   renderDailyReport();
 });
-
-
-onSnapshot(collection(db, "DayStatus"), snapshot => {
-  const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-  drDayStatus = docs;
-  renderDailyReport();
-});
-
-
 
 function renderCalendar(){
 
@@ -4610,18 +4600,10 @@ function isDrToday() {
 
   return `${h}:${m}${ampm}`;
 }
-function isDrDayLocked() {
-  const dateStr = getDrDateString();
-
-  return drDayStatus?.some(d =>
-    d.date === dateStr &&
-    d.staffId === currentUserStaffId &&
-    d.locked === true
-  );
-}
 
 function isDrEditingAllowed() {
   if (springMode) return true;
+
   const [y, m, d] = getDrDateString().split('-').map(Number);
   const selected = new Date(y, m - 1, d);
   const today = new Date();
@@ -4629,23 +4611,11 @@ function isDrEditingAllowed() {
   selected.setHours(0,0,0,0);
   today.setHours(0,0,0,0);
 
-  const isSameDay = selected.getTime() === today.getTime();
-
-  const dayStatus = drDayStatus?.find(d =>
-    d.date === getDrDateString() &&
-    d.staffId === currentUserStaffId
-  );
-
-  // Если день явно открыт менеджером — разрешаем
-  if (dayStatus && dayStatus.locked === false) {
-    return true;
-  }
-
-  // Иначе работает обычная логика
-  return isSameDay && !isDrDayLocked();
+  return selected.getTime() === today.getTime();
 }
-      function isDrDeletingAllowed() {
+function isDrDeletingAllowed() {
   if (springMode) return true;
+
   const [y, m, d] = getDrDateString().split('-').map(Number);
   const selected = new Date(y, m - 1, d);
   const today = new Date();
@@ -4653,19 +4623,7 @@ function isDrEditingAllowed() {
   selected.setHours(0,0,0,0);
   today.setHours(0,0,0,0);
 
-  const isSameDay = selected.getTime() === today.getTime();
-
-  const dayStatus = drDayStatus?.find(d =>
-    d.date === getDrDateString() &&
-    d.staffId === currentUserStaffId
-  );
-
-  // Если день явно открыт менеджером
-  if (dayStatus && dayStatus.locked === false) {
-    return true;
-  }
-
-  return isSameDay;
+  return selected.getTime() === today.getTime();
 }
 function renderDailyReport() {
         // ===== DAILY REPORT WIDTH (staff compact / manager wide) =====
@@ -4691,11 +4649,7 @@ function renderDailyReport() {
 
 
   const dateStr = getDrDateString();
-const dayClosed = drDayStatus?.some(d =>
-  d.date === dateStr &&
-  d.staffId === currentUserStaffId &&
-  d.locked === true
-);
+
 
   let entries = drEntries.filter(e => e.date === dateStr);
 const editingAllowed = isDrEditingAllowed();
@@ -4932,7 +4886,6 @@ const alreadyWithdrawnToday = drWithdrawals.some(w =>
 
 const withdrawalDisabled =
   !isToday ||
-  dayClosed ||
   alreadyWithdrawnToday;
 
 html += `
@@ -4943,11 +4896,6 @@ html += `
       Tips Withdrawal
     </button>
 
-    <button class="dr-button"
-      ${(!editingAllowed) ? 'disabled' : ''}
-      onclick="openCloseDayModal()">
-      Close Day
-    </button>
 
     <button class="dr-button"
       onclick="closeDailyReport()">
@@ -5356,75 +5304,6 @@ html += `
   
 // ===== ROLE ACTIONS =====
 
-// ---------- OPEN THE DAY ----------
-
-window.openTheDayModal = () => {
-  if (currentUserRole !== 'manager') return;
-
-  const select = document.getElementById('openDayStaff');
-
-  select.innerHTML = staff
-    .filter(s => s.id !== ANYONE_ID)
-    .map(s => `<option value="${s.id}">${s.name}</option>`)
-    .join('');
-
-  document.getElementById('openDayModal')
-    .classList.remove('hidden');
-};
-
-window.closeOpenDayModal = () => {
-  document.getElementById('openDayModal')
-    .classList.add('hidden');
-};
-
-window.confirmOpenDay = async () => {
-  const staffId =
-    document.getElementById('openDayStaff').value;
-
-  const dateStr = getDrDateString();
-const formattedDate = new Date(dateStr + "T00:00:00")
-  .toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric"
-  });
-  // Проверяем статус дня
-  const existing = drDayStatus?.find(d =>
-    d.date === dateStr &&
-    d.staffId === staffId
-  );
-
-  if (existing && existing.locked === false) {
-    const staffName = staff.find(s => s.id === staffId)?.name || "";
-
-showToast(
-  `Day ${formattedDate} is already open for ${staffName}`,
-  "warning"
-);
-    closeOpenDayModal();
-    return;
-  }
-
-  await setDoc(
-    doc(db, "DayStatus", dateStr + "_" + staffId),
-    {
-      date: dateStr,
-      staffId: staffId,
-      locked: false,
-      reopenedAt: serverTimestamp()
-    }
-  );
-
-  const staffName = staff.find(s => s.id === staffId)?.name || "";
-
- showToast(
-  `Day ${formattedDate} opened for ${staffName}`,
-  "success"
-);
-
-  closeOpenDayModal();
-  renderDailyReport();
-};
 
 // ---------- SELL PRODUCT ----------
 
@@ -6666,61 +6545,6 @@ renderCalendar();
   document.getElementById('calendar-container').style.display = 'block';
 });
 
-      
-window.openCloseDayModal = () => {
-  const dateStr = getDrDateString();
-  const now = new Date();
-const todayStr =
-  now.getFullYear() + '-' +
-  String(now.getMonth() + 1).padStart(2, '0') + '-' +
-  String(now.getDate()).padStart(2, '0');
-
-  const dayClosed = drDayStatus?.some(d =>
-    d.date === dateStr &&
-    d.staffId === currentUserStaffId &&
-    d.locked === true
-  );
-
-  if (dayClosed) return;
-
-  document.getElementById('closeDayModal').classList.remove('hidden');
-};
-
-
-window.cancelCloseDay = () => {
-  document.getElementById('closeDayModal').classList.add('hidden');
-};
-
-window.confirmCloseDay = async () => {
-  const dateStr = getDrDateString();
-
-  // 🔹 Проверяем открытые строки
-  const openRows = drEntries.filter(e =>
-    e.date === dateStr &&
-    e.staffId === currentUserStaffId &&
-    e.status !== "closed"
-  );
-
-  if (openRows.length > 0) {
-    showToast("Please close all entries before closing the day.", "warning", 4000);
-    return;
-  }
-
-  await setDoc(
-    doc(db, "DayStatus", dateStr + "_" + currentUserStaffId),
-    {
-      date: dateStr,
-      staffId: currentUserStaffId,
-      locked: true,
-      lockedAt: serverTimestamp()
-    }
-  );
-
-  cancelCloseDay();
-  renderDailyReport();  
-};
-
-
 window.openWithdrawal = () => {
   const dateStr = getDrDateString();
   const now = new Date();
@@ -6728,14 +6552,6 @@ const todayStr =
   now.getFullYear() + '-' +
   String(now.getMonth() + 1).padStart(2, '0') + '-' +
   String(now.getDate()).padStart(2, '0');
-
-  const dayClosed = drDayStatus?.some(d =>
-    d.date === dateStr &&
-    d.staffId === currentUserStaffId &&
-    d.locked === true
-  );
-
-  if (dayClosed) return;
 
   document.getElementById('withdrawAmount').value = '';
   document.getElementById('withdrawModal').classList.remove('hidden');
@@ -6926,23 +6742,7 @@ window.addEventListener('DOMContentLoaded', () => {
   Walk-in
 </button>
 
-<!-- CLOSE DAY CONFIRM -->
-<div id="closeDayModal" class="modal hidden">
-  <div class="modal-content" style="max-width:280px;">
-    <h4>Close Day</h4>
 
-    <p style="font-size:13px; margin-top:10px;">
-      Are you sure you want to close this day?
-      <br><br>
-      After closing, you will not be able to edit this day.
-    </p>
-
-    <div class="modal-actions">
-      <button onclick="confirmCloseDay()">OK</button>
-      <button onclick="cancelCloseDay()">Cancel</button>
-    </div>
-  </div>
-</div>
 <!-- TIPS WITHDRAWAL -->
 <div id="withdrawModal" class="modal hidden">
   <div class="modal-content" style="max-width:260px;">
@@ -6964,27 +6764,6 @@ window.addEventListener('DOMContentLoaded', () => {
     </div>
   </div>
 </div>
-<!-- ===================== -->
-<!-- OPEN THE DAY MODAL -->
-<!-- ===================== -->
-
-<div id="openDayModal" class="modal hidden">
-  <div class="modal-content" style="max-width:320px;">
-    <h4>Open the Day</h4>
-
-    <p style="font-size:13px; margin-top:10px;">
-      Select staff member:
-    </p>
-
-    <select id="openDayStaff" style="width:100%; margin-top:10px;"></select>
-
-    <div class="modal-actions">
-      <button onclick="confirmOpenDay()">Open</button>
-      <button onclick="closeOpenDayModal()">Cancel</button>
-    </div>
-  </div>
-</div>
-
 
 <!-- ===================== -->
 <!-- SELL PRODUCT MODAL -->
