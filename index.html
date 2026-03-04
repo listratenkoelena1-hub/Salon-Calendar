@@ -2446,7 +2446,6 @@ let staff=[], appointments=[], editId=null, staffToDelete=null;
 let drEntries = [];
 let drExtras = [];
 let drWithdrawals = [];
-let drDayStatus = null;
 let springServices = [];
 let springMode = false;      
 let currentPaymentParent = null;
@@ -2541,7 +2540,7 @@ if (changeCalendarDateBtn) {
 
 
 const today = new Date();
-calendarDate.value = today.toISOString().slice(0, 10);
+calendarDate.value = drLocalDateToYMD(new Date());
 
 
 const anyonePopup = document.getElementById('anyonePopup');
@@ -2793,14 +2792,6 @@ onSnapshot(collection(db, "SpringServices"), snapshot => {
   }));
   renderDailyReport();
 });
-
-
-onSnapshot(collection(db, "DayStatus"), snapshot => {
-  const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-  drDayStatus = docs;
-  renderDailyReport();
-});
-
 
 
 function renderCalendar(){
@@ -4610,62 +4601,16 @@ function isDrToday() {
 
   return `${h}:${m}${ampm}`;
 }
-function isDrDayLocked() {
-  const dateStr = getDrDateString();
-
-  return drDayStatus?.some(d =>
-    d.date === dateStr &&
-    d.staffId === currentUserStaffId &&
-    d.locked === true
-  );
-}
 
 function isDrEditingAllowed() {
   if (springMode) return true;
-  const [y, m, d] = getDrDateString().split('-').map(Number);
-  const selected = new Date(y, m - 1, d);
-  const today = new Date();
-
-  selected.setHours(0,0,0,0);
-  today.setHours(0,0,0,0);
-
-  const isSameDay = selected.getTime() === today.getTime();
-
-  const dayStatus = drDayStatus?.find(d =>
-    d.date === getDrDateString() &&
-    d.staffId === currentUserStaffId
-  );
-
-  // Если день явно открыт менеджером — разрешаем
-  if (dayStatus && dayStatus.locked === false) {
-    return true;
-  }
-
-  // Иначе работает обычная логика
-  return isSameDay && !isDrDayLocked();
+  if (!isDrToday()) return false; // today-only
+  return true;
 }
-      function isDrDeletingAllowed() {
-  if (springMode) return true;
-  const [y, m, d] = getDrDateString().split('-').map(Number);
-  const selected = new Date(y, m - 1, d);
-  const today = new Date();
 
-  selected.setHours(0,0,0,0);
-  today.setHours(0,0,0,0);
-
-  const isSameDay = selected.getTime() === today.getTime();
-
-  const dayStatus = drDayStatus?.find(d =>
-    d.date === getDrDateString() &&
-    d.staffId === currentUserStaffId
-  );
-
-  // Если день явно открыт менеджером
-  if (dayStatus && dayStatus.locked === false) {
-    return true;
-  }
-
-  return isSameDay;
+function isDrDeletingAllowed() {
+  // чтобы не ломать существующую логику (deletingAllowed в UI)
+  return isDrEditingAllowed();
 }
 function renderDailyReport() {
         // ===== DAILY REPORT WIDTH (staff compact / manager wide) =====
@@ -4932,7 +4877,6 @@ const alreadyWithdrawnToday = drWithdrawals.some(w =>
 
 const withdrawalDisabled =
   !isToday ||
-  dayClosed ||
   alreadyWithdrawnToday;
 
 html += `
@@ -4943,11 +4887,9 @@ html += `
       Tips Withdrawal
     </button>
 
-    <button class="dr-button"
-      ${(!editingAllowed) ? 'disabled' : ''}
-      onclick="openCloseDayModal()">
-      Close Day
-    </button>
+    <button class="dr-button btn-primary" onclick="finishWork()" id="finishWorkBtn">
+  Finish Work
+</button>
 
     <button class="dr-button"
       onclick="closeDailyReport()">
@@ -4956,6 +4898,8 @@ html += `
   </div>
 `;
   body.innerHTML = html;
+   const fw = document.getElementById("finishWorkBtn");
+if (fw) fw.disabled = !isDrToday() || finishWorkDoneToday;   
 }
 function renderSpringDailyReport() {
 
@@ -5321,9 +5265,6 @@ html += `
 
   if (currentUserRole === 'manager') {
     html += `
-      <button class="dr-button" onclick="openTheDayModal()">
-        Open the Day
-      </button>
 
       <button class="dr-button" onclick="openSpringHelp()">
         Spring Help
@@ -5352,79 +5293,6 @@ html += `
 
   body.innerHTML = html;
 }
-
-  
-// ===== ROLE ACTIONS =====
-
-// ---------- OPEN THE DAY ----------
-
-window.openTheDayModal = () => {
-  if (currentUserRole !== 'manager') return;
-
-  const select = document.getElementById('openDayStaff');
-
-  select.innerHTML = staff
-    .filter(s => s.id !== ANYONE_ID)
-    .map(s => `<option value="${s.id}">${s.name}</option>`)
-    .join('');
-
-  document.getElementById('openDayModal')
-    .classList.remove('hidden');
-};
-
-window.closeOpenDayModal = () => {
-  document.getElementById('openDayModal')
-    .classList.add('hidden');
-};
-
-window.confirmOpenDay = async () => {
-  const staffId =
-    document.getElementById('openDayStaff').value;
-
-  const dateStr = getDrDateString();
-const formattedDate = new Date(dateStr + "T00:00:00")
-  .toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric"
-  });
-  // Проверяем статус дня
-  const existing = drDayStatus?.find(d =>
-    d.date === dateStr &&
-    d.staffId === staffId
-  );
-
-  if (existing && existing.locked === false) {
-    const staffName = staff.find(s => s.id === staffId)?.name || "";
-
-showToast(
-  `Day ${formattedDate} is already open for ${staffName}`,
-  "warning"
-);
-    closeOpenDayModal();
-    return;
-  }
-
-  await setDoc(
-    doc(db, "DayStatus", dateStr + "_" + staffId),
-    {
-      date: dateStr,
-      staffId: staffId,
-      locked: false,
-      reopenedAt: serverTimestamp()
-    }
-  );
-
-  const staffName = staff.find(s => s.id === staffId)?.name || "";
-
- showToast(
-  `Day ${formattedDate} opened for ${staffName}`,
-  "success"
-);
-
-  closeOpenDayModal();
-  renderDailyReport();
-};
 
 // ---------- SELL PRODUCT ----------
 
@@ -5821,7 +5689,21 @@ window.deleteDrEntry = async (id) => {
 if (!isDrEditingAllowed()) return;
   const entry = drEntries.find(e => e.id === id);
   if (!entry) return;
+// ===== Freeze delete after Tips Withdraw =====
+const lastWithdrawMs = getLastWithdrawAtMsForDay();
+if (lastWithdrawMs) {
+  const ts = entry.createdAt;
+  let entryMs = 0;
 
+  if (ts && ts.toDate) entryMs = ts.toDate().getTime();
+  else if (ts) entryMs = new Date(ts).getTime();
+
+  // если createdAt нет — считаем “старой” и тоже блокируем
+  if (!ts || entryMs <= lastWithdrawMs) {
+    showToast("Tips were withdrawn — this entry can’t be deleted.", "warning", 4000);
+    return;
+  }
+}
   if (!entry.splitGroupId) {
     await deleteDoc(doc(db, "DayEntries", id));
     return;
@@ -6000,12 +5882,7 @@ for (const row of entry.pendingSplit) {
 };
 
 
-window.reopenDrEntry = async (id) => {
-     if (!isDrEditingAllowed()) return; 
-  await updateDoc(doc(db, "DayEntries", id), {
-    status: "open"
-  });
-};
+
 window.openSplitModal = (parentId) => {
 if (!isDrEditingAllowed()) return;
   const entry = drEntries.find(e => e.id === parentId);
@@ -6667,76 +6544,168 @@ renderCalendar();
 });
 
       
-window.openCloseDayModal = () => {
-  const dateStr = getDrDateString();
-  const now = new Date();
-const todayStr =
-  now.getFullYear() + '-' +
-  String(now.getMonth() + 1).padStart(2, '0') + '-' +
-  String(now.getDate()).padStart(2, '0');
-
-  const dayClosed = drDayStatus?.some(d =>
-    d.date === dateStr &&
-    d.staffId === currentUserStaffId &&
-    d.locked === true
-  );
-
-  if (dayClosed) return;
-
-  document.getElementById('closeDayModal').classList.remove('hidden');
-};
+// ===== Finish Work (today only) =====
+let finishWorkDoneToday = false;
 
 
-window.cancelCloseDay = () => {
-  document.getElementById('closeDayModal').classList.add('hidden');
-};
 
-window.confirmCloseDay = async () => {
-  const dateStr = getDrDateString();
+function slotToLabel(slotIndex) {
+  // slotIndex -> minutes -> label like existing UI
+  const minutes = START_MINUTES + slotIndex * SLOT_MINUTES;
+  const h24 = Math.floor(minutes / 60);
+  const m = minutes % 60;
 
-  // 🔹 Проверяем открытые строки
-  const openRows = drEntries.filter(e =>
-    e.date === dateStr &&
-    e.staffId === currentUserStaffId &&
-    e.status !== "closed"
-  );
+  let h = h24 % 12;
+  if (h === 0) h = 12;
+  const ampm = h24 >= 12 ? "PM" : "AM";
+  return `${h}:${String(m).padStart(2, "0")} ${ampm}`;
+}
 
-  if (openRows.length > 0) {
-    showToast("Please close all entries before closing the day.", "warning", 4000);
+function mergeRanges(ranges) {
+  if (!ranges.length) return [];
+  const sorted = ranges
+    .map(r => ({ start: r.start, end: r.end }))
+    .sort((a,b) => a.start - b.start);
+
+  const out = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    const last = out[out.length - 1];
+    const cur = sorted[i];
+    if (cur.start <= last.end) {
+      last.end = Math.max(last.end, cur.end);
+    } else {
+      out.push(cur);
+    }
+  }
+  return out;
+}
+
+function subtractRanges(baseStart, baseEnd, blocked) {
+  const holes = [];
+  let cursor = baseStart;
+
+  blocked.forEach(b => {
+    if (b.end <= cursor) return;
+    if (b.start >= baseEnd) return;
+
+    const start = Math.max(b.start, baseStart);
+    const end = Math.min(b.end, baseEnd);
+
+    if (start > cursor) holes.push({ start: cursor, end: start });
+    cursor = Math.max(cursor, end);
+  });
+
+  if (cursor < baseEnd) holes.push({ start: cursor, end: baseEnd });
+  return holes;
+}
+
+window.finishWork = async () => {
+  // today only
+  if (!isDrToday()) {
+    showToast("Finish Work works only for Today.", "warning", 3500);
     return;
   }
 
-  await setDoc(
-    doc(db, "DayStatus", dateStr + "_" + currentUserStaffId),
-    {
+  if (!currentUserStaffId) return;
+
+  const now = new Date();
+  const minutesNow = now.getHours() * 60 + now.getMinutes();
+
+  // if already after end of day -> nothing
+  if (minutesNow >= END_MINUTES) {
+    showToast("Finish Work: already after 8:00 PM.", "info", 3000);
+    return;
+  }
+
+  // next slot (nearest slot forward)
+  const raw = (minutesNow - START_MINUTES) / SLOT_MINUTES;
+  let startSlot = Math.ceil(raw);
+  if (startSlot < 0) startSlot = 0;
+
+  const endSlot = SLOTS; // end exclusive (как в saveOffWork: end: SLOTS) :contentReference[oaicite:3]{index=3}
+
+  // gather existing offwork blocks for this staff & date
+  const dateStr = getDrDateString();
+  const existing = offWork
+    .filter(o => o.staffId === currentUserStaffId && o.date === dateStr)
+    .map(o => {
+      if (o.allDay) return { start: 0, end: SLOTS };
+      return { start: Number(o.start) || 0, end: Number(o.end) || 0 };
+    });
+
+  const merged = mergeRanges(existing);
+
+  // what’s still open between startSlot..endSlot
+  const holes = subtractRanges(startSlot, endSlot, merged);
+
+  if (!holes.length) {
+    finishWorkDoneToday = true;
+    showToast("Finish Work: everything is already Off-work.", "info", 3500);
+    renderDailyReport();
+    return;
+  }
+
+  // create OffWork only for holes
+  for (const h of holes) {
+    if (h.end <= h.start) continue;
+
+    await addDoc(collection(db, "OffWork"), {
       date: dateStr,
       staffId: currentUserStaffId,
-      locked: true,
-      lockedAt: serverTimestamp()
-    }
-  );
+      allDay: false,
+      start: h.start,
+      end: h.end,
+      createdAt: serverTimestamp()
+    });
+  }
 
-  cancelCloseDay();
-  renderDailyReport();  
+  finishWorkDoneToday = true;
+
+  const toastFrom = slotToLabel(startSlot);
+  const toastTo = "8:00 PM";
+  showToast(`Finish Work: Off-work set from ${toastFrom} to ${toastTo}`, "success", 4000);
+
+  renderCalendar();
+  renderDailyReport();
 };
 
+      function getLastWithdrawAtMsForDay() {
+  const dateStr = getDrDateString();
+  const list = (drWithdrawals || []).filter(w =>
+    w.date === dateStr && w.staffId === currentUserStaffId
+  );
 
+  let maxMs = null;
+  list.forEach(w => {
+    const ts = w.withdrawAt || w.createdAt;
+    if (!ts) return;
+    // Firestore Timestamp -> Date
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    const ms = d.getTime();
+    if (maxMs === null || ms > maxMs) maxMs = ms;
+  });
+
+  return maxMs; // null if no withdrawals
+}
 window.openWithdrawal = () => {
   const dateStr = getDrDateString();
+  const isClosed = Array.isArray(drDayStatus) && drDayStatus.some(d =>
+  d.date === dateStr &&
+  d.staffId === currentUserStaffId &&
+  d.locked === true
+);
+if (isClosed) return;    
   const now = new Date();
 const todayStr =
   now.getFullYear() + '-' +
   String(now.getMonth() + 1).padStart(2, '0') + '-' +
   String(now.getDate()).padStart(2, '0');
-
-  const dayClosed = drDayStatus?.some(d =>
-    d.date === dateStr &&
-    d.staffId === currentUserStaffId &&
-    d.locked === true
-  );
-
-  if (dayClosed) return;
-
+if (dateStr !== todayStr) {
+  showToast("Tips Withdraw works only for Today.", "warning", 3500);
+  return;
+}
+  
+  
   document.getElementById('withdrawAmount').value = '';
   document.getElementById('withdrawModal').classList.remove('hidden');
 };
@@ -6783,13 +6752,13 @@ if (alreadyWithdrawnToday) {
   return;
 }
 
-  await addDoc(collection(db, "TipWithdrawals"), {
-    staffId: currentUserStaffId,
-    date: getDrDateString(),
-    amount: amount,
-    createdAt: serverTimestamp()
-  });
-
+ await addDoc(collection(db, "TipWithdrawals"), {
+  staffId: currentUserStaffId,
+  date: getDrDateString(),
+  amount: amount,
+  createdAt: serverTimestamp(),
+  withdrawAt: serverTimestamp()
+});
   closeWithdrawal();
 };
 window.closeOffWorkHardConflict = () => {
@@ -6926,23 +6895,7 @@ window.addEventListener('DOMContentLoaded', () => {
   Walk-in
 </button>
 
-<!-- CLOSE DAY CONFIRM -->
-<div id="closeDayModal" class="modal hidden">
-  <div class="modal-content" style="max-width:280px;">
-    <h4>Close Day</h4>
 
-    <p style="font-size:13px; margin-top:10px;">
-      Are you sure you want to close this day?
-      <br><br>
-      After closing, you will not be able to edit this day.
-    </p>
-
-    <div class="modal-actions">
-      <button onclick="confirmCloseDay()">OK</button>
-      <button onclick="cancelCloseDay()">Cancel</button>
-    </div>
-  </div>
-</div>
 <!-- TIPS WITHDRAWAL -->
 <div id="withdrawModal" class="modal hidden">
   <div class="modal-content" style="max-width:260px;">
@@ -6964,27 +6917,6 @@ window.addEventListener('DOMContentLoaded', () => {
     </div>
   </div>
 </div>
-<!-- ===================== -->
-<!-- OPEN THE DAY MODAL -->
-<!-- ===================== -->
-
-<div id="openDayModal" class="modal hidden">
-  <div class="modal-content" style="max-width:320px;">
-    <h4>Open the Day</h4>
-
-    <p style="font-size:13px; margin-top:10px;">
-      Select staff member:
-    </p>
-
-    <select id="openDayStaff" style="width:100%; margin-top:10px;"></select>
-
-    <div class="modal-actions">
-      <button onclick="confirmOpenDay()">Open</button>
-      <button onclick="closeOpenDayModal()">Cancel</button>
-    </div>
-  </div>
-</div>
-
 
 <!-- ===================== -->
 <!-- SELL PRODUCT MODAL -->
