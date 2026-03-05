@@ -5900,8 +5900,8 @@ window.finishWork = async () => {
   const now = new Date();
   const minutesNow = now.getHours() * 60 + now.getMinutes();
 
-  const START_MIN = START_HOUR * 60;
-  const END_MIN = END_HOUR * 60; // 8:00 PM если END_HOUR = 20
+const START_MIN = START_MINUTES;
+const END_MIN = END_MINUTES;
   const END_SLOT = Math.round((END_MIN - START_MIN) / SLOT_MINUTES);
 
   // ближайший слот вверх
