@@ -4896,6 +4896,11 @@ html += `
       Tips Withdrawal
     </button>
 
+    <button class="dr-button"
+      ${(!isToday || !editingAllowed) ? 'disabled' : ''}
+      onclick="finishWork()">
+      Finish Work
+    </button>
 
     <button class="dr-button"
       onclick="closeDailyReport()">
@@ -5269,10 +5274,7 @@ html += `
 
   if (currentUserRole === 'manager') {
     html += `
-      <button class="dr-button" onclick="openTheDayModal()">
-        Open the Day
-      </button>
-
+      
       <button class="dr-button" onclick="openSpringHelp()">
         Spring Help
       </button>
@@ -5885,6 +5887,99 @@ window.reopenDrEntry = async (id) => {
     status: "open"
   });
 };
+window.finishWork = async () => {
+  // редактировать можно только сегодня (как и в Daily Report)
+  if (!isDrEditingAllowed()) return;
+
+  // только staff
+  if (currentUserRole !== "staff") return;
+
+  const dateStr = getDrDateString();
+  const staffId = currentUserStaffId;
+
+  const now = new Date();
+  const minutesNow = now.getHours() * 60 + now.getMinutes();
+
+  const START_MIN = START_HOUR * 60;
+  const END_MIN = END_HOUR * 60; // 8:00 PM если END_HOUR = 20
+  const END_SLOT = Math.round((END_MIN - START_MIN) / SLOT_MINUTES);
+
+  // ближайший слот вверх
+  let startSlot = Math.ceil((minutesNow - START_MIN) / SLOT_MINUTES);
+  if (startSlot < 0) startSlot = 0;
+
+  // если уже поздно
+  if (startSlot >= END_SLOT) {
+    showToast("Finish Work completed.", "success", 3500);
+    return;
+  }
+
+  // 1) СНАЧАЛА проверяем: есть ли appointments (busy) до конца дня
+  for (let i = startSlot; i < END_SLOT; i++) {
+    const conflictType = checkCalendarConflict({
+      staffId,
+      date: dateStr,
+      start: i,
+      end: i + 1
+    });
+
+    // appointment = "busy"
+    if (conflictType === "busy") {
+      showToast(
+        "Finish Work blocked: there are upcoming appointments.",
+        "error",
+        5000
+      );
+      return;
+    }
+  }
+
+  // 2) Если appointments нет — создаём OffWork на свободные слоты (пропуская off/weekly)
+  const ranges = [];
+  let runStart = null;
+
+  for (let i = startSlot; i < END_SLOT; i++) {
+    const conflictType = checkCalendarConflict({
+      staffId,
+      date: dateStr,
+      start: i,
+      end: i + 1
+    });
+
+    const isFree = !conflictType; // null => свободно (нет off/weekly/appointment)
+
+    if (isFree) {
+      if (runStart === null) runStart = i;
+    } else {
+      if (runStart !== null) {
+        ranges.push({ start: runStart, end: i });
+        runStart = null;
+      }
+    }
+  }
+
+  if (runStart !== null) {
+    ranges.push({ start: runStart, end: END_SLOT });
+  }
+
+  // создаём только если реально есть свободные слоты
+  if (ranges.length > 0) {
+    for (const r of ranges) {
+      await addDoc(collection(db, "OffWork"), {
+        date: dateStr,
+        staffId: staffId,
+        allDay: false,
+        start: r.start,
+        end: r.end
+      });
+    }
+    renderCalendar();
+  }
+
+  // 3) Всегда успех (если appointments не было)
+  showToast("Finish Work ✓", "success", 4500);
+};      
+      
 window.openSplitModal = (parentId) => {
 if (!isDrEditingAllowed()) return;
   const entry = drEntries.find(e => e.id === parentId);
