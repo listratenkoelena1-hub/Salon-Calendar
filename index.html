@@ -4646,6 +4646,34 @@ function isDrDeletingAllowed() {
 
   return selected.getTime() === today.getTime();
 }
+      
+ function canDeleteDrEntry(entry, dateStr) {
+  if (!entry) return false;
+
+  // withdrawal только для этого staff и этой даты
+  const withdrawal = drWithdrawals.find(w =>
+    w.staffId === entry.staffId &&
+    w.date === dateStr
+  );
+
+  // если withdrawal не было — удалять можно
+  if (!withdrawal) return true;
+
+  const withdrawalMs =
+    typeof withdrawal.createdAt?.toMillis === "function"
+      ? withdrawal.createdAt.toMillis()
+      : 0;
+
+  const closedAtMs =
+    typeof entry.closedAt?.toMillis === "function"
+      ? entry.closedAt.toMillis()
+      : 0;
+
+  // если entry закрыта ДО withdrawal или closedAt вообще нет — удалять нельзя
+  if (!closedAtMs) return false;
+
+  return closedAtMs > withdrawalMs;
+}     
 function renderDailyReport() {
         // ===== DAILY REPORT WIDTH (staff compact / manager wide) =====
   const drBox = document.getElementById('dailyReportContent');
@@ -4759,7 +4787,7 @@ if (tip > 0 && tipMethod) {
 entries.forEach((e, index) => {
 
   const isClosed = e.status === "closed" || e.lockedSplit === true;
-
+const canDelete = isClosed && deletingAllowed && canDeleteDrEntry(e, dateStr);
   const serviceAmount =
   window.drDrafts?.[e.id]?.serviceAmount !== undefined
     ? window.drDrafts[e.id].serviceAmount
@@ -4834,9 +4862,9 @@ entries.forEach((e, index) => {
           <span onclick="closeDrEntry('${e.id}')" style="cursor:pointer;">✅</span>
         ` : ''}
 
-        ${isClosed && deletingAllowed ? `
-          <span onclick="deleteDrEntry('${e.id}')" style="cursor:pointer;">🗑</span>
-        ` : ''}
+        ${canDelete ? `
+  <span onclick="deleteDrEntry('${e.id}')" style="cursor:pointer;">🗑</span>
+` : ''}
       </div>
 
     </div>
@@ -5827,7 +5855,12 @@ window.deleteDrEntry = async (id) => {
 if (!isDrEditingAllowed()) return;
   const entry = drEntries.find(e => e.id === id);
   if (!entry) return;
+const dateStr = entry.date || getDrDateString();
 
+if (!canDeleteDrEntry(entry, dateStr)) {
+  showToast("This entry can’t be deleted after Tips Withdrawal.", "warning", 4000);
+  return;
+}
   if (!entry.splitGroupId) {
     await deleteDoc(doc(db, "DayEntries", id));
     return;
@@ -5836,7 +5869,14 @@ if (!isDrEditingAllowed()) return;
   const groupEntries = drEntries.filter(e =>
     e.splitGroupId === entry.splitGroupId
   );
+const hasLockedGroupEntry = groupEntries.some(item =>
+  !canDeleteDrEntry(item, item.date || dateStr)
+);
 
+if (hasLockedGroupEntry) {
+  showToast("This split entry can’t be deleted after Tips Withdrawal.", "warning", 4000);
+  return;
+}
   for (const item of groupEntries) {
     await deleteDoc(doc(db, "DayEntries", item.id));
   }
@@ -5973,6 +6013,7 @@ await updateDoc(doc(db, "DayEntries", id), {
   lockedSplit: true,
   pendingSplit: null,
   payments: distributeServicePayments(parentServiceCents),
+  closedAt: serverTimestamp()
 });
 // ----- children -----
 for (const row of entry.pendingSplit) {
@@ -5987,25 +6028,28 @@ for (const row of entry.pendingSplit) {
   const totalWithTax = serviceCents + taxCents;
 
   await addDoc(collection(db, "DayEntries"), {
-    date: entry.date,
-    staffId: row.staffId,
-    serviceAmount: serviceCents,
-    tip: tipShare,
-        tipMethod: entry.tipMethod || entry.paymentMethod || null,    
-    payments: distributeServicePayments(serviceCents),
-    status: "closed",
-    splitGroupId: splitGroupId,
-    isParent: false,
-    lockedSplit: true,
-    createdAt: serverTimestamp()
-  });
+  date: entry.date,
+  staffId: row.staffId,
+  serviceAmount: serviceCents,
+  tip: tipShare,
+  tipMethod: entry.tipMethod || entry.paymentMethod || null,
+  payments: distributeServicePayments(serviceCents),
+  status: "closed",
+  splitGroupId: splitGroupId,
+  isParent: false,
+  lockedSplit: true,
+  createdAt: serverTimestamp(),
+  closedAt: serverTimestamp()
+});
 }
+      return;
 }
 
 
   await updateDoc(doc(db, "DayEntries", id), {
-    status: "closed"
-  });
+  status: "closed",
+  closedAt: serverTimestamp()
+});
 };
 
 
