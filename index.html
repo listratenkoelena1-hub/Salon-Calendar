@@ -1149,6 +1149,19 @@ padding:10px 14px;
   min-width: 0;
 }
       #paymentPanel #paymentRows span{ display:none !important; }
+ #paymentPanel input[type=number]::-webkit-outer-spin-button,
+#paymentPanel input[type=number]::-webkit-inner-spin-button,
+#splitModal input[type=number]::-webkit-outer-spin-button,
+#splitModal input[type=number]::-webkit-inner-spin-button{
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+#paymentPanel input[type=number],
+#splitModal input[type=number]{
+  -moz-appearance: textfield;
+  appearance: textfield;
+}     
       /* =========================================================
    UI SYSTEM (v1) — tokens + reusable components
    Put at the END of <style> to override older rules
@@ -4762,8 +4775,6 @@ entries.forEach((e, index) => {
       <div>
         <input class="dr-input dr-input-right"
   type="number"
-  min="0"
-  step="0.01"
   value="${serviceAmount}"
   ${(isClosed || !editingAllowed) ? 'disabled' : ''}
   oninput="updateDrFieldLocal('${e.id}','serviceAmount',this.value)">
@@ -4774,8 +4785,6 @@ entries.forEach((e, index) => {
       <div>
         <input class="dr-input dr-input-right"
   type="number"
-  min="0"
-  step="0.01"
   value="${tip}"
   ${(isClosed || !editingAllowed) ? 'disabled' : ''}
   oninput="updateDrFieldLocal('${e.id}','tip',this.value)">
@@ -6102,9 +6111,8 @@ if (entry.splitGroupId) {
 }
 currentPaymentTotalWithTax = totalWithTax;
 tempPayments = [
-  { method: "card", amount: totalWithTax }
+  { method: "card", amount: "" }
 ];
-
 renderPaymentRows();
 
 document.getElementById("paymentPanel")
@@ -6127,10 +6135,9 @@ function renderPaymentRows() {
       </select>
 
       <input type="number"
-        step="0.01"
-        value="${fromCents(p.amount)}"
-        onchange="updatePaymentAmount(${i}, this.value)"
-      >
+  value="${p.amount === '' ? '' : fromCents(p.amount)}"
+  onchange="updatePaymentAmount(${i}, this.value)"
+>
 
       ${i > 0 ? `
         <span style="cursor:pointer;"
@@ -6143,7 +6150,7 @@ function renderPaymentRows() {
 }
 
 window.updatePaymentAmount = function(index, value) {
-  tempPayments[index].amount = toCents(value);
+  tempPayments[index].amount = value === "" ? "" : toCents(value);
   autoRecalculatePayments();
 };
      window.updatePaymentMethod = function(index, value) {
@@ -6158,17 +6165,19 @@ function autoRecalculatePayments() {
 
   let otherTotal = 0;
 
-  tempPayments.forEach((p, i) => {
-    if (i !== 0) {
-      otherTotal += Number(p.amount) || 0;
-    }
-  });
+tempPayments.forEach((p, i) => {
+  if (i !== 0) {
+    otherTotal += Number(p.amount) || 0;
+  }
+});
 
-  const newFirstAmount = totalWithTax - otherTotal;
+const newFirstAmount = totalWithTax - otherTotal;
 
-  tempPayments[0].amount = newFirstAmount > 0 ? newFirstAmount : 0;
+if (tempPayments[0]) {
+  tempPayments[0].amount = newFirstAmount > 0 ? newFirstAmount : "";
+}
 
-  renderPaymentRows();
+renderPaymentRows();
 }
 
 
@@ -6176,7 +6185,7 @@ window.addPaymentRow = function () {
 
   tempPayments.push({
     method: "cash",
-    amount: 0
+    amount: ""
   });
 
   renderPaymentRows();
@@ -6389,10 +6398,9 @@ function renderSplitRows() {
       </select>
 
       <input type="number"
-        step="0.01"
-        value="${row.amount}"
-        onchange="updateSplitAmount(${index}, this.value)"
-      />
+  value="${row.amount ?? ''}"
+  onchange="updateSplitAmount(${index}, this.value)"
+/>
 
       <button onclick="removeSplitRow(${index})">✖</button>
 
@@ -6401,9 +6409,9 @@ function renderSplitRows() {
 }
 window.addSplitRow = () => {
   splitRows.push({
-  staffId: "",
-  amount: 0
-});
+    staffId: "",
+    amount: ""
+  });
   renderSplitRows();
 };
 
@@ -7020,10 +7028,10 @@ window.addEventListener('DOMContentLoaded', () => {
     <h4>Spring Help</h4>
 
     <label>Service Amount</label>
-    <input id="springServiceAmount" type="number" min="0" step="0.01" style="width:100%;">
+    <input id="springServiceAmount" type="number" style="width:100%;">
 
     <label style="margin-top:8px;">Tips</label>
-    <input id="springTipAmount" type="number" min="0" step="0.01" style="width:100%;">
+    <input id="springTipAmount" type="number" style="width:100%;">
 
     <label style="margin-top:8px;">Payment</label>
     <select id="springPaymentMethod" style="width:100%;">
