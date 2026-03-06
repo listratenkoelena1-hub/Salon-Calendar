@@ -4684,7 +4684,7 @@ let totalCashCents = 0;
 let totalCardCents = 0;
 let totalGiftCents = 0;
 let totalCheckCents = 0;
-
+let totalEtransferCents = 0;
 
   entries
   .filter(e => e.status === "closed")
@@ -4712,6 +4712,7 @@ basePayments.forEach(p => {
   if (p.method === "cash") totalCashCents += amt;
   if (p.method === "giftcard") totalGiftCents += amt;
   if (p.method === "check") totalCheckCents += amt;
+  if (p.method === "etransfer") totalEtransferCents += amt;    
 });
 
 // 2) Tips добавляем ОДНИМ методом (tipMethod)
@@ -4728,6 +4729,7 @@ if (tip > 0 && tipMethod) {
   if (tipMethod === "cash") totalCashCents += tip;
   if (tipMethod === "giftcard") totalGiftCents += tip;
   if (tipMethod === "check") totalCheckCents += tip;
+  if (tipMethod === "etransfer") totalEtransferCents += tip;    
 }
 
   });
@@ -4805,6 +4807,7 @@ entries.forEach((e, index) => {
                 <option value="cash" ${e.payments?.[0]?.method==="cash"?"selected":""}>Cash</option>
                 <option value="giftcard" ${e.payments?.[0]?.method==="giftcard"?"selected":""}>Gift</option>
                 <option value="check" ${e.payments?.[0]?.method==="check"?"selected":""}>Check</option>
+                <option value="etransfer" ${e.payments?.[0]?.method==="etransfer"?"selected":""}>E-transfer</option>
               </select>
             `
             : (
@@ -5033,6 +5036,7 @@ html += `
 <option value="cash" ${e.paymentMethod==="cash"?"selected":""}>Cash</option>
 <option value="giftcard" ${e.paymentMethod==="giftcard"?"selected":""}>Gift</option>
 <option value="check" ${e.paymentMethod==="check"?"selected":""}>Check</option>
+<option value="etransfer" ${e.paymentMethod==="etransfer"?"selected":""}>E-transfer</option>
             </select>
           `
           : (
@@ -5117,7 +5121,9 @@ function renderManagerDailyReport() {
       let totalCashCents = 0;
       let totalGiftCents = 0;
       let totalCheckCents = 0;
+      let totalEtransferCents = 0;   
       let totalTipsTodayCents = 0;
+          
 
       staffEntries.forEach(e => {
 
@@ -5135,6 +5141,7 @@ function renderManagerDailyReport() {
     if (p.method === "cash") totalCashCents += p.amount;
     if (p.method === "giftcard") totalGiftCents += p.amount;
     if (p.method === "check") totalCheckCents += p.amount;
+        if (p.method === "etransfer") totalEtransferCents += p.amount;   
   });
 // ✅ Tips добавляем ОДНИМ методом (tipMethod)
 const tipMethod =
@@ -5147,6 +5154,7 @@ if (tipCents > 0 && tipMethod) {
   if (tipMethod === "cash") totalCashCents += tipCents;
   if (tipMethod === "giftcard") totalGiftCents += tipCents;
   if (tipMethod === "check") totalCheckCents += tipCents;
+if (tipMethod === "etransfer") totalEtransferCents += tipCents;
 }
 });
 
@@ -5196,12 +5204,12 @@ html += `
           const taxCents = Math.round(serviceCents * 0.05);
           const tipCents = Number(e.tip) || 0;
 
-          const payLabel =
-            (e.payments && e.payments.length > 1)
-              ? "Split"
-              : (e.payments && e.payments.length === 1)
-                ? e.payments[0].method
-                : "-";
+         const payLabel =
+  (e.payments && e.payments.length > 1)
+    ? "Split"
+    : (e.payments && e.payments.length === 1)
+      ? labelPayMethod(e.payments[0].method)
+      : "-";
 
           const timeLabel = formatDrTime12(e);
 
@@ -5226,25 +5234,40 @@ html += `
 
       <div class="mgr-totals-grid">
 
-        <div class="mgr-trow">
-          <div class="mgr-pair"><span>Service</span><span>${fromCents(totalServiceCents)}</span></div>
-          <div class="mgr-pair"><span>Card</span><span>${fromCents(totalCardCents)}</span></div>
-        </div>
+  <div class="mgr-trow">
+    <div class="mgr-pair"><span>Service</span><span>${fromCents(totalServiceCents)}</span></div>
+    <div>
+      ${totalCardCents > 0 ? `<div class="mgr-pair"><span>Card</span><span>${fromCents(totalCardCents)}</span></div>` : ``}
+    </div>
+  </div>
 
-        <div class="mgr-trow">
-          <div class="mgr-pair"><span>Srv+Tax</span><span>${fromCents(totalServiceCents + totalTaxCents)}</span></div>
-          <div class="mgr-pair"><span>Cash</span><span>${fromCents(totalCashCents)}</span></div>
-        </div>
+  <div class="mgr-trow">
+    <div class="mgr-pair"><span>Srv+Tax</span><span>${fromCents(totalServiceCents + totalTaxCents)}</span></div>
+    <div>
+      ${totalCashCents > 0 ? `<div class="mgr-pair"><span>Cash</span><span>${fromCents(totalCashCents)}</span></div>` : ``}
+    </div>
+  </div>
 
-        <div class="mgr-trow">
-          <div class="mgr-pair"><span>Today Tips</span><span>${fromCents(totalTipsTodayCents)}</span></div>
-          <div class="mgr-pair"><span>Gift</span><span>${fromCents(totalGiftCents)}</span></div>
-        </div>
+  <div class="mgr-trow">
+    <div class="mgr-pair"><span>Today Tips</span><span>${fromCents(totalTipsTodayCents)}</span></div>
+    <div>
+      ${totalEtransferCents > 0 ? `<div class="mgr-pair"><span>E-transfer</span><span>${fromCents(totalEtransferCents)}</span></div>` : ``}
+    </div>
+  </div>
 
-        <div class="mgr-trow">
-          <div></div>
-          <div class="mgr-pair"><span>Check</span><span>${fromCents(totalCheckCents)}</span></div>
-        </div>
+  <div class="mgr-trow">
+    <div></div>
+    <div>
+      ${totalGiftCents > 0 ? `<div class="mgr-pair"><span>Gift</span><span>${fromCents(totalGiftCents)}</span></div>` : ``}
+    </div>
+  </div>
+
+  <div class="mgr-trow">
+    <div></div>
+    <div>
+      ${totalCheckCents > 0 ? `<div class="mgr-pair"><span>Check</span><span>${fromCents(totalCheckCents)}</span></div>` : ``}
+    </div>
+  </div>
 
         ${
           s.id === SPRING_HELP_ID
@@ -5483,7 +5506,9 @@ function renderRightTotalsBlock() {
   let totalCashCents = 0;
   let totalGiftCents = 0;
   let totalCheckCents = 0;
+  let totalEtransferCents = 0;    
   let totalWithdrawalsCents = 0;
+      
 
   // ===== SERVICES =====
   dayEntries.forEach(e => {
@@ -5501,6 +5526,7 @@ function renderRightTotalsBlock() {
   if (p.method === "cash") totalCashCents += p.amount;
   if (p.method === "giftcard") totalGiftCents += p.amount;
   if (p.method === "check") totalCheckCents += p.amount;
+  if (p.method === "etransfer") totalEtransferCents += p.amount;        
 });
    // ✅ ADD TIPS to global payment totals
 const tipCents = Number(e.tip) || 0;
@@ -5515,6 +5541,7 @@ if (tipCents > 0 && tipMethod) {
   if (tipMethod === "cash") totalCashCents += tipCents;
   if (tipMethod === "giftcard") totalGiftCents += tipCents;
   if (tipMethod === "check") totalCheckCents += tipCents;
+  if (tipMethod === "etransfer") totalEtransferCents += tipCents;    
 }     
 });
 
@@ -5529,6 +5556,7 @@ extrasToday.forEach(e => {
       if (p.method === "cash") totalCashCents += Number(p.amount) || 0;
       if (p.method === "giftcard") totalGiftCents += Number(p.amount) || 0;
       if (p.method === "check") totalCheckCents += Number(p.amount) || 0;
+      if (p.method === "etransfer") totalEtransferCents += Number(p.amount) || 0;    
     });
     return;
   }
@@ -5539,6 +5567,7 @@ extrasToday.forEach(e => {
   if (e.paymentMethod === "cash") totalCashCents += amountCents;
   if (e.paymentMethod === "giftcard") totalGiftCents += amountCents;
   if (e.paymentMethod === "check") totalCheckCents += amountCents;
+  if (e.paymentMethod === "etransfer") totalEtransferCents += amountCents;    
 });
   // ===== WITHDRAWALS =====
   const withdrawalsToday = drWithdrawals.filter(w => w.date === dateStr);
@@ -5564,6 +5593,7 @@ extrasToday.forEach(e => {
     <div class="mgr-totals-right">
   <div>Total Card ${fromCents(totalCardCents)}</div>
   <div>Total Cash ${fromCents(totalCashCents)}</div>
+  <div>Total E-transfer ${fromCents(totalEtransferCents)}</div>
   <div>Total Gift ${fromCents(totalGiftCents)}</div>
   <div>Total Check ${fromCents(totalCheckCents)}</div>
 </div>
@@ -6130,6 +6160,7 @@ function renderPaymentRows() {
       <select onchange="updatePaymentMethod(${i}, this.value)">
         <option value="card" ${p.method==="card"?"selected":""}>Card</option>
         <option value="cash" ${p.method==="cash"?"selected":""}>Cash</option>
+        <option value="etransfer" ${p.method==="etransfer"?"selected":""}>E-transfer</option>
         <option value="giftcard" ${p.method==="giftcard"?"selected":""}>Gift</option>
         <option value="check" ${p.method==="check"?"selected":""}>Check</option>
       </select>
@@ -6341,6 +6372,7 @@ function labelPayMethod(m){
   if (m === "cash") return "Cash";
   if (m === "giftcard") return "Gift";
   if (m === "check") return "Check";
+  if (m === "etransfer") return "E-transfer";    
   return m;
 }
 
@@ -6955,6 +6987,7 @@ window.addEventListener('DOMContentLoaded', () => {
         <select id="productPayment" style="width:100%;">
           <option value="card">Card</option>
           <option value="cash">Cash</option>
+          <option value="etransfer">E-transfer</option>    
           <option value="giftcard">Gift</option>
           <option value="check">Check</option>
         </select>
@@ -7001,6 +7034,7 @@ window.addEventListener('DOMContentLoaded', () => {
         <select id="giftPayment" style="width:100%;">
           <option value="card">Card</option>
           <option value="cash">Cash</option>
+          <option value="etransfer">E-transfer</option>    
           <option value="giftcard">Gift</option>
           <option value="check">Check</option>
         </select>
@@ -7037,6 +7071,7 @@ window.addEventListener('DOMContentLoaded', () => {
     <select id="springPaymentMethod" style="width:100%;">
       <option value="card">Card</option>
       <option value="cash">Cash</option>
+      <option value="etransfer">E-transfer</option>    
       <option value="giftcard">Gift</option>
       <option value="check">Check</option>
     </select>
