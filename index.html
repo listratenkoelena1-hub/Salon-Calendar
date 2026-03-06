@@ -4738,8 +4738,14 @@ entries.forEach((e, index) => {
 
   const isClosed = e.status === "closed" || e.lockedSplit === true;
 
-  const serviceAmount = e.serviceAmount != null ? fromCents(e.serviceAmount) : "";
-  const tip = e.tip != null ? fromCents(e.tip) : "";
+  const serviceAmount =
+  window.drDrafts?.[e.id]?.serviceAmount !== undefined
+    ? window.drDrafts[e.id].serviceAmount
+    : (e.serviceAmount != null ? fromCents(e.serviceAmount) : "");
+  const tip =
+  window.drDrafts?.[e.id]?.tip !== undefined
+    ? window.drDrafts[e.id].tip
+    : (e.tip != null ? fromCents(e.tip) : "");
 
   const serviceCents = Number(e.serviceAmount) || 0;
   const taxCents = Math.round(serviceCents * 0.05);
@@ -4755,24 +4761,24 @@ entries.forEach((e, index) => {
 
       <div>
         <input class="dr-input dr-input-right"
-          type="number"
-          min="0"
-          step="0.01"
-          value="${serviceAmount}"
-          ${(isClosed || !editingAllowed) ? 'disabled' : ''}
-          onchange="updateDrField('${e.id}','serviceAmount',this.value)">
+  type="number"
+  min="0"
+  step="0.01"
+  value="${serviceAmount}"
+  ${(isClosed || !editingAllowed) ? 'disabled' : ''}
+  oninput="updateDrFieldLocal('${e.id}','serviceAmount',this.value)">
       </div>
 
       <div class="dr-cell-right">${serviceWithTax}</div>
 
       <div>
         <input class="dr-input dr-input-right"
-          type="number"
-          min="0"
-          step="0.01"
-          value="${tip}"
-          ${(isClosed || !editingAllowed) ? 'disabled' : ''}
-          onchange="updateDrField('${e.id}','tip',this.value)">
+  type="number"
+  min="0"
+  step="0.01"
+  value="${tip}"
+  ${(isClosed || !editingAllowed) ? 'disabled' : ''}
+  oninput="updateDrFieldLocal('${e.id}','tip',this.value)">
       </div>
 
       <div class="dr-cell-right dr-time-gap">${timeLabel}</div>
@@ -4962,8 +4968,14 @@ function renderSpringDailyReport() {
 
     const isClosed = e.status === "closed" || e.lockedSplit === true;
 
-    const serviceAmount = e.serviceAmount != null ? fromCents(e.serviceAmount) : "";
-    const tip = e.tip != null ? fromCents(e.tip) : "";
+    const serviceAmount =
+  window.drDrafts?.[e.id]?.serviceAmount !== undefined
+    ? window.drDrafts[e.id].serviceAmount
+    : (e.serviceAmount != null ? fromCents(e.serviceAmount) : "");
+    const tip =
+  window.drDrafts?.[e.id]?.tip !== undefined
+    ? window.drDrafts[e.id].tip
+    : (e.tip != null ? fromCents(e.tip) : "");
 
     const serviceCents = Number(e.serviceAmount) || 0;
     const taxCents = Math.round(serviceCents * 0.05);
@@ -4977,24 +4989,24 @@ html += `
 
     <div>
       <input class="dr-input dr-input-right"
-        type="number"
-        min="0"
-        step="0.01"
-        value="${serviceAmount}"
-        ${(isClosed || !editingAllowed) ? 'disabled' : ''}
-        onchange="updateDrField('${e.id}','serviceAmount',this.value)">
+  type="number"
+  min="0"
+  step="0.01"
+  value="${serviceAmount}"
+  ${(isClosed || !editingAllowed) ? 'disabled' : ''}
+  oninput="updateDrFieldLocal('${e.id}','serviceAmount',this.value)">
     </div>
 
     <div class="dr-cell-right">${serviceWithTax}</div>
 
     <div>
       <input class="dr-input dr-input-right"
-        type="number"
-        min="0"
-        step="0.01"
-        value="${tip}"
-        ${(isClosed || !editingAllowed) ? 'disabled' : ''}
-        onchange="updateDrField('${e.id}','tip',this.value)">
+  type="number"
+  min="0"
+  step="0.01"
+  value="${tip}"
+  ${(isClosed || !editingAllowed) ? 'disabled' : ''}
+  oninput="updateDrFieldLocal('${e.id}','tip',this.value)">
     </div>
 
     <div class="dr-cell-right dr-time-gap">${timeLabel}</div>
@@ -5674,6 +5686,47 @@ window.addSpringEntry = async () => {
     createdAt: serverTimestamp()
   });
 };
+ window.drDrafts = window.drDrafts || {};
+
+window.updateDrFieldLocal = (id, field, value) => {
+  if (!isDrEditingAllowed()) return;
+
+  if (!window.drDrafts[id]) {
+    window.drDrafts[id] = {};
+  }
+
+  window.drDrafts[id][field] = value;
+};
+
+window.saveDrDraft = async (id) => {
+  if (!isDrEditingAllowed()) return;
+
+  const draft = window.drDrafts[id];
+  if (!draft) return;
+
+  const data = {};
+
+  if (draft.serviceAmount !== undefined) {
+    const serviceCents = toCents(draft.serviceAmount);
+    const taxCents = Math.round(serviceCents * 0.05);
+    const totalWithTax = serviceCents + taxCents;
+
+    data.serviceAmount = serviceCents;
+    data.payments = [
+      { method: "card", amount: totalWithTax }
+    ];
+  }
+
+  if (draft.tip !== undefined) {
+    data.tip = toCents(draft.tip);
+  }
+
+  if (Object.keys(data).length > 0) {
+    await updateDoc(doc(db, "DayEntries", id), data);
+  }
+
+  delete window.drDrafts[id];
+};     
 window.updateDrField = async (id, field, value) => {
 if (!isDrEditingAllowed()) return;
   const data = {};
@@ -5723,11 +5776,14 @@ if (!isDrEditingAllowed()) return;
 
 
 window.closeDrEntry = async (id) => {
-      if (!isDrEditingAllowed()) return;
- const snap = await getDoc(doc(db, "DayEntries", id));
-if (!snap.exists()) return;
+  if (!isDrEditingAllowed()) return;
 
-const entry = snap.data();
+  await saveDrDraft(id);
+
+  const snap = await getDoc(doc(db, "DayEntries", id));
+  if (!snap.exists()) return;
+
+  const entry = snap.data();
 
   if (!entry) return;
 // ===== TIP METHOD PROMPT (Split Payment + tips) =====
