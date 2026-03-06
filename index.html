@@ -5208,7 +5208,9 @@ html += `
   (e.payments && e.payments.length > 1)
     ? "Split"
     : (e.payments && e.payments.length === 1)
-      ? labelPayMethod(e.payments[0].method)
+      ? (e.payments[0].method === "etransfer"
+          ? "E-trn"
+          : labelPayMethod(e.payments[0].method))
       : "-";
 
           const timeLabel = formatDrTime12(e);
