@@ -5750,10 +5750,20 @@ window.saveDrDraft = async (id) => {
     const taxCents = Math.round(serviceCents * 0.05);
     const totalWithTax = serviceCents + taxCents;
 
-    data.serviceAmount = serviceCents;
-    data.payments = [
-      { method: "card", amount: totalWithTax }
-    ];
+    const snap = await getDoc(doc(db, "DayEntries", id));
+if (!snap.exists()) return;
+
+const entry = snap.data();
+const method =
+  entry.paymentMethod ||
+  entry.payments?.[0]?.method ||
+  "card";
+
+data.serviceAmount = serviceCents;
+data.paymentMethod = method;
+data.payments = [
+  { method, amount: totalWithTax }
+];
   }
 
   if (draft.tip !== undefined) {
@@ -5786,7 +5796,20 @@ if (!isDrEditingAllowed()) return;
   if (field === "tip") {
     data.tip = toCents(value);
   }
+if (field === "paymentMethod") {
+  const snap = await getDoc(doc(db, "DayEntries", id));
+  if (!snap.exists()) return;
 
+  const entry = snap.data();
+  const serviceCents = Number(entry.serviceAmount) || 0;
+  const taxCents = Math.round(serviceCents * 0.05);
+  const totalWithTax = serviceCents + taxCents;
+
+  data.paymentMethod = value;
+  data.payments = [
+    { method: value, amount: totalWithTax }
+  ];
+}
   await updateDoc(doc(db, "DayEntries", id), data);
 };
 
