@@ -3953,8 +3953,8 @@ offVacation.disabled = true;
 
   offAllDay.checked = record.allDay;
 
-  offTimeRange.style.display = record.allDay ? 'none' : 'block';
-
+  // offTimeRange.style.display = record.allDay ? 'none' : 'block'; //
+toggleSmoothSection(offTimeRange, !record.allDay);
   offStart.innerHTML =
     [...Array(SLOTS).keys()]
       .map(i => `<option value="${i}">${timeLabel(i)}</option>`)
@@ -4042,7 +4042,8 @@ offWorkModal.dataset.vacationId = '';
 offVacation.checked = false;
 offVacation.disabled = false;
 offAllDay.checked = false;
-offTimeRange.style.display = 'block';
+toggleSmoothSection(offTimeRange, true);
+      // offTimeRange.style.display = 'block';//
 vacationFrom = null;
 vacationTo = null;
 
