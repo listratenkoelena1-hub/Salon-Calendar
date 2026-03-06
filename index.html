@@ -1479,7 +1479,8 @@ button:disabled{
   align-items:center;
   column-gap:4px;
   box-sizing:border-box;
-  font-size: 13px;    
+  font-size: 13px; 
+  font-variant-numeric: tabular-nums;    
 
   /* # | Service | Tax(S+T) | Tips | Time | Payment | Actions */
   grid-template-columns:
@@ -1505,6 +1506,13 @@ button:disabled{
 #dailyReportModal .dr-head > div{
   white-space: nowrap;
 }
+#dailyReportModal .dr-head > div{
+  text-align:left;
+}
+
+#dailyReportModal .dr-head .dr-cell-right{
+  text-align:left;
+}      
 #dailyReportModal .dr-row{
   padding:6px 0;
   border-bottom:1px solid rgba(0,0,0,.06);
@@ -1542,16 +1550,15 @@ button:disabled{
   height: 22px !important;
   line-height: 22px !important;
 }   
-#dailyReportModal .dr-input-right{ text-align:right; }
+#dailyReportModal .dr-input-right{
+  text-align:left;
+}
       /* right aligned numeric cells */
 #dailyReportModal .dr-cell-right{
-  text-align:right;
+  text-align:left;
   font-size:13px;
 }
 
-#dailyReportModal .dr-input-right{
-  text-align:right;
-}
       /* remove number spinners */
 #dailyReportModal input[type=number]::-webkit-outer-spin-button,
 #dailyReportModal input[type=number]::-webkit-inner-spin-button{
