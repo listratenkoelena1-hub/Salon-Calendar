@@ -762,7 +762,15 @@ padding:10px 14px;
   min-width: 0;
 }
 
+#staffModal.staff-view .staff-name{
+  width: auto;
+  max-width: 170px;
+}
 
+#staffModal.staff-view .staff-color{
+  width: 20px;
+  height: 20px;
+}
 
 .staff-btn {
   padding: 6px 12px;
@@ -1752,9 +1760,11 @@ body.modal-open{
 
 /* Staff compact layout */
 #staffModal.staff-view .staff-row{
-  grid-template-columns:
-    1fr
-    28px;
+  grid-template-columns: max-content 22px;
+  justify-content: start;
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 0;
 }
 
 /* Hide manager-only controls in staff mode */
@@ -1787,10 +1797,15 @@ body.modal-open{
   display: flex;
   justify-content: flex-end;
 }    
-  /* Staff modal horizontal scroll (includes Close button) */
+  /* Staff modal scroll */
 #staffModal #staffScroll{
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+/* Staff view: no horizontal scroll */
+#staffModal.staff-view #staffScroll{
+  overflow-x: hidden;
 }
 
 /* This sets the "real" width of the staff modal content for manager */
@@ -1800,8 +1815,9 @@ body.modal-open{
 
 /* Compact staff view */
 #staffModal.staff-view #staffScrollInner{
-  min-width: 360px;
-}    
+  min-width: 0;
+  width: 100%;
+}
  /* ===== TOAST NOTIFICATION ===== */
 
 #toastContainer {
