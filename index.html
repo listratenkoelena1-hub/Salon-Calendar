@@ -1467,8 +1467,20 @@ button:disabled{
   font-weight:700;
   white-space:nowrap;
 }
+/* ===== Daily Report: horizontal scroll only for table ===== */
+#dailyReportModal .dr-table-scroll{
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
 
-/* table grid (stable, compact, 7 columns) */
+#dailyReportModal .dr-table{
+  min-width: max-content;
+  width: max-content;
+}
+
+/* ===== Staff / Spring table grid (without Time column) ===== */
 #dailyReportModal .dr-head,
 #dailyReportModal .dr-row{
   display:grid;
@@ -1476,20 +1488,18 @@ button:disabled{
   align-items:center;
   column-gap:4px;
   box-sizing:border-box;
-  font-size: 13px; 
-  font-variant-numeric: tabular-nums;    
+  font-size:13px;
+  font-variant-numeric:tabular-nums;
 
-  /* # | Service | Tax(S+T) | Tips | Time | Payment | Actions */
+  /* # | Service | Tax | Tips | Payment | Actions */
   grid-template-columns:
   18px   /* # */
-  7ch    /* Service: 999.99 (6 символов) + чуть воздуха */
-  7ch    /* Tax: 999.99 */
-  6ch    /* Tips: 99.99 (5 символов) + чуть воздуха */
-  7ch    /* Time: 10:05PM (7 символов) */
-  8ch    /* Payment: Card / Split */
-  11ch;  /* Actions: 3 иконки */
+  7ch    /* Service */
+  7ch    /* Tax */
+  6ch    /* Tips */
+  8ch    /* Payment */
+  11ch;  /* Actions */
 }
-
 #dailyReportModal .dr-head{
   font-size:13px;
   font-weight:700;
@@ -4831,7 +4841,7 @@ const canDelete = isClosed && deletingAllowed && canDeleteDrEntry(e, dateStr);
   oninput="updateDrFieldLocal('${e.id}','tip',this.value)">
       </div>
 
-      <div class="dr-cell-right dr-time-gap">${timeLabel}</div>
+      
 
       <div>
         ${
@@ -5060,7 +5070,7 @@ html += `
   oninput="updateDrFieldLocal('${e.id}','tip',this.value)">
     </div>
 
-    <div class="dr-cell-right dr-time-gap">${timeLabel}</div>
+    
 
     <div>
       ${
