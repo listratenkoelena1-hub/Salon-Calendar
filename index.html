@@ -355,6 +355,16 @@ margin-top:12px;
   width: 100%;
   min-width: 0;
 }
+#staffModal.staff-view .staff-name{
+  width: auto;
+  min-width: 0;
+  max-width: 170px;
+}
+
+#staffModal.staff-view .staff-color{
+  width: 20px;
+  height: 20px;
+}      
 .staff-row input,
 .staff-row select,
 .staff-row button,
@@ -762,15 +772,7 @@ padding:10px 14px;
   min-width: 0;
 }
 
-#staffModal.staff-view .staff-name{
-  width: auto;
-  max-width: 170px;
-}
 
-#staffModal.staff-view .staff-color{
-  width: 20px;
-  height: 20px;
-}
 
 .staff-btn {
   padding: 6px 12px;
@@ -1763,8 +1765,7 @@ body.modal-open{
   grid-template-columns: max-content 22px;
   justify-content: start;
   align-items: center;
-  column-gap: 6px;
-  row-gap: 0;
+  gap: 6px;
 }
 
 /* Hide manager-only controls in staff mode */
@@ -1797,7 +1798,7 @@ body.modal-open{
   display: flex;
   justify-content: flex-end;
 }    
-  /* Staff modal scroll */
+ /* Staff modal horizontal scroll (includes Close button) */
 #staffModal #staffScroll{
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -3911,17 +3912,14 @@ offSaveBtn.disabled = false;
   };
 
   offStart.innerHTML =
-  [...Array(SLOTS).keys()]
-    .map(i => `<option value="${i}">${timeLabel(i)}</option>`)
-    .join('');
+    [...Array(SLOTS).keys()]
+      .map(i => `<option value="${i}">${timeLabel(i)}</option>`)
+      .join('');
 
-offEnd.innerHTML =
-  [...Array(SLOTS).keys()]
-    .map(i => `<option value="${i + 1}">${timeLabel(i + 1)}</option>`)
-    .join('');
+  offEnd.innerHTML = offStart.innerHTML;
 
-offStart.value = 0;
-offEnd.value = SLOTS;
+  offStart.value = 0;
+  offEnd.value = SLOTS - 1;
 };
 
 
@@ -3995,14 +3993,11 @@ offVacation.disabled = true;
   // offTimeRange.style.display = record.allDay ? 'none' : 'block'; //
 toggleSmoothSection(offTimeRange, !record.allDay);
   offStart.innerHTML =
-  [...Array(SLOTS).keys()]
-    .map(i => `<option value="${i}">${timeLabel(i)}</option>`)
-    .join('');
+    [...Array(SLOTS).keys()]
+      .map(i => `<option value="${i}">${timeLabel(i)}</option>`)
+      .join('');
 
-offEnd.innerHTML =
-  [...Array(SLOTS).keys()]
-    .map(i => `<option value="${i + 1}">${timeLabel(i + 1)}</option>`)
-    .join('');
+  offEnd.innerHTML = offStart.innerHTML;
 
   if (!record.allDay) {
     offStart.value = record.start;
