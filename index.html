@@ -945,7 +945,8 @@ padding:10px 14px;
 /* ===== MANAGER DAILY REPORT (STAFF CARDS REDESIGN) ===== */
 
 .mgr-wrapper{
-  width: 100%;
+  width:100%;
+  overflow:hidden;
 }
 
 .mgr-staff-scroll{
@@ -956,10 +957,20 @@ padding:10px 14px;
   -webkit-overflow-scrolling: touch;
 }
 
-/* карточка мастера */
 .mgr-card{
-    width: 214px;
+  width: 214px;
+  min-width: 214px;
+  max-width: 214px;
   flex: 0 0 214px;
+
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.14);
+  border-left-width: 6px;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.12);
+
+  padding: 8px 10px 8px 8px;
+  box-sizing: border-box;
+}
 
   border-radius: 14px;
   border: 1px solid rgba(0,0,0,0.14);
@@ -1713,11 +1724,15 @@ body.modal-open{
 
 /* горизонтальный скролл карточек мастеров должен всегда жить */
 .mgr-staff-scroll{
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-x;
-}
+  display:flex;
+  gap:10px;
+  overflow-x:auto;
+  overflow-y:hidden;
 
+  -webkit-overflow-scrolling:touch;
+
+  flex-wrap:nowrap;
+}
 /* вертикальный скролл внутри daily report (если нужен) */
 #dailyReportContent,
 .daily-report-content{
