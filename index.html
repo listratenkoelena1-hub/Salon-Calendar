@@ -4784,13 +4784,13 @@ if (tip > 0 && tipMethod) {
   });
 
  let html = `
-  <div class="dr-table" style="width:100%; max-width:100%; overflow:hidden; box-sizing:border-box;">
+  <div class="dr-table-scroll">
+    <div class="dr-table">
     <div class="dr-head">
       <div>#</div>
       <div class="dr-cell-right">Service</div>
       <div class="dr-cell-right">Tax</div>
       <div class="dr-cell-right">Tips</div>
-      <div class="dr-cell-right">Time</div>
       <div>Payment</div>
       <div class="dr-cell-right">Actions</div>
     </div>
@@ -4885,7 +4885,7 @@ const canDelete = isClosed && deletingAllowed && canDeleteDrEntry(e, dateStr);
   `;
 });
 
-html += `</div></div>`; // close rows wrapper + dr-table
+html += `</div></div></div>`; // close rows wrapper + dr-table
   // ===== TOTAL BLOCK =====
 
 // Total service with tax
@@ -5011,19 +5011,19 @@ function renderSpringDailyReport() {
       totalTipsCents += tip;
     });
 
-  let html = `
-  <div class="dr-table" style="width:100%; max-width:100%; overflow:hidden; box-sizing:border-box;">
-    <div class="dr-head">
-      <div>#</div>
-      <div class="dr-cell-right">Service</div>
-      <div class="dr-cell-right">Tax</div>
-      <div class="dr-cell-right">Tips</div>
-      <div class="dr-cell-right">Time</div>
-      <div>Payment</div>
-      <div class="dr-cell-right">Actions</div>
-    </div>
+let html = `
+  <div class="dr-table-scroll">
+    <div class="dr-table">
+      <div class="dr-head">
+        <div>#</div>
+        <div class="dr-cell-right">Service</div>
+        <div class="dr-cell-right">Tax</div>
+        <div class="dr-cell-right">Tips</div>
+        <div>Payment</div>
+        <div class="dr-cell-right">Actions</div>
+      </div>
 
-    <div class="dr-rows-wrapper">
+      <div class="dr-rows-wrapper">
 `;
   entries.forEach((e, index) => {
 
@@ -5113,7 +5113,7 @@ html += `
   </div>
 `;
 });
-html += `</div></div>`; // close rows wrapper + dr-table
+html += `</div></div></div>`; // close rows wrapper + dr-table
 
 // ===== Add Entry link (like staff) =====
 html += editingAllowed
