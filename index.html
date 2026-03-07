@@ -3895,14 +3895,17 @@ offSaveBtn.disabled = false;
   };
 
   offStart.innerHTML =
-    [...Array(SLOTS).keys()]
-      .map(i => `<option value="${i}">${timeLabel(i)}</option>`)
-      .join('');
+  [...Array(SLOTS).keys()]
+    .map(i => `<option value="${i}">${timeLabel(i)}</option>`)
+    .join('');
 
-  offEnd.innerHTML = offStart.innerHTML;
+offEnd.innerHTML =
+  [...Array(SLOTS).keys()]
+    .map(i => `<option value="${i + 1}">${timeLabel(i + 1)}</option>`)
+    .join('');
 
-  offStart.value = 0;
-  offEnd.value = SLOTS - 1;
+offStart.value = 0;
+offEnd.value = SLOTS;
 };
 
 
@@ -3976,11 +3979,14 @@ offVacation.disabled = true;
   // offTimeRange.style.display = record.allDay ? 'none' : 'block'; //
 toggleSmoothSection(offTimeRange, !record.allDay);
   offStart.innerHTML =
-    [...Array(SLOTS).keys()]
-      .map(i => `<option value="${i}">${timeLabel(i)}</option>`)
-      .join('');
+  [...Array(SLOTS).keys()]
+    .map(i => `<option value="${i}">${timeLabel(i)}</option>`)
+    .join('');
 
-  offEnd.innerHTML = offStart.innerHTML;
+offEnd.innerHTML =
+  [...Array(SLOTS).keys()]
+    .map(i => `<option value="${i + 1}">${timeLabel(i + 1)}</option>`)
+    .join('');
 
   if (!record.allDay) {
     offStart.value = record.start;
