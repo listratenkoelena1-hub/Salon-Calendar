@@ -1456,7 +1456,9 @@ button:disabled{
 }
 
 #dailyReportModal .dr-arrow{
-  display:inline-block;
+  display:flex;
+  align-items:center;
+  justify-content:center;
   font-size:28px;
   font-weight:700;
   line-height:1;
@@ -1464,7 +1466,11 @@ button:disabled{
   user-select:none;
   padding:0 2px;
 }
-
+#dailyReportModal .dr-date-nav{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
 #dailyReportModal #drDateLabel{
   font-size:13px;
   font-weight:700;
