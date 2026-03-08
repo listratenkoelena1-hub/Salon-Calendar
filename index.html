@@ -2001,8 +2001,8 @@ body.modal-open{
 
 
 
-<div class="header-right">
-  <button class="menu-btn" onclick="toggleMenu()">☰</button>
+<div class="header-right hidden">
+  
 
   <div id="topMenu" class="top-menu hidden">
     <div onclick="openDailyReport(); closeMenu()">Daily Report</div>
@@ -2045,10 +2045,13 @@ body.modal-open{
 
 </div>
 <div id="bottomToolbar">
-  <button class="bottom-tool-btn" id="bottomDailyBtn">◉</button>
-  <button class="bottom-tool-btn" id="bottomOffWorkBtn">◌</button>
-  <button class="bottom-tool-btn" id="bottomSearchBtn">⌕</button>
-  <button class="bottom-tool-btn" id="bottomMenuBtn">☰</button>
+  <button class="bottom-tool-btn" onclick="openDailyReport()">◉</button>
+
+  <button class="bottom-tool-btn" onclick="openOffWork()">◌</button>
+
+  <button class="bottom-tool-btn" onclick="openSearch()">⌕</button>
+
+  <button class="bottom-tool-btn" onclick="toggleMenu()">☰</button>
 </div>
 </div>
 <!-- ===================== -->
