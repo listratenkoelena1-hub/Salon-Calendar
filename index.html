@@ -70,8 +70,13 @@ header {
   padding: 8px 10px !important;
   margin: 0 !important;
 }
-
-
+body.modal-open header{
+  filter: brightness(0.8);
+}
+body.modal-open header,
+body.modal-open #bottomToolbar{
+  filter: brightness(0.8);
+}
 .header-left {
 
 display:flex;
@@ -204,29 +209,32 @@ cursor:pointer;
 
 
 .modal{
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,.4);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  z-index:6000;
-  overflow: hidden;
-  padding: 12px;               /* чтобы сверху/снизу был зазор */
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  z-index: 12000;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 96px 12px 24px 12px;
   -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
 }
 
 .hidden { display:none; }
 
 .modal-content {
-  background:#fff;
-  padding:15px;
-  border-radius:12px;
-  width:380px;
-  max-height: calc(100vh - 24px);
-overflow-y: auto;
--webkit-overflow-scrolling: touch;
+  background: #fff;
+  padding: 15px;
+  border-radius: 12px;
+  width: 380px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   position: relative;
+  box-sizing: border-box;
 }
 
 
