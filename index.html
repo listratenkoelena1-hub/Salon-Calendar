@@ -2050,7 +2050,7 @@ body.modal-open{
 
   <button class="bottom-tool-btn" onclick="openSearch()">⌕</button>
 
-  <button class="bottom-tool-btn" onclick="toggleMenu()">☰</button>
+  <button id="bottomMenuBtn" class="bottom-tool-btn" onclick="toggleMenu()">☰</button>
 </div>
   <div id="topMenu" class="bottom-popup-menu hidden">
   <div id="staffMenuItem" onclick="openStaff(); closeMenu()">Staff</div>
@@ -7360,7 +7360,22 @@ if ('serviceWorker' in navigator) {
       });
   });
 }
-</script>      
+</script> 
+document.addEventListener("click", function(e) {
+
+  const menu = document.getElementById("topMenu");
+  const menuButton = document.getElementById("bottomMenuBtn");
+
+  if (!menu) return;
+
+  if (
+    !menu.contains(e.target) &&
+    !e.target.closest("#bottomToolbar")
+  ) {
+    menu.classList.add("hidden");
+  }
+
+});      
 </body>
 
 
