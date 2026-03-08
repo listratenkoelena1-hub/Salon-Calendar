@@ -7362,20 +7362,18 @@ if ('serviceWorker' in navigator) {
 }
 </script> 
 document.addEventListener("click", function(e) {
-
   const menu = document.getElementById("topMenu");
   const menuButton = document.getElementById("bottomMenuBtn");
 
-  if (!menu) return;
+  if (!menu || menu.classList.contains("hidden")) return;
 
-  if (
-    !menu.contains(e.target) &&
-    !e.target.closest("#bottomToolbar")
-  ) {
-    menu.classList.add("hidden");
+  const clickedInsideMenu = menu.contains(e.target);
+  const clickedMenuButton = menuButton && menuButton.contains(e.target);
+
+  if (!clickedInsideMenu && !clickedMenuButton) {
+    closeMenu();
   }
-
-});      
+});
 </body>
 
 
