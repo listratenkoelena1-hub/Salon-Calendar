@@ -1971,6 +1971,48 @@ body.modal-open{
     #appointmentStatusBlock {
   display: none;
 }  
+/* ===== Loading Screen ===== */
+
+#loadingScreen{
+  position: fixed;
+  inset: 0;
+  background: #ffffff;
+  z-index: 20000;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-box{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:22px;
+}
+
+.loading-title{
+  font-size:20px;
+  font-weight:600;
+  color:#333;
+}
+
+.loading-spinner{
+  width:34px;
+  height:34px;
+
+  border:3px solid #e5e5e5;
+  border-top:3px solid #999;
+
+  border-radius:50%;
+
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin{
+  from{ transform:rotate(0deg); }
+  to{ transform:rotate(360deg); }
+}      
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -1980,6 +2022,19 @@ body.modal-open{
 
 
 <body>
+<div id="loadingScreen">
+
+  <div class="loading-box">
+
+    <div class="loading-title">
+      Salon Calendar
+    </div>
+
+    <div class="loading-spinner"></div>
+
+  </div>
+
+</div>      
   <div id="loginScreen" class="modal hidden">
   <div class="modal-content">
     <h3>Login</h3>
@@ -7484,6 +7539,21 @@ document.addEventListener("click", function(e) {
   }
 });
 </script>
+<script>
+
+window.addEventListener("load", function(){
+
+  const loader = document.getElementById("loadingScreen");
+
+  if(loader){
+    setTimeout(function(){
+      loader.style.display = "none";
+    }, 400);
+  }
+
+});
+
+</script>      
 </body>
 
 
