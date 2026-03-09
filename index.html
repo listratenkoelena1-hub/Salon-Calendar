@@ -3721,9 +3721,10 @@ canceled: aCanceled.checked === true,
 cancelComment: aCanceled.checked ? (aCancelComment.value || '').trim() : null,
 lastEditedBy: editorLabel
 };
-  if (isOlderThan7Days(data.date)) {
-  return;
-}
+    if (isOlderThan7Days(data.date)) {
+    showToast("Appointments older than 7 days cannot be edited", "warning");
+    return;
+  }
     
 const end = data.start + data.duration;
 
@@ -3747,18 +3748,27 @@ if (conflictType === "off") {
   return;
 }
 
-editId
-? await updateDoc(doc(db,"appointments",editId),data)
-: await addDoc(collection(db,"appointments"),data);
+const isEditingAppointment = !!editId;
+
+if (isEditingAppointment) {
+  await updateDoc(doc(db, "appointments", editId), data);
+  showToast("Appointment updated", "success");
+} else {
+  await addDoc(collection(db, "appointments"), data);
+  showToast("Appointment saved", "success");
+}
+
 closeAppointment();
 };
 
 window.confirmDelete=()=>{ if(editId) deleteModal.classList.remove('hidden'); };
 
-window.deleteAppointment=async()=>{
-await deleteDoc(doc(db,"appointments",editId));
-editId=null;
-closeDelete(); closeAppointment();
+window.deleteAppointment = async () => {
+  await deleteDoc(doc(db, "appointments", editId));
+  editId = null;
+  showToast("Appointment deleted", "success");
+  closeDelete();
+  closeAppointment();
 };
 
 window.login = async () => {
@@ -4014,7 +4024,10 @@ window.addStaff = async () => {
   const role = newStaffRole.value;
   const color = newStaffColor.value;
 
-  if (!name) return;
+    if (!name) {
+    showToast("Please enter staff name", "warning");
+    return;
+  }
 
   const docRef = await addDoc(collection(db, "staff"), {
   name: name,
@@ -4028,10 +4041,12 @@ await ensureAuthUser(email, role, docRef.id);
 
 
   // очистка полей
-  newStaffName.value = '';
+    newStaffName.value = '';
   newStaffEmail.value = '';
   newStaffRole.value = 'staff';
-  newStaffColor.selectedIndex = 0;    
+  newStaffColor.selectedIndex = 0;
+
+  showToast("Staff added", "success");
 };
 
 window.updateStaffColor=(id,color)=>updateDoc(doc(db,"staff",id),{color});
@@ -4062,20 +4077,26 @@ if (statusEl) {
   }, 4000);
 }
 
+showToast("Staff updated", "success");
 };
 
+window.moveStaff = async (i, dir) => {
+  if (currentUserRole === 'staff') return;
 
-window.moveStaff=async(i,dir)=>{
-if (currentUserRole === 'staff') return;
-const real=staff.filter(s=>s.id!==ANYONE_ID);
-const j=i+dir;
-if(j<0||j>=real.length) return;
-const a=real[i], b=real[j];
-await Promise.all([
-updateDoc(doc(db,"staff",a.id),{order:j}),
-updateDoc(doc(db,"staff",b.id),{order:i})
+  const real = staff.filter(s => s.id !== ANYONE_ID);
+  const j = i + dir;
 
-]);
+  if (j < 0 || j >= real.length) return;
+
+  const a = real[i];
+  const b = real[j];
+
+  await Promise.all([
+    updateDoc(doc(db, "staff", a.id), { order: j }),
+    updateDoc(doc(db, "staff", b.id), { order: i })
+  ]);
+
+  showToast("Staff order updated", "success");
 };
 
 
@@ -4095,13 +4116,19 @@ staffDeleteModal.classList.add('hidden');
 
 
 
-window.confirmStaffDelete=async()=>{
-const q=query(collection(db,"appointments"),where("staffId","==",staffToDelete));
-const snap=await getDocs(q);
-await Promise.all(snap.docs.map(d=>deleteDoc(d.ref)));
-await deleteDoc(doc(db,"staff",staffToDelete));
-staffToDelete=null;
-staffDeleteModal.classList.add('hidden');
+window.confirmStaffDelete = async () => {
+  const q = query(
+    collection(db, "appointments"),
+    where("staffId", "==", staffToDelete)
+  );
+
+  const snap = await getDocs(q);
+  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+  await deleteDoc(doc(db, "staff", staffToDelete));
+
+  staffToDelete = null;
+  staffDeleteModal.classList.add('hidden');
+  showToast("Staff removed", "success");
 };
 
 //====================================================================//
@@ -4528,10 +4555,8 @@ if (currentUserRole === 'staff') {
   // =========================================
   if (offVacation.checked) {
 
-    if (!vacationFrom || !vacationTo) {
-      document
-        .getElementById('offWorkHardConflictModal')
-        .classList.remove('hidden');
+       if (!vacationFrom || !vacationTo) {
+      showToast("Please select vacation dates", "warning");
       return;
     }
 
@@ -4604,7 +4629,7 @@ if (conflictType === "off") {
         vacationId: vacationId
       });
     }));
-
+showToast("Vacation saved", "success");
     closeOffWork();
     return;
   }
@@ -4662,7 +4687,7 @@ if (futureConflict) {
     };
 
     await addDoc(collection(db, "WeeklyOff"), weeklyData);
-
+showToast("Weekly off saved", "success");
     closeOffWork();
     return;
   }
@@ -4718,7 +4743,7 @@ if (conflictType === "off") {
 
 
   // ===== SAVE =====
-  if (editingOffWorkId) {
+   if (editingOffWorkId) {
     await updateDoc(doc(db, "OffWork", editingOffWorkId), {
       date: data.date,
       staffId: data.staffId,
@@ -4726,6 +4751,7 @@ if (conflictType === "off") {
       start: offAllDay.checked ? null : +offStart.value,
       end: offAllDay.checked ? null : +offEnd.value
     });
+    showToast("Off work updated", "success");
   } else {
     await addDoc(collection(db, "OffWork"), {
       date: data.date,
@@ -4734,6 +4760,7 @@ if (conflictType === "off") {
       start: offAllDay.checked ? null : +offStart.value,
       end: offAllDay.checked ? null : +offEnd.value
     });
+    showToast("Off work saved", "success");
   }
 
   editingOffWorkId = null;
@@ -4750,6 +4777,7 @@ window.removeOffWork = async () => {
   await deleteDoc(doc(db, "OffWork", editingOffWorkId));
   editingOffWorkId = null;
 
+  showToast("Off work removed", "success");
   closeOffWork();
 };
 
@@ -4780,6 +4808,7 @@ removeWeeklyAllBtn.onclick = async () => {
   await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
 
   // 3. Закрываем и перерисовываем
+  showToast("Weekly off removed", "success");    
   closeOffWork();
   renderCalendar();
 };
@@ -4802,7 +4831,7 @@ removeWeeklyDayBtn.onclick = async () => {
   };
 
   await addDoc(collection(db, 'OffWork'), data);
-
+showToast("This day removed from weekly off", "success");
   closeOffWork();
   renderCalendar();
 };
@@ -4824,7 +4853,7 @@ const q = query(
 
 const snap = await getDocs(q);
 await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
-
+showToast("Vacation removed", "success");
   closeOffWork();
 };
 
@@ -6423,6 +6452,7 @@ for (const row of entry.pendingSplit) {
   closedAt: serverTimestamp()
 });
 }
+      showToast("Split service saved", "success");
       return;
 }
 
@@ -6725,7 +6755,7 @@ if (paymentContext && paymentContext.mode === "extra") {
   // ===== ЕСЛИ НЕТ splitGroup → обычный split payment =====
   if (!parentEntry.splitGroupId) {
 
-    await updateDoc(
+        await updateDoc(
       doc(db, "DayEntries", parentEntry.id),
       {
         payments: tempPayments,
@@ -6733,6 +6763,7 @@ if (paymentContext && paymentContext.mode === "extra") {
       }
     );
 
+    showToast("Split payment saved", "success");
     closePaymentPanel();
     return;
   }
@@ -6803,9 +6834,10 @@ await updateDoc(
     paymentMethod: null
   }
 );
-  closePaymentPanel();
-};
 
+showToast("Split payment saved", "success");
+closePaymentPanel();
+};
 window.closePaymentPanel = function () {
 
   document.getElementById("paymentPanel").classList.add("hidden");
@@ -7261,12 +7293,14 @@ if (alreadyWithdrawnToday) {
   return;
 }
 
-  await addDoc(collection(db, "TipWithdrawals"), {
+   await addDoc(collection(db, "TipWithdrawals"), {
     staffId: currentUserStaffId,
     date: getDrDateString(),
     amount: amount,
     createdAt: serverTimestamp()
   });
+
+  showToast(`Tips withdrawn: $${(amount / 100).toFixed(2)}`, "success");
 
   closeWithdrawal();
 };
