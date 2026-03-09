@@ -3402,15 +3402,8 @@ dayAppointments
     const visibleStart = getVisibleAppointmentStart(a);
     const hiddenMorningSlots = Math.max(0, visibleStart - a.start);
     const visibleDuration = Math.max(1, fullDuration - hiddenMorningSlots);
-const firstVisibleCell = document.querySelector(
-  `.slot[data-slot="${visibleStart}"][data-staff="${si}"]`
-);
-
-const slotPixelHeight = firstVisibleCell
-  ? firstVisibleCell.getBoundingClientRect().height
-  : 23;
-
-const overlayPixelHeight = Math.max(1, visibleDuration * slotPixelHeight - 2);
+const SLOT_PIXEL_HEIGHT = 23;
+const overlayPixelHeight = Math.max(1, visibleDuration * SLOT_PIXEL_HEIGHT - 2);
     for (let i = 0; i < visibleDuration; i++) {
       const slotIndex = visibleStart + i;
 
@@ -3457,8 +3450,7 @@ const overlayPixelHeight = Math.max(1, visibleDuration * slotPixelHeight - 2);
         morningCell.style.background = color;
 
 const hiddenPartDuration = Math.max(1, Math.min(fullDuration, MORNING_SLOTS - a.start));
-const morningCellHeight = morningCell.getBoundingClientRect().height || 18;
-const morningOverlayHeight = Math.max(1, morningCellHeight - 2);
+const morningOverlayHeight = 16;
 
 morningCell.innerHTML = buildAppointmentOverlay(
   {
