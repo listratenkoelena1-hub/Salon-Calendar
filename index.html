@@ -7063,6 +7063,11 @@ if (currentUserRole === 'staff' || currentUserRole === 'reception') {
   phoneRow.style.display = 'flex';
 }
 const walkBtn = document.getElementById('walkInBtn');
+const todayBtn = document.getElementById('todayBtn');
+
+if (todayBtn) {
+  todayBtn.classList.remove('hidden');
+}
 
 if (walkBtn) {
   if (currentUserRole === 'staff') {
