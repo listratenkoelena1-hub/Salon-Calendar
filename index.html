@@ -3563,10 +3563,10 @@ if (a.lastEditedBy) {
 }
 if(!a) return;
 editId=id;
-if (appointmentStatusBlock) appointmentStatusBlock.style.display = 'block';      
+if (appointmentStatusBlock) appointmentStatusBlock.style.display = 'block';
+document.getElementById('durationError').style.display = 'none';
 appointmentModal.classList.remove('hidden');
-document.getElementById('durationError').style.display = 'none';      
-document.getElementById('appointmentStatusBlock').style.display = 'block';      
+document.getElementById('appointmentStatusBlock').style.display = 'block';
 fillSelects();
 // редактирование — разрешаем менять staff и дату
 aStaff.disabled = false;
@@ -3576,6 +3576,7 @@ aDate.value=a.date;
 aStaff.value=a.staffId;
 aTime.value = a.start === -1 ? -1 : a.start;
 aDuration.value = a.duration ?? '';
+document.getElementById('durationError').style.display = 'none';      
 aClient.value=a.client;
 aPhone.value = a.phone || '';
 aNote.value=a.note||'';
