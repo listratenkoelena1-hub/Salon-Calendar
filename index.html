@@ -528,8 +528,6 @@ th.time {
   right: 1px;
   top: 0;
 
-  height: calc(var(--appt-slots) * 23px);
-
   background: var(--appt-color);
   border-radius: 10px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.10);
@@ -601,6 +599,10 @@ th.time {
   border-radius:50%;
   margin-right:6px;
 }
+.anyone-cell {
+  background: #e9e9e9 !important;
+  border-radius: 0;
+}      
 #calendar-container {
   width: 100vw;
   overflow: hidden;
@@ -3151,14 +3153,18 @@ for (let i = 0; i < SLOTS; i++) {
 
 drawAppointments();
 }
-function buildAppointmentOverlay(a, color) {
+function buildAppointmentOverlay(a, color, pixelHeight = null) {
   const slots = Math.max(a.duration || 1, 1);
 
   const startText = timeLabel(a.start);
   const endText = timeLabel(a.start + slots);
 
+  const heightStyle = pixelHeight
+    ? `height:${pixelHeight}px;`
+    : '';
+
   return `
-    <div class="app-overlay" style="--appt-slots:${slots}; --appt-color:${color};">
+    <div class="app-overlay" style="--appt-slots:${slots}; --appt-color:${color}; ${heightStyle}">
       <div class="app-time">${startText} - ${endText}</div>
 
       <div class="app-client ${a.noShow ? 'no-show-text' : ''}">
@@ -3272,6 +3278,9 @@ cell.dataset.weeklyStaffId = w.staffId;
 cell.dataset.weeklyStaffId = w.staffId;
 
       }
+ if (cell.dataset.slot === "-1") {
+  cell.onclick = null;
+}         
     }
   });
 
@@ -3297,9 +3306,14 @@ if (!o.allDay) {
       `.slot[data-slot="-1"][data-staff="${staffIndex}"]`
     );
     if (cell) {
-      cell.style.background = '#e0e0e0';
-      cell.onclick = () => openOffWorkEdit(o);
-    }
+  cell.style.background = '#e0e0e0';
+
+  if (cell.dataset.slot === "-1") {
+    cell.onclick = null;
+  } else {
+    cell.onclick = () => openOffWorkEdit(o);
+  }
+}
   }
 
 
@@ -3338,11 +3352,13 @@ Object.entries(anyoneGroups).forEach(([start, group]) => {
   );
 
   if (!cell) return;
-  cell.style.background = staff[si].color;
-  cell.classList.add('busy');
-  const firstName = group[0].client || '—';
-  const extra = group.length - 1;
-  cell.innerHTML = firstName;
+cell.style.background = '#e9e9e9';
+cell.classList.remove('busy');
+cell.classList.add('anyone-cell');
+
+const firstName = group[0].client || '—';
+const extra = group.length - 1;
+cell.innerHTML = firstName;
   if (extra > 0) {
     cell.innerHTML += `<span class="anyone-count">+${extra}</span>`;
   }
@@ -3386,7 +3402,15 @@ dayAppointments
     const visibleStart = getVisibleAppointmentStart(a);
     const hiddenMorningSlots = Math.max(0, visibleStart - a.start);
     const visibleDuration = Math.max(1, fullDuration - hiddenMorningSlots);
+const firstVisibleCell = document.querySelector(
+  `.slot[data-slot="${visibleStart}"][data-staff="${si}"]`
+);
 
+const slotPixelHeight = firstVisibleCell
+  ? firstVisibleCell.getBoundingClientRect().height
+  : 23;
+
+const overlayPixelHeight = Math.max(1, visibleDuration * slotPixelHeight - 2);
     for (let i = 0; i < visibleDuration; i++) {
       const slotIndex = visibleStart + i;
 
@@ -3402,15 +3426,17 @@ dayAppointments
       if (i === 0 && i === lastVisible) {
         cell.classList.add('block-start', 'block-end');
         cell.innerHTML = buildAppointmentOverlay(
-          { ...a, start: visibleStart, duration: visibleDuration },
-          color
-        );
+  { ...a, start: visibleStart, duration: visibleDuration },
+  color,
+  overlayPixelHeight
+);
       } else if (i === 0) {
         cell.classList.add('block-start');
-        cell.innerHTML = buildAppointmentOverlay(
-          { ...a, start: visibleStart, duration: visibleDuration },
-          color
-        );
+       cell.innerHTML = buildAppointmentOverlay(
+  { ...a, start: visibleStart, duration: visibleDuration },
+  color,
+  overlayPixelHeight
+);
       } else if (i === lastVisible) {
         cell.classList.add('block-end');
       } else {
@@ -3430,18 +3456,21 @@ dayAppointments
         morningCell.classList.add('busy', 'block-start', 'block-end');
         morningCell.style.background = color;
 
-        const hiddenPartDuration = Math.max(1, Math.min(fullDuration, MORNING_SLOTS - a.start));
+const hiddenPartDuration = Math.max(1, Math.min(fullDuration, MORNING_SLOTS - a.start));
+const morningCellHeight = morningCell.getBoundingClientRect().height || 18;
+const morningOverlayHeight = Math.max(1, morningCellHeight - 2);
 
-        morningCell.innerHTML = buildAppointmentOverlay(
-          {
-            ...a,
-            start: a.start,
-            duration: hiddenPartDuration
-          },
-          color
-        );
+morningCell.innerHTML = buildAppointmentOverlay(
+  {
+    ...a,
+    start: Math.max(MORNING_SLOTS - hiddenPartDuration, a.start),
+    duration: hiddenPartDuration
+  },
+  color,
+  morningOverlayHeight
+);
 
-        morningCell.onclick = () => openEdit(a.id);
+        morningCell.onclick = null;
       }
     }
   });
