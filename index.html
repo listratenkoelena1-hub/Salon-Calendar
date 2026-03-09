@@ -3565,6 +3565,7 @@ if(!a) return;
 editId=id;
 if (appointmentStatusBlock) appointmentStatusBlock.style.display = 'block';      
 appointmentModal.classList.remove('hidden');
+document.getElementById('durationError').style.display = 'none';      
 document.getElementById('appointmentStatusBlock').style.display = 'block';      
 fillSelects();
 // редактирование — разрешаем менять staff и дату
