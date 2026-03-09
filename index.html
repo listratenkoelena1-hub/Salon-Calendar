@@ -503,58 +503,101 @@ th.time {
 
 
 
-.slot.busy {
-
-  border: none;
-
+.slot {
+  position: relative;
 }
 
+.slot.busy {
+  background: transparent !important;
+  border: none !important;
+}
 
+.slot.busy.block-start,
+.slot.busy.block-middle,
+.slot.busy.block-end {
+  border: none !important;
+}
 
 .slot.busy.block-start {
-
-  border-top-left-radius: 10px;
-
-  border-top-right-radius: 10px;
-
-  border-left: 1px solid rgba(0,0,0,0.35);
-
-  border-right: 1px solid rgba(0,0,0,0.35);
-
-  border-top: 1px solid rgba(0,0,0,0.35);
-
+  overflow: visible !important;
 }
 
+.app-overlay {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 1px;
 
+  height: calc(var(--appt-slots) * 22px - 2px);
 
-.slot.busy.block-middle {
+  background: var(--appt-color);
+  border-radius: 10px;
+  box-shadow: 0 2px 7px rgba(0,0,0,0.18);
 
-  border-left: 1px solid rgba(0,0,0,0.35);
+  box-sizing: border-box;
+  padding: 4px 6px 5px 6px;
 
-  border-right: 1px solid rgba(0,0,0,0.35);
+  overflow: hidden;
+  z-index: 3;
+  pointer-events: none;
 
-  border-radius: 0;
-
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
-
-
-.slot.busy.block-end {
-
-  border-bottom-left-radius: 10px;
-
-  border-bottom-right-radius: 10px;
-
-  border-left: 1px solid rgba(0,0,0,0.35);
-
-  border-right: 1px solid rgba(0,0,0,0.35);
-
-  border-bottom: 1px solid rgba(0,0,0,0.35);
-
+.app-time {
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.1;
+  white-space: nowrap;
+  margin-bottom: 2px;
+  opacity: 0.95;
 }
 
+.app-client {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  margin-bottom: 2px;
+}
 
+.app-note-wrap {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
 
+  mask-image: linear-gradient(to bottom, black 72%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 72%, transparent 100%);
+}
+
+.app-service {
+  font-size: 10px;
+  line-height: 1.15;
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: clip;
+  opacity: 0.78;
+}
+
+.no-show-text {
+  text-decoration: line-through;
+  color: #b71c1c;
+}
+
+.no-show-dot {
+  display:inline-block;
+  width:8px;
+  height:8px;
+  background:#d32f2f;
+  border-radius:50%;
+  margin-right:6px;
+}
 #calendar-container {
   width: 100vw;
   overflow: hidden;
@@ -3105,7 +3148,27 @@ for (let i = 0; i < SLOTS; i++) {
 
 drawAppointments();
 }
+function buildAppointmentOverlay(a, color) {
+  const slots = Math.max(a.duration || 1, 1);
 
+  const startText = timeLabel(a.start);
+  const endText = timeLabel(a.start + slots);
+
+  return `
+    <div class="app-overlay" style="--appt-slots:${slots}; --appt-color:${color};">
+      <div class="app-time">${startText} - ${endText}</div>
+
+      <div class="app-client ${a.noShow ? 'no-show-text' : ''}">
+        ${a.noShow ? '<span class="no-show-dot"></span>' : ''}
+        ${a.client || ''}
+      </div>
+
+      <div class="app-note-wrap">
+        <div class="app-service">${a.note || ''}</div>
+      </div>
+    </div>
+  `;
+}
 function drawAppointments(){
 
 document.querySelectorAll('.slot').forEach(c => {
@@ -3287,56 +3350,50 @@ dayAppointments
   .forEach(a => {
     const si = staff.findIndex(s => s.id === a.staffId);
     if (si === -1) return;
+
     if (a.start === -1) {
       const cell = document.querySelector(
         `.slot[data-slot="-1"][data-staff="${si}"]`
       );
 
       if (!cell) return;
-      cell.style.background = staff[si].color;
+
       cell.classList.add('busy', 'block-start', 'block-end');
       cell.innerHTML = `
-  <div class="app-client ${a.noShow ? 'no-show-text' : ''}">
-    ${a.noShow ? '<span class="no-show-dot"></span>' : ''}
-    ${a.client || ''}
-  </div>
-  <div class="app-service">${a.note || ''}</div>
-`;
+        <div class="app-client ${a.noShow ? 'no-show-text' : ''}">
+          ${a.noShow ? '<span class="no-show-dot"></span>' : ''}
+          ${a.client || ''}
+        </div>
+        <div class="app-service">${a.note || ''}</div>
+      `;
       cell.onclick = () => openEdit(a.id);
       return;
     }
 
-    for (let i = 0; i < (a.duration || 1); i++) {
+    const duration = Math.max(a.duration || 1, 1);
+    const last = duration - 1;
+    const color = staff[si].color;
+
+    for (let i = 0; i < duration; i++) {
       const cell = document.querySelector(
-        `.slot[data-slot="${a.start  + i}"][data-staff="${si}"]`
+        `.slot[data-slot="${a.start + i}"][data-staff="${si}"]`
       );
       if (!cell) continue;
-      cell.style.background = staff[si].color;
+
       cell.classList.add('busy');
-      const last = (a.duration || 1) - 1;
+
       if (i === 0 && i === last) {
         cell.classList.add('block-start', 'block-end');
-        cell.innerHTML = `
-  <div class="app-client ${a.noShow ? 'no-show-text' : ''}">
-    ${a.noShow ? '<span class="no-show-dot"></span>' : ''}
-    ${a.client || ''}
-  </div>
-  <div class="app-service">${a.note || ''}</div>
-`;
+        cell.innerHTML = buildAppointmentOverlay(a, color);
       } else if (i === 0) {
         cell.classList.add('block-start');
-        cell.innerHTML = `
-  <div class="app-client ${a.noShow ? 'no-show-text' : ''}">
-    ${a.noShow ? '<span class="no-show-dot"></span>' : ''}
-    ${a.client || ''}
-  </div>
-  <div class="app-service">${a.note || ''}</div>
-`;
+        cell.innerHTML = buildAppointmentOverlay(a, color);
       } else if (i === last) {
         cell.classList.add('block-end');
       } else {
         cell.classList.add('block-middle');
       }
+
       cell.onclick = () => openEdit(a.id);
     }
   });
