@@ -3494,28 +3494,28 @@ document.addEventListener('click', e => {
 
 
 
-window.openAdd=()=>{
-appointmentAction = 'create';     
-editId=null;
-appointmentModal.classList.remove('hidden');
-aDate.value=calendarDate.value;
-fillSelects();
-// обычное добавление — разрешаем менять staff и дату
-aStaff.disabled = false;
-aStaff.style.opacity = '1';
-changeDateBtn.style.display = '';
-aClient.value='';
-aNote.value='';
-aPhone.value = '';
-aNoShow.checked = false;
-aCanceled.checked = false;
-aCancelComment.value = '';
-updateCancelUI();
-document.getElementById('durationError').style.display = 'none';
-aDuration.value = '';     
-document.getElementById('appointmentEditorLabel').textContent = '';
-applyAppointmentTintNow();
-};
+// window.openAdd=()=>{
+// appointmentAction = 'create';     
+// editId=null;
+// appointmentModal.classList.remove('hidden');
+// aDate.value=calendarDate.value;
+// fillSelects();
+// // обычное добавление — разрешаем менять staff и дату
+// aStaff.disabled = false;
+// aStaff.style.opacity = '1';
+// changeDateBtn.style.display = '';
+// aClient.value='';
+// aNote.value='';
+// aPhone.value = '';
+// aNoShow.checked = false;
+// aCanceled.checked = false;
+// aCancelComment.value = '';
+// updateCancelUI();
+// document.getElementById('durationError').style.display = 'none';
+// aDuration.value = '';     
+// document.getElementById('appointmentEditorLabel').textContent = '';
+// applyAppointmentTintNow();
+// };
 
 
 
@@ -6523,12 +6523,12 @@ await addDoc(collection(db, "DayEntries"), {
 };
 
 
-window.reopenDrEntry = async (id) => {
-     if (!isDrEditingAllowed()) return; 
-  await updateDoc(doc(db, "DayEntries", id), {
-    status: "open"
-  });
-};
+// window.reopenDrEntry = async (id) => {
+//      if (!isDrEditingAllowed()) return; 
+//   await updateDoc(doc(db, "DayEntries", id), {
+//     status: "open"
+//   });
+// };
 window.finishWork = async () => {
   // редактировать можно только сегодня (как и в Daily Report)
   if (!isDrEditingAllowed()) return;
