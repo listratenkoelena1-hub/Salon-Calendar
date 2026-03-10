@@ -4704,6 +4704,7 @@ showToast("Weekly off saved", "success");
     end: offAllDay.checked ? SLOTS : +offEnd.value
   };
 if (isOlderThan7Days(data.date)) {
+showToast("Off work older than 7 days cannot be edited", "warning");      
   return;
 }
 
@@ -7196,22 +7197,22 @@ if (staffMenuItem) {
     staffMenuItem.style.display = '';
   }
 }
-  const offWorkMenuItem = document.getElementById('offWorkMenuItem');
+const offWorkMenuItem = document.getElementById('offWorkMenuItem');
 
 if (offWorkMenuItem) {
-  if (currentUserRole !== 'staff') {
-    offWorkMenuItem.style.display = 'none';
-  } else {
+  if (currentUserRole === 'staff' || currentUserRole === 'reception') {
     offWorkMenuItem.style.display = '';
+  } else {
+    offWorkMenuItem.style.display = 'none';
   }
 }
 const bottomOffWorkBtn = document.getElementById('bottomOffWorkBtn');
 
 if (bottomOffWorkBtn) {
-  if (currentUserRole !== 'staff') {
-    bottomOffWorkBtn.style.display = 'none';
-  } else {
+  if (currentUserRole === 'staff' || currentUserRole === 'reception') {
     bottomOffWorkBtn.style.display = '';
+  } else {
+    bottomOffWorkBtn.style.display = 'none';
   }
 }
 
