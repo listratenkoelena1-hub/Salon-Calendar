@@ -6634,15 +6634,22 @@ const END_MIN = END_MINUTES;
 
   // создаём только если реально есть свободные слоты
   if (ranges.length > 0) {
-    for (const r of ranges) {
-      await addDoc(collection(db, "OffWork"), {
-        date: dateStr,
-        staffId: staffId,
-        allDay: false,
-        start: r.start,
-        end: r.end
-      });
-    }
+const finishWorkBatchId = crypto.randomUUID();
+
+for (let index = 0; index < ranges.length; index++) {
+  const r = ranges[index];
+
+  await addDoc(collection(db, "OffWork"), {
+    date: dateStr,
+    staffId: staffId,
+    allDay: false,
+    start: r.start,
+    end: r.end,
+    finishWork: true,
+    finishWorkBatchId: finishWorkBatchId,
+    finishWorkNotify: index === 0
+  });
+}
     renderCalendar();
   }
 
