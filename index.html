@@ -1044,7 +1044,7 @@ padding:10px 14px;
   opacity: 0.7;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: relative;
+  text-overflow: clip;
 
   mask-image: linear-gradient(to right, black 80%, transparent 100%);
   -webkit-mask-image: linear-gradient(to right, black 80%, transparent 100%);
@@ -1103,16 +1103,6 @@ padding:10px 14px;
   box-sizing: border-box;
 }
 
-  border-radius: 14px;
-  border: 1px solid rgba(0,0,0,0.14);
-  border-left-width: 6px;              /* цвет мастера зададим inline */
-  box-shadow: 0 8px 18px rgba(0,0,0,0.12);
-
-    padding: 8px 10px 8px 8px;   /* справа чуть больше */
-  box-sizing: border-box;
-
-  /* фон (tint) зададим inline */
-}
 
 /* имя мастера сверху */
 .mgr-card-title{
@@ -1940,16 +1930,7 @@ body.modal-open{
   min-width: 110px;
   max-width: 110px;
 }    
-  /* Close button should align to the FULL scrollable width */
-#staffModal #staffModalActions{
-  width: max-content;
-  margin-left: auto;
-}
 
-#staffModal #staffModalActions{
-  display: flex;
-  justify-content: flex-end;
-}    
  /* Staff modal horizontal scroll (includes Close button) */
 #staffModal #staffScroll{
   overflow-x: auto;
@@ -2751,9 +2732,6 @@ changeDateBtn.onclick = () => {
   appointmentDatePicker.open();
 };
 
-const aDatePicker = document.getElementById('aDatePicker');
-
-
 // Search
 const searchInput = document.getElementById('searchInput');
 const searchResults = document.getElementById('searchResults');
@@ -2866,15 +2844,7 @@ aPhone.addEventListener('input', () => {
 
 const calendar=document.getElementById('calendar');
 
-const calendarDate=document.getElementById('calendarDate');
-const changeCalendarDateBtn = document.getElementById('changeCalendarDateBtn');
-
-if (changeCalendarDateBtn) {
-  changeCalendarDateBtn.onclick = () => {
-    calendarDate.showPicker();
-  };
-}
-
+const calendarDate = document.getElementById('calendarDate');
 
 const today = new Date();
 calendarDate.value = today.toISOString().slice(0, 10);
@@ -4124,10 +4094,10 @@ await ensureAuthUser(email, role, docRef.id);
 
 
   // очистка полей
-    newStaffName.value = '';
+   newStaffName.value = '';
   newStaffEmail.value = '';
   newStaffRole.value = 'staff';
-  newStaffColor.selectedIndex = 0;
+  newStaffColor.value = '#cce5ff';
 
   showToast("Staff added", "success");
 };
