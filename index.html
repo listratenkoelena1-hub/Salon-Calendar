@@ -6506,6 +6506,7 @@ await updateDoc(doc(db, "DayEntries", id), {
   tip: parentTipShare,
   tipMethod: entry.tipMethod || entry.paymentMethod || null,
   splitGroupId: splitGroupId,
+  splitCount: (entry.pendingSplit?.length || 0) + 1,
   isParent: true,
   lockedSplit: true,
   pendingSplit: null,
@@ -6524,7 +6525,7 @@ for (const row of entry.pendingSplit) {
   const taxCents = Math.round(serviceCents * 0.05);
   const totalWithTax = serviceCents + taxCents;
 
-  await addDoc(collection(db, "DayEntries"), {
+await addDoc(collection(db, "DayEntries"), {
   date: entry.date,
   staffId: row.staffId,
   serviceAmount: serviceCents,
@@ -6533,6 +6534,7 @@ for (const row of entry.pendingSplit) {
   payments: distributeServicePayments(serviceCents),
   status: "closed",
   splitGroupId: splitGroupId,
+  splitCount: (entry.pendingSplit?.length || 0) + 1,
   isParent: false,
   lockedSplit: true,
   createdAt: serverTimestamp(),
