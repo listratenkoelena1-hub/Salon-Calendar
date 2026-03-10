@@ -4403,9 +4403,9 @@ toggleSmoothSection(offTimeRange, !record.allDay);
   offEnd.innerHTML = offStart.innerHTML;
 
   if (!record.allDay) {
-    offStart.value = record.start;
-    offEnd.value = record.end;
-  }
+  offStart.value = record.start;
+  offEnd.value = record.end >= SLOTS ? (SLOTS - 1) : record.end;
+}
 
   offSaveBtn.disabled = false;
   offRemoveBtn.disabled = false;
@@ -4561,7 +4561,10 @@ window.saveOffWork = async () => {
 if (currentUserRole === 'staff') {
   offStaff.value = currentUserStaffId;
 }
-
+const normalizedEnd =
+  offAllDay.checked
+    ? SLOTS
+    : (+offEnd.value === SLOTS - 1 ? SLOTS : +offEnd.value);
   // =========================================
   // VACATION SAVE
   // =========================================
@@ -4662,7 +4665,7 @@ showToast("Vacation saved", "success");
 // 🔴 FULL FUTURE CONFLICT CHECK FOR WEEKLY
 
 const weeklyStart = offAllDay.checked ? 0 : +offStart.value;
-const weeklyEnd = offAllDay.checked ? SLOTS : +offEnd.value;
+const weeklyEnd = normalizedEnd;
 
 const futureConflict = appointments.some(a => {
 
@@ -4688,15 +4691,15 @@ if (futureConflict) {
   return;
 }
 
-    const weeklyData = {
-      staffId: offStaff.value,
-      weekday: weekday,
-      startDate: offDate.value,
-      allDay: offAllDay.checked,
-      start: offAllDay.checked ? 0 : +offStart.value,
-      end: offAllDay.checked ? SLOTS : +offEnd.value,
-      enabled: true
-    };
+   const weeklyData = {
+  staffId: offStaff.value,
+  weekday: weekday,
+  startDate: offDate.value,
+  allDay: offAllDay.checked,
+  start: offAllDay.checked ? 0 : +offStart.value,
+  end: normalizedEnd,
+  enabled: true
+};
 
     await addDoc(collection(db, "WeeklyOff"), weeklyData);
 showToast("Weekly off saved", "success");
@@ -4708,13 +4711,13 @@ showToast("Weekly off saved", "success");
   // NORMAL OFF WORK
   // =========================================
 
-  const data = {
-    date: offDate.value,
-    staffId: offStaff.value,
-    allDay: offAllDay.checked,
-    start: offAllDay.checked ? 0 : +offStart.value,
-    end: offAllDay.checked ? SLOTS : +offEnd.value
-  };
+const data = {
+  date: offDate.value,
+  staffId: offStaff.value,
+  allDay: offAllDay.checked,
+  start: offAllDay.checked ? 0 : +offStart.value,
+  end: normalizedEnd
+};
 if (isOlderThan7Days(data.date)) {
 showToast("Off work older than 7 days cannot be edited", "warning");      
   return;
@@ -4757,22 +4760,22 @@ if (conflictType === "off") {
 
   // ===== SAVE =====
    if (editingOffWorkId) {
-    await updateDoc(doc(db, "OffWork", editingOffWorkId), {
-      date: data.date,
-      staffId: data.staffId,
-      allDay: offAllDay.checked,
-      start: offAllDay.checked ? null : +offStart.value,
-      end: offAllDay.checked ? null : +offEnd.value
-    });
+await updateDoc(doc(db, "OffWork", editingOffWorkId), {
+  date: data.date,
+  staffId: data.staffId,
+  allDay: offAllDay.checked,
+  start: offAllDay.checked ? null : +offStart.value,
+  end: offAllDay.checked ? null : normalizedEnd
+});
     showToast("Off work updated", "success");
   } else {
-    await addDoc(collection(db, "OffWork"), {
-      date: data.date,
-      staffId: data.staffId,
-      allDay: offAllDay.checked,
-      start: offAllDay.checked ? null : +offStart.value,
-      end: offAllDay.checked ? null : +offEnd.value
-    });
+   await addDoc(collection(db, "OffWork"), {
+  date: data.date,
+  staffId: data.staffId,
+  allDay: offAllDay.checked,
+  start: offAllDay.checked ? null : +offStart.value,
+  end: offAllDay.checked ? null : normalizedEnd
+});
     showToast("Off work saved", "success");
   }
 
