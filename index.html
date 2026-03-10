@@ -2707,11 +2707,26 @@ function updateCancelUI() {
 
 if (aCanceled) {
   aCanceled.addEventListener('change', () => {
+    if (aCanceled.checked) {
+      aNoShow.checked = false;
+    }
     updateCancelUI();
     checkTimeAvailability();
   });
 }
- updateCancelUI();     
+
+if (aNoShow) {
+  aNoShow.addEventListener('change', () => {
+    if (aNoShow.checked) {
+      aCanceled.checked = false;
+      if (aCancelComment) aCancelComment.value = '';
+    }
+    updateCancelUI();
+    checkTimeAvailability();
+  });
+}
+
+updateCancelUI();   
 function initAppointmentDatePicker() {
   if (appointmentDatePicker) {
     appointmentDatePicker.destroy();
@@ -2762,6 +2777,7 @@ const staffDeleteModal = document.getElementById('staffDeleteModal');
 
 
 let staff=[], appointments=[], editId=null, staffToDelete=null;
+let appointmentAction = 'create';
   // ===== DAILY REPORT DATA =====
 
 let drEntries = [];
@@ -3509,6 +3525,7 @@ document.addEventListener('click', e => {
 
 
 window.openAdd=()=>{
+appointmentAction = 'create';     
 editId=null;
 appointmentModal.classList.remove('hidden');
 aDate.value=calendarDate.value;
@@ -3533,6 +3550,7 @@ applyAppointmentTintNow();
 
 
 function openAddFromCell(cell) {
+  appointmentAction = 'create';    
   editId = null;
 document.getElementById('durationError').style.display = 'none';
 aClient.value = '';
@@ -3575,6 +3593,7 @@ if (a.lastEditedBy) {
 }
 if(!a) return;
 editId=id;
+appointmentAction = 'edit';      
 if (appointmentStatusBlock) appointmentStatusBlock.style.display = 'block';
 document.getElementById('durationError').style.display = 'none';
 appointmentModal.classList.remove('hidden');
@@ -3702,75 +3721,127 @@ function checkTimeAvailability() {
 }
 
 
-window.saveAppointment=async()=>{
+window.saveAppointment = async () => {
 
-const editorLabel =
-  currentUserRole === 'manager'
-    ? 'Manager'
-    : currentUserRole === 'reception'
-      ? 'Reception'
-      : staff.find(s => s.id === currentUserStaffId)?.name || 'Staff';
+  const editorLabel =
+    currentUserRole === 'manager'
+      ? 'Manager'
+      : currentUserRole === 'reception'
+        ? 'Reception'
+        : staff.find(s => s.id === currentUserStaffId)?.name || 'Staff';
 
-      
-      // ===== DURATION VALIDATION =====
-if (aStaff.value !== ANYONE_ID && !aDuration.value) {
-  document.getElementById('durationError').style.display = 'block';
-  return;
-}
+  if (aStaff.value !== ANYONE_ID && !aDuration.value) {
+    document.getElementById('durationError').style.display = 'block';
+    return;
+  }
 
-const data = {
-  date: aDate.value,
-  staffId: aStaff.value,
-  phone: aPhone.value || null,
-  start: +aTime.value === -1 ? -1 : +aTime.value,
-  duration: aStaff.value === ANYONE_ID
-  ? 1
-  : Number(aDuration.value),
-  client: aClient.value,
-  note: aNote.value,
-  noShow: aNoShow.checked === true,
-canceled: aCanceled.checked === true,
-cancelComment: aCanceled.checked ? (aCancelComment.value || '').trim() : null,
-lastEditedBy: editorLabel
-};
-    if (isOlderThan7Days(data.date)) {
+  const original = editId
+    ? appointments.find(a => a.id === editId)
+    : null;
+
+  const data = {
+    date: aDate.value,
+    staffId: aStaff.value,
+    phone: aPhone.value || null,
+    start: +aTime.value === -1 ? -1 : +aTime.value,
+    duration: aStaff.value === ANYONE_ID
+      ? 1
+      : Number(aDuration.value),
+    client: aClient.value,
+    note: aNote.value,
+    noShow: aNoShow.checked === true,
+    canceled: aCanceled.checked === true,
+    cancelComment: aCanceled.checked ? (aCancelComment.value || '').trim() : null,
+    lastEditedBy: editorLabel,
+    lastAction: 'edit'
+  };
+
+  if (isOlderThan7Days(data.date)) {
     showToast("Appointments older than 7 days cannot be edited", "warning");
     return;
   }
-    
-const end = data.start + data.duration;
 
-const conflictType = checkCalendarConflict({
-  staffId: data.staffId,
-  date: data.date,
-  start: data.start,
-  end: end,
-  excludeId: editId
-});
+  if (!editId) {
+    data.lastAction = 'create';
+  } else if (original?.canceled === false && data.canceled === true) {
+    data.lastAction = 'cancel';
+  } else if (original?.canceled === true && data.canceled === false) {
+    data.lastAction = 'cancel_removed';
+  } else if (original?.noShow === false && data.noShow === true) {
+    data.lastAction = 'no_show';
+  } else if (original?.noShow === true && data.noShow === false) {
+    data.lastAction = 'no_show_removed';
+  } else if (original?.date !== data.date) {
+    data.lastAction = 'move';
+  } else {
+    data.lastAction = 'edit';
+  }
 
-if (conflictType === "busy") {
-  conflictModal.classList.remove('hidden');
-  return;
-}
+  const shouldCheckConflict =
+    !editId ||
+    data.lastAction === 'move' ||
+    data.lastAction === 'cancel_removed' ||
+    data.lastAction === 'no_show_removed' ||
+    (
+      data.lastAction === 'edit' &&
+      original &&
+      (
+        original.date !== data.date ||
+        original.staffId !== data.staffId ||
+        original.start !== data.start ||
+        original.duration !== data.duration
+      )
+    );
 
-if (conflictType === "off") {
-  document
-    .getElementById('offWorkConflictModal')
-    .classList.remove('hidden');
-  return;
-}
+  if (shouldCheckConflict) {
+    const end = data.start + data.duration;
 
-const isEditingAppointment = !!editId;
+    const conflictType = checkCalendarConflict({
+      staffId: data.staffId,
+      date: data.date,
+      start: data.start,
+      end: end,
+      excludeId: editId
+    });
 
-if (isEditingAppointment) {
-  await updateDoc(doc(db, "appointments", editId), data);
-  showToast("Appointment updated", "success");
-} else {
-  await addDoc(collection(db, "appointments"), data);
-  showToast("Appointment saved", "success");
-}
+    if (conflictType === "busy") {
+      conflictModal.classList.remove('hidden');
+      return;
+    }
 
-closeAppointment();
+    if (conflictType === "off") {
+      document
+        .getElementById('offWorkConflictModal')
+        .classList.remove('hidden');
+      return;
+    }
+  }
+
+  const isEditingAppointment = !!editId;
+
+  if (isEditingAppointment) {
+    await updateDoc(doc(db, "appointments", editId), data);
+
+    if (data.lastAction === 'move') {
+      showToast("Appointment moved to other date", "success");
+    } else if (data.lastAction === 'cancel') {
+      showToast("Appointment canceled", "success");
+    } else if (data.lastAction === 'cancel_removed') {
+      showToast("Canceled status removed. Appointment restored to calendar", "success");
+    } else if (data.lastAction === 'no_show') {
+      showToast("Appointment marked as no-show", "success");
+    } else if (data.lastAction === 'no_show_removed') {
+      showToast("No-show removed. Appointment restored to calendar", "success");
+    } else {
+      showToast("Appointment updated", "success");
+    }
+
+  } else {
+    await addDoc(collection(db, "appointments"), data);
+    showToast("Appointment saved", "success");
+  }
+
+  closeAppointment();
 };
 
 window.confirmDelete=()=>{ if(editId) deleteModal.classList.remove('hidden'); };
@@ -4149,7 +4220,7 @@ window.closeAppointment = () => {
    document.getElementById('appointmentStatusBlock').style.display = 'none';
    
   appointmentModal.classList.add('hidden');
-      
+  appointmentAction = 'create';    
       resetAppointmentModalTint();
 
   // ===== RESET WALK-IN LOCKS =====
