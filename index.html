@@ -3140,8 +3140,9 @@ for (let i = 0; i < SLOTS; i++) {
   r += '</tr>';
   calendar.innerHTML += r;
 }
-
-drawAppointments();
+requestAnimationFrame(() => {
+  drawAppointments();
+});
 }
 function buildAppointmentOverlay(a, color, pixelHeight = null) {
   const slots = Math.max(a.duration || 1, 1);
