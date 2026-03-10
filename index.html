@@ -3392,8 +3392,16 @@ dayAppointments
     const visibleStart = getVisibleAppointmentStart(a);
     const hiddenMorningSlots = Math.max(0, visibleStart - a.start);
     const visibleDuration = Math.max(1, fullDuration - hiddenMorningSlots);
-const SLOT_PIXEL_HEIGHT = 23;
-const overlayPixelHeight = Math.max(1, visibleDuration * SLOT_PIXEL_HEIGHT - 2);
+
+const firstVisibleCell = document.querySelector(
+  `.slot[data-slot="${visibleStart}"][data-staff="${si}"]`
+);
+
+const realSlotHeight = firstVisibleCell
+  ? firstVisibleCell.getBoundingClientRect().height
+  : 23;
+
+const overlayPixelHeight = Math.max(1, visibleDuration * realSlotHeight - 2);
     for (let i = 0; i < visibleDuration; i++) {
       const slotIndex = visibleStart + i;
 
