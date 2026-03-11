@@ -6694,7 +6694,10 @@ if (!isDrEditingAllowed()) return;
 
 window.openPaymentPanel = async (entryId) => {
 if (!isDrEditingAllowed()) return;
-
+const paymentPanel = document.getElementById("paymentPanel");
+if (paymentPanel && paymentPanel.parentElement !== document.body) {
+  document.body.appendChild(paymentPanel);
+}
 const entrySnap = await getDoc(doc(db, "DayEntries", entryId));
 if (!entrySnap.exists()) return;
 
