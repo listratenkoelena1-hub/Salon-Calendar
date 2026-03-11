@@ -5267,8 +5267,12 @@ if (tip > 0 && tipMethod) {
 
 entries.forEach((e, index) => {
 
-  const isClosed = e.status === "closed" || e.lockedSplit === true;
-const canDelete = isClosed && deletingAllowed && canDeleteDrEntry(e, dateStr);
+const isClosed = e.status === "closed" || e.lockedSplit === true;
+const canDelete =
+  isClosed &&
+  deletingAllowed &&
+  canDeleteDrEntry(e, dateStr) &&
+  (!e.splitGroupId || e.isParent === true);
   const serviceAmount =
   window.drDrafts?.[e.id]?.serviceAmount !== undefined
     ? window.drDrafts[e.id].serviceAmount
@@ -5572,9 +5576,9 @@ html += `
         <span onclick="closeDrEntry('${e.id}')" style="cursor:pointer;">✅</span>
       ` : ''}
 
-      ${isClosed && editingAllowed ? `
-        <span onclick="deleteDrEntry('${e.id}')" style="cursor:pointer;">🗑</span>
-      ` : ''}
+      ${isClosed && editingAllowed && (!e.splitGroupId || e.isParent === true) ? `
+  <span onclick="deleteDrEntry('${e.id}')" style="cursor:pointer;">🗑</span>
+` : ''}
     </div>
 
   </div>
