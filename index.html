@@ -2598,55 +2598,50 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
-  sendPasswordResetEmail,
-  createUserWithEmailAndPassword
+  sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
-initializeApp({
-
-apiKey:"AIzaSyC5BecKxYxQ9V5qbmXBNkTsvnIZBtK_dx8",
-authDomain:"rosesnails-calendar.firebaseapp.com",
-projectId:"rosesnails-calendar"
+ import {
+  getFunctions,
+  httpsCallable
+} from "https://www.gstatic.com/firebasejs/12.8.0/firebase-functions.js";
+      
+const app = initializeApp({
+  apiKey: "AIzaSyC5BecKxYxQ9V5qbmXBNkTsvnIZBtK_dx8",
+  authDomain: "rosesnails-calendar.firebaseapp.com",
+  projectId: "rosesnails-calendar"
 });
 
-const db = getFirestore();
-const auth = getAuth();
+const db = getFirestore(app);
+const auth = getAuth(app);
+const functions = getFunctions(app, "us-central1");
   let currentUserRole = null;
 let currentUserStaffId = null;
 
-  async function ensureAuthUser(email, role, staffId = null) {
+async function ensureAuthUser(email, role, staffId = null, staffName = null) {
   if (!email) return;
 
   try {
-    // временный пароль — пользователь его НЕ будет использовать
-    const tempPassword = 'Temp1234!';
+    const createStaffAuthUser = httpsCallable(functions, "createStaffAuthUser");
 
-    const userCredential = await createUserWithEmailAndPassword(
-      auth,
-      email,
-      tempPassword
-    );
-
-    const user = userCredential.user;
-
-    // создаём документ user
-    await setDoc(doc(db, "users", user.uid), {
-      email: email,
+    await createStaffAuthUser({
+      email: email.trim().toLowerCase(),
       role: role,
-      staffId: staffId
+      staffId: staffId,
+      staffName: staffName
     });
 
-    // сразу отправляем reset password
-    await sendPasswordResetEmail(auth, email);
+    await sendPasswordResetEmail(auth, email.trim().toLowerCase());
 
   } catch (error) {
-    // если пользователь уже существует — это НЕ ошибка для нас
-    if (error.code === 'auth/email-already-in-use') {
-      console.log('User already exists:', email);
-      return;
-    }
+    console.error("Auth user create error:", error);
 
-    console.error('Auth user create error:', error);
+    const message =
+      error?.message ||
+      error?.details ||
+      "Failed to create auth user";
+
+    showToast(message, "error");
   }
 }
 
@@ -4090,7 +4085,7 @@ window.addStaff = async () => {
   order: staff.filter(s => s.id !== ANYONE_ID).length
 });
 
-await ensureAuthUser(email, role, docRef.id);
+await ensureAuthUser(email, role, docRef.id, name);
 
 
   // очистка полей
@@ -4120,7 +4115,10 @@ window.saveStaffMeta = async (staffId) => {
     email: email || null,
     role: role
   });
-  await ensureAuthUser(email, role, staffId);
+ const nameEl = document.querySelector(`[data-staff-name="${staffId}"]`);
+const staffName = nameEl ? nameEl.value.trim() : null;
+
+await ensureAuthUser(email, role, staffId, staffName);
   const statusEl = document.getElementById(`staff-status-${staffId}`);
 if (statusEl) {
   statusEl.classList.add('show');
@@ -7225,82 +7223,76 @@ onAuthStateChanged(auth, async (user) => {
   const userRef = doc(db, "users", user.uid);
   const userSnap = await getDoc(userRef);
 
-  // если пользователь зашёл впервые
   if (!userSnap.exists()) {
-    await setDoc(userRef, {
-      email: user.email,
-      role: "manager", // первый пользователь = manager
-      staffId: null
-    });
+    showToast("Access denied. Your account is not configured.", "error", 4000);
+    await signOut(auth);
+    return;
   }
-if (!userSnap.exists()) {
-  showToast("User role is missing. Please contact admin.", "error", 4000);
-  await signOut(auth);
-  return;
-}
 
-const data = userSnap.data();
+  const data = userSnap.data();
 
-currentUserRole = data.role;
-currentUserStaffId = data.staffId;
+  currentUserRole = data.role;
+  currentUserStaffId = data.staffId;
 
-if (!currentUserRole) {
-  showToast("User role is missing. Please contact admin.", "error", 4000);
-  await signOut(auth);
-  return;
-}
-
-
-
-
-const staffMenuItem = document.getElementById('staffMenuItem');
-
-if (staffMenuItem) {
-  if (currentUserRole === 'reception') {
-    staffMenuItem.style.display = 'none';
-  } else {
-    staffMenuItem.style.display = '';
+  if (!currentUserRole) {
+    showToast("User role is missing. Please contact admin.", "error", 4000);
+    await signOut(auth);
+    return;
   }
-}
-const offWorkMenuItem = document.getElementById('offWorkMenuItem');
 
-if (offWorkMenuItem) {
+  const staffMenuItem = document.getElementById('staffMenuItem');
+
+  if (staffMenuItem) {
+    if (currentUserRole === 'reception') {
+      staffMenuItem.style.display = 'none';
+    } else {
+      staffMenuItem.style.display = '';
+    }
+  }
+
+  const offWorkMenuItem = document.getElementById('offWorkMenuItem');
+
+  if (offWorkMenuItem) {
+    if (currentUserRole === 'staff' || currentUserRole === 'reception') {
+      offWorkMenuItem.style.display = '';
+    } else {
+      offWorkMenuItem.style.display = 'none';
+    }
+  }
+
+  const bottomOffWorkBtn = document.getElementById('bottomOffWorkBtn');
+
+  if (bottomOffWorkBtn) {
+    if (currentUserRole === 'staff' || currentUserRole === 'reception') {
+      bottomOffWorkBtn.style.display = '';
+    } else {
+      bottomOffWorkBtn.style.display = 'none';
+    }
+  }
+
   if (currentUserRole === 'staff' || currentUserRole === 'reception') {
-    offWorkMenuItem.style.display = '';
+    phoneRow.style.display = 'none';
   } else {
-    offWorkMenuItem.style.display = 'none';
+    phoneRow.style.display = 'flex';
   }
-}
-const bottomOffWorkBtn = document.getElementById('bottomOffWorkBtn');
 
-if (bottomOffWorkBtn) {
-  if (currentUserRole === 'staff' || currentUserRole === 'reception') {
-    bottomOffWorkBtn.style.display = '';
-  } else {
-    bottomOffWorkBtn.style.display = 'none';
+  const walkBtn = document.getElementById('walkInBtn');
+  const todayBtn = document.getElementById('todayBtn');
+
+  if (todayBtn) {
+    todayBtn.classList.remove('hidden');
   }
-}
 
-if (currentUserRole === 'staff' || currentUserRole === 'reception') {
-  phoneRow.style.display = 'none';
-} else {
-  phoneRow.style.display = 'flex';
-}
-const walkBtn = document.getElementById('walkInBtn');
-const todayBtn = document.getElementById('todayBtn');
-
-if (todayBtn) {
-  todayBtn.classList.remove('hidden');
-}
-
-if (walkBtn) {
-  if (currentUserRole === 'staff') {
-    walkBtn.classList.remove('hidden');
-  } else {
-    walkBtn.classList.add('hidden');
+  if (walkBtn) {
+    if (currentUserRole === 'staff') {
+      walkBtn.classList.remove('hidden');
+    } else {
+      walkBtn.classList.add('hidden');
+    }
   }
-}
-renderCalendar();
+
+  renderCalendar();
+
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('calendar-container').style.display = 'block';
 });
