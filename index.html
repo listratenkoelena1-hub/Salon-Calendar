@@ -6704,46 +6704,69 @@ if (!entrySnap.exists()) return;
 const entry = entrySnap.data();
 currentPaymentParent = { id: entryId, ...entry };
 
-let totalWithTax = 0;
+// let totalWithTax = 0;
 
-// 1️⃣ если split уже создан
-if (entry.splitGroupId) {
+// // 1️⃣ если split уже создан
+// if (entry.splitGroupId) {
 
-  const q = query(
-    collection(db, "DayEntries"),
-    where("splitGroupId", "==", entry.splitGroupId)
-  );
+//   const q = query(
+//     collection(db, "DayEntries"),
+//     where("splitGroupId", "==", entry.splitGroupId)
+//   );
 
-  const snap = await getDocs(q);
+//   const snap = await getDocs(q);
 
-  snap.forEach(docSnap => {
-    const e = docSnap.data();
-    const s = Number(e.serviceAmount) || 0;
-    const t = Math.round(s * 0.05);
-    totalWithTax += s + t;
-  });
+//   snap.forEach(docSnap => {
+//     const e = docSnap.data();
+//     const s = Number(e.serviceAmount) || 0;
+//     const t = Math.round(s * 0.05);
+//     totalWithTax += s + t;
+//   });
 
-// 2️⃣ если split ещё pending (до Done)
-} else if (entry.pendingSplit && entry.pendingSplit.length > 0) {
+// // 2️⃣ если split ещё pending (до Done)
+// } else if (entry.pendingSplit && entry.pendingSplit.length > 0) {
 
-  const parentService = Number(entry.serviceAmount) || 0;
-  const parentTax = Math.round(parentService * 0.05);
+//   const parentService = Number(entry.serviceAmount) || 0;
+//   const parentTax = Math.round(parentService * 0.05);
 
-  totalWithTax = parentService + parentTax;
+//   totalWithTax = parentService + parentTax;
 
-  entry.pendingSplit.forEach(r => {
-    const s = Number(r.amount) || 0;
-    const t = Math.round(s * 0.05);
-    totalWithTax += s + t;
-  });
+//   entry.pendingSplit.forEach(r => {
+//     const s = Number(r.amount) || 0;
+//     const t = Math.round(s * 0.05);
+//     totalWithTax += s + t;
+//   });
 
-// 3️⃣ обычный сервис
-} else {
+// // 3️⃣ обычный сервис
+// } else {
 
-  const s = Number(entry.serviceAmount) || 0;
-  const t = Math.round(s * 0.05);
-  totalWithTax = s + t;
+//   const s = Number(entry.serviceAmount) || 0;
+//   const t = Math.round(s * 0.05);
+//   totalWithTax = s + t;
+// }
+const draftServiceValue = window.drDrafts?.[entryId]?.serviceAmount;
+
+if (
+  draftServiceValue === undefined ||
+  draftServiceValue === null ||
+  draftServiceValue === ""
+) {
+  showToast("Please enter service amount first", "error");
+  return;
 }
+
+const parentServiceCents = toCents(draftServiceValue);
+const parentTaxCents = Math.round(parentServiceCents * 0.05);
+
+let totalWithTax = parentServiceCents + parentTaxCents;
+
+if (entry.pendingSplit && entry.pendingSplit.length > 0) {
+  entry.pendingSplit.forEach(r => {
+    const childServiceCents = Number(r.amount) || 0;
+    const childTaxCents = Math.round(childServiceCents * 0.05);
+    totalWithTax += childServiceCents + childTaxCents;
+  });
+}      
 currentPaymentTotalWithTax = totalWithTax;
 tempPayments = [
   { method: "card", amount: totalWithTax }
