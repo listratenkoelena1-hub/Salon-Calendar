@@ -6746,10 +6746,9 @@ if (entry.splitGroupId) {
 }
 currentPaymentTotalWithTax = totalWithTax;
 tempPayments = [
-  { method: "card", amount: "" }
+  { method: "card", amount: totalWithTax }
 ];
 renderPaymentRows();
-
 document.getElementById("paymentPanel")
   .classList.remove("hidden");
 };
