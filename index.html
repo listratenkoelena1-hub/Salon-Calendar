@@ -6560,7 +6560,7 @@ await addDoc(collection(db, "DayEntries"), {
   closedAt: serverTimestamp()
 });
 }
-      showToast("Split service saved", "success");
+      
       return;
 }
 
@@ -7087,6 +7087,7 @@ if (!isDrEditingAllowed()) return;
 
   document.getElementById("splitModal")
     .classList.add("hidden");
+ showToast("Split service added", "success");     
 };
 
 //=============================================================================================================//
