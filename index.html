@@ -2617,7 +2617,9 @@ const auth = getAuth(app);
 const functions = getFunctions(app, "us-central1");
   let currentUserRole = null;
 let currentUserStaffId = null;
-
+function isManagerWithColumn() {
+  return currentUserRole === 'manager' && !!currentUserStaffId;
+}
 async function ensureAuthUser(email, role, staffId = null, staffName = null) {
   if (!email) return;
 
@@ -3955,9 +3957,10 @@ setTimeout(()=>openEdit(id),50);
 //======================================stuff modal===================================================//
 window.openStaff = () => {
   if (currentUserRole === 'reception') return;
+
   closeAllMainModals();
-  // сначала выставляем режим (чтобы ширина была правильной сразу)
-  if (currentUserRole === 'staff') {
+
+  if (currentUserRole === 'staff' || isManagerWithColumn()) {
     staffModal.classList.add('staff-view');
   } else {
     staffModal.classList.remove('staff-view');
@@ -4318,15 +4321,17 @@ offVacation.disabled = false;
     .map(s => `<option value="${s.id}">${s.name}</option>`)
     .join('');
 // ===== ROLE CONTROL =====
-if (currentUserRole === 'staff') {
+if (currentUserRole === 'staff' || isManagerWithColumn()) {
   offStaff.value = currentUserStaffId;
   offStaff.disabled = true;
   offStaff.style.opacity = '0.6';
 } else if (currentUserRole === 'reception') {
   offStaff.disabled = false;
   offStaff.style.opacity = '1';
+} else {
+  offStaff.disabled = false;
+  offStaff.style.opacity = '1';
 }
-
   offAllDay.checked = false;
 toggleSmoothSection(offTimeRange, true);
 offSaveBtn.disabled = false;
@@ -4491,7 +4496,7 @@ window.closeOffWork = () => {
 
   // reset weekly UI
   // ===== RESET ROLE STATE =====
-if (currentUserRole === 'staff') {
+if (currentUserRole === 'staff' || isManagerWithColumn()) {
   offStaff.disabled = true;
   offStaff.style.opacity = '0.6';
 } else {
@@ -4597,7 +4602,7 @@ offVacation.onchange = () => {
 
 window.saveOffWork = async () => {
 // ===== ROLE SECURITY =====
-if (currentUserRole === 'staff') {
+if (currentUserRole === 'staff' || isManagerWithColumn()) {
   offStaff.value = currentUserStaffId;
 }
 const normalizedEnd =
@@ -5148,10 +5153,16 @@ function renderDailyReport() {
   }
        // ===== SPRING MODE: показываем staff-таблицу для Spring Help =====
   if (drViewMode === "spring") {
-    renderSpringDailyReport();
-    return;
-  } 
-  if (currentUserRole === 'manager' || currentUserRole === 'reception') {
+  renderSpringDailyReport();
+  return;
+}
+
+if (currentUserRole === 'reception') {
+  renderManagerDailyReport();
+  return;
+}
+
+if (currentUserRole === 'manager' && !isManagerWithColumn()) {
   renderManagerDailyReport();
   return;
 }
@@ -5159,7 +5170,10 @@ function renderDailyReport() {
   if (!body) return;
 
   
-  if (currentUserRole === 'staff' && !currentUserStaffId) return;
+  if (
+  (currentUserRole === 'staff' || isManagerWithColumn()) &&
+  !currentUserStaffId
+) return;
 
 
   const dateStr = getDrDateString();
@@ -5168,7 +5182,7 @@ function renderDailyReport() {
   let entries = drEntries.filter(e => e.date === dateStr);
 const editingAllowed = isDrEditingAllowed();
       const deletingAllowed = isDrDeletingAllowed();
-  if (currentUserRole === 'staff' && currentUserStaffId) {
+  if ((currentUserRole === 'staff' || isManagerWithColumn()) && currentUserStaffId) {
   entries = entries.filter(e => e.staffId === getActiveDrStaffId());
 }
 
@@ -5819,11 +5833,21 @@ html += `
     ">
   `;
 
-  if (currentUserRole === 'manager') {
+  if (currentUserRole === 'manager' && !isManagerWithColumn()) {
     html += `
-      
       <button class="dr-button" onclick="openSpringHelp()">
         Spring Help
+      </button>
+    `;
+  }
+
+  if (currentUserRole === 'manager' && isManagerWithColumn()) {
+    const selfStaff = staff.find(s => s.id === currentUserStaffId);
+    const selfStaffName = selfStaff ? selfStaff.name : 'My';
+
+    html += `
+      <button class="dr-button" onclick="openMyDailyReport()">
+        ${selfStaffName} Daily Report
       </button>
     `;
   }
@@ -5989,7 +6013,32 @@ window.openSpringHelp = () => {
   renderDailyReport();
 };
 
+window.openMyDailyReport = () => {
+  if (!isManagerWithColumn()) return;
 
+  springMode = false;
+  drViewMode = "normal";
+
+  drCurrentDate = new Date();
+  drCurrentDate.setHours(0, 0, 0, 0);
+
+  const modal = document.getElementById('dailyReportModal');
+  const content = document.getElementById('dailyReportContent');
+  const title = document.getElementById('drTitle');
+
+  content.classList.remove('daily-report-wide');
+
+  const selfStaff = staff.find(s => s.id === currentUserStaffId);
+  const selfStaffName = selfStaff ? selfStaff.name : 'Daily Report';
+
+  if (title) title.textContent = `${selfStaffName} Daily Report`;
+
+  document.getElementById('drDateLabel').textContent = formatDrDate(drCurrentDate);
+
+  modal.classList.remove('hidden');
+  renderDailyReport();
+};
+      
 function renderRightTotalsBlock() {
 
   const dateStr = getDrDateString();
@@ -7088,7 +7137,11 @@ function resetAppointmentModalTint() {
 }
 
 function isWalkInDraftOpenNow() {
-  return editId == null && currentUserRole === "staff" && aClient?.value === "👣";
+  return (
+    editId == null &&
+    (currentUserRole === "staff" || isManagerWithColumn()) &&
+    aClient?.value === "👣"
+  );
 }
 
 function applyAppointmentTintNow() {
@@ -7148,7 +7201,7 @@ window.goToday = () => {
 };
 window.openWalkIn = () => {
 
-  if (currentUserRole !== 'staff') return;
+  if (currentUserRole !== 'staff' && !isManagerWithColumn()) return;
   if (!currentUserStaffId) return;
 
   editId = null;
@@ -7232,13 +7285,15 @@ onAuthStateChanged(auth, async (user) => {
   const data = userSnap.data();
 
   currentUserRole = data.role;
-  currentUserStaffId = data.staffId;
+currentUserStaffId = data.staffId;
 
-  if (!currentUserRole) {
-    showToast("User role is missing. Please contact admin.", "error", 4000);
-    await signOut(auth);
-    return;
-  }
+const managerWithColumn = isManagerWithColumn();
+
+if (!currentUserRole) {
+  showToast("User role is missing. Please contact admin.", "error", 4000);
+  await signOut(auth);
+  return;
+}
 
   const staffMenuItem = document.getElementById('staffMenuItem');
 
@@ -7252,23 +7307,31 @@ onAuthStateChanged(auth, async (user) => {
 
   const offWorkMenuItem = document.getElementById('offWorkMenuItem');
 
-  if (offWorkMenuItem) {
-    if (currentUserRole === 'staff' || currentUserRole === 'reception') {
-      offWorkMenuItem.style.display = '';
-    } else {
-      offWorkMenuItem.style.display = 'none';
-    }
+ if (offWorkMenuItem) {
+  if (
+    currentUserRole === 'staff' ||
+    currentUserRole === 'reception' ||
+    managerWithColumn
+  ) {
+    offWorkMenuItem.style.display = '';
+  } else {
+    offWorkMenuItem.style.display = 'none';
   }
+}
 
   const bottomOffWorkBtn = document.getElementById('bottomOffWorkBtn');
 
-  if (bottomOffWorkBtn) {
-    if (currentUserRole === 'staff' || currentUserRole === 'reception') {
-      bottomOffWorkBtn.style.display = '';
-    } else {
-      bottomOffWorkBtn.style.display = 'none';
-    }
+if (bottomOffWorkBtn) {
+  if (
+    currentUserRole === 'staff' ||
+    currentUserRole === 'reception' ||
+    managerWithColumn
+  ) {
+    bottomOffWorkBtn.style.display = '';
+  } else {
+    bottomOffWorkBtn.style.display = 'none';
   }
+}
 
   if (currentUserRole === 'staff' || currentUserRole === 'reception') {
     phoneRow.style.display = 'none';
@@ -7284,12 +7347,12 @@ onAuthStateChanged(auth, async (user) => {
   }
 
   if (walkBtn) {
-    if (currentUserRole === 'staff') {
-      walkBtn.classList.remove('hidden');
-    } else {
-      walkBtn.classList.add('hidden');
-    }
+  if (currentUserRole === 'staff' || managerWithColumn) {
+    walkBtn.classList.remove('hidden');
+  } else {
+    walkBtn.classList.add('hidden');
   }
+}
 
   renderCalendar();
 
