@@ -3299,8 +3299,8 @@ if (!o.allDay) {
     if (cell) {
   cell.style.background = '#e0e0e0';
 
-  // if (cell.dataset.slot === "-1") {
-  //   cell.onclick = null;
+  if (cell.dataset.slot === "-1") {
+    cell.onclick = null;
   } else {
     cell.onclick = () => openOffWorkEdit(o);
   }
