@@ -5148,7 +5148,9 @@ function renderDailyReport() {
         // ===== DAILY REPORT WIDTH (staff compact / manager wide) =====
   const drBox = document.getElementById('dailyReportContent');
   if (drBox) {
-    const isWide = (drViewMode !== "spring") && (currentUserRole === 'manager' || currentUserRole === 'reception');
+   const isWide =
+  drViewMode !== "spring" &&
+  (currentUserRole === 'reception' || (currentUserRole === 'manager' && !isManagerWithColumn()));
     drBox.classList.toggle('daily-report-wide', isWide);
   }
        // ===== SPRING MODE: показываем staff-таблицу для Spring Help =====
@@ -7247,7 +7249,9 @@ changeDateBtn.style.display = 'none';
   aPhone.value = '';
   aNote.value = '';
   aNoShow.checked = false;
-
+aCanceled.checked = false;
+aCancelComment.value = '';
+updateCancelUI();
   handleAnyone();
   document.getElementById('appointmentEditorLabel').textContent = '';
   applyAppointmentTintNow();    
