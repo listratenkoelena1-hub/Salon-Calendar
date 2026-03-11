@@ -3275,39 +3275,34 @@ for (let i = w.start; i < w.end; i++) {
 }        
   });
 
-  todayOff.forEach(o => {
+todayOff.forEach(o => {
+  const staffIndex = staff.findIndex(s => s.id === o.staffId);
+  if (staffIndex === -1) return;
 
-    const staffIndex = staff.findIndex(s => s.id=== o.staffId);
-    if (staffIndex === -1) return;
-    if (o.allDay) {
-      document
-        .querySelectorAll(`.slot[data-staff="${staffIndex}"]`)
-        .forEach(cell => {
-          cell.style.background = '#e0e0e0';
-          cell.onclick = () => {
-  if (!offWork.find(x => x.id === o.id)) return;
-  openOffWorkEdit(o);
-};
-        });
-    }
+  if (o.allDay) {
+    document
+      .querySelectorAll(`.slot[data-staff="${staffIndex}"]`)
+      .forEach(cell => {
+        cell.style.background = '#e0e0e0';
+        cell.onclick = () => {
+          if (!offWork.find(x => x.id === o.id)) return;
+          openOffWorkEdit(o);
+        };
+      });
 
-if (!o.allDay) {
+    return;
+  }
+
   if (o.start === -1) {
     const cell = document.querySelector(
       `.slot[data-slot="-1"][data-staff="${staffIndex}"]`
     );
+
     if (cell) {
-  cell.style.background = '#e0e0e0';
-
-  if (cell.dataset.slot === "-1") {
-    cell.onclick = null;
-  } else {
-    cell.onclick = () => openOffWorkEdit(o);
+      cell.style.background = '#e0e0e0';
+      cell.onclick = null;
+    }
   }
-}
-  }
-
-
 
   for (let i = Math.max(o.start, 0); i < o.end; i++) {
     const cell = document.querySelector(
@@ -3319,9 +3314,7 @@ if (!o.allDay) {
       cell.onclick = () => openOffWorkEdit(o);
     }
   }
-}
-  });
-
+});
   const dayAppointments = appointments.filter(
   a => a.date === calendarDate.value && a.noShow !== true && a.canceled !== true
 );
