@@ -3244,21 +3244,35 @@ cell.dataset.weeklyStaffId = w.staffId;
       return;
     }
 
-    for (let i = w.start; i < w.end; i++) {
-      const cell = document.querySelector(
-        `.slot[data-slot="${i}"][data-staff="${staffIndex}"]`
-      );
-      if (cell && !cell.classList.contains('busy')) {
-        cell.style.background = '#e0e0e0';
-        cell.dataset.weeklyOff = '1';
-        cell.dataset.weeklyId = w.id;
-cell.dataset.weeklyStaffId = w.staffId;
+//     for (let i = w.start; i < w.end; i++) {
+//       const cell = document.querySelector(
+//         `.slot[data-slot="${i}"][data-staff="${staffIndex}"]`
+//       );
+//       if (cell && !cell.classList.contains('busy')) {
+//         cell.style.background = '#e0e0e0';
+//         cell.dataset.weeklyOff = '1';
+//         cell.dataset.weeklyId = w.id;
+// cell.dataset.weeklyStaffId = w.staffId;
 
-      }
- if (cell.dataset.slot === "-1") {
-  cell.onclick = null;
-}         
-    }
+//       }
+//  if (cell.dataset.slot === "-1") {
+//   cell.onclick = null;
+// }         
+//     }
+for (let i = w.start; i < w.end; i++) {
+  const cell = document.querySelector(
+    `.slot[data-slot="${i}"][data-staff="${staffIndex}"]`
+  );
+
+  if (!cell) continue;
+
+  if (!cell.classList.contains('busy')) {
+    cell.style.background = '#e0e0e0';
+    cell.dataset.weeklyOff = '1';
+    cell.dataset.weeklyId = w.id;
+    cell.dataset.weeklyStaffId = w.staffId;
+  }
+}        
   });
 
   todayOff.forEach(o => {
@@ -3285,8 +3299,8 @@ if (!o.allDay) {
     if (cell) {
   cell.style.background = '#e0e0e0';
 
-  if (cell.dataset.slot === "-1") {
-    cell.onclick = null;
+  // if (cell.dataset.slot === "-1") {
+  //   cell.onclick = null;
   } else {
     cell.onclick = () => openOffWorkEdit(o);
   }
