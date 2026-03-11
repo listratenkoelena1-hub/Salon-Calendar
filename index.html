@@ -1867,8 +1867,8 @@ body.modal-open{
 
 /* Manager/Reception: real wide card (so Close is at far right) */
 #staffModal:not(.staff-view) .staff-modal-content{
-  width: 1100px;
-  max-width: 1100px;
+  width: fit-content;
+  max-width: calc(100vw - 24px);
 }
 
 /* Staff: compact */
@@ -1944,7 +1944,7 @@ body.modal-open{
 
 /* This sets the "real" width of the staff modal content for manager */
 #staffModal:not(.staff-view) #staffScrollInner{
-  min-width: 1100px;
+  min-width: max-content;
 }
 
 /* Compact staff view */
