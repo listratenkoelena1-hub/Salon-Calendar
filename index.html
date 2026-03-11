@@ -6532,6 +6532,7 @@ const parentTaxCents = Math.round(parentServiceCents * 0.05);
 const parentTotalWithTax = parentServiceCents + parentTaxCents;
 
 await updateDoc(doc(db, "DayEntries", id), {
+  status: "closed",    
   tip: parentTipShare,
   tipMethod: entry.tipMethod || entry.paymentMethod || null,
   splitGroupId: splitGroupId,
