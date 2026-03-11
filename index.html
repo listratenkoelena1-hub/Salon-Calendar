@@ -6307,16 +6307,26 @@ window.saveDrDraft = async (id) => {
 if (!snap.exists()) return;
 
 const entry = snap.data();
-const method =
-  entry.paymentMethod ||
-  entry.payments?.[0]?.method ||
-  "card";
 
 data.serviceAmount = serviceCents;
-data.paymentMethod = method;
-data.payments = [
-  { method, amount: totalWithTax }
-];
+
+const methodsNow = Array.from(
+  new Set((entry.payments || []).map(p => p.method).filter(Boolean))
+);
+
+const isSplitPayNow = methodsNow.length > 1;
+
+if (!isSplitPayNow) {
+  const method =
+    entry.paymentMethod ||
+    entry.payments?.[0]?.method ||
+    "card";
+
+  data.paymentMethod = method;
+  data.payments = [
+    { method, amount: totalWithTax }
+  ];
+}
   }
 
   if (draft.tip !== undefined) {
