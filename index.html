@@ -7285,11 +7285,11 @@ document.getElementById('durationError').style.display = 'none';
   appointmentModal.classList.remove('hidden');
 document.getElementById('appointmentStatusBlock').style.display = "none";
   // дата = текущая выбранная
-  const now = new Date();
+  const walkInNow = new Date();
 const todayStr =
-  now.getFullYear() + '-' +
-  String(now.getMonth() + 1).padStart(2, '0') + '-' +
-  String(now.getDate()).padStart(2, '0');
+  walkInNow.getFullYear() + '-' +
+  String(walkInNow.getMonth() + 1).padStart(2, '0') + '-' +
+  String(walkInNow.getDate()).padStart(2, '0');
 
 aDate.value = todayStr;
 
@@ -7307,7 +7307,7 @@ changeDateBtn.style.display = 'none';
 
 
   // вычисляем ближайший слот (15 минут)
-  const minutesNow = now.getHours() * 60 + now.getMinutes();
+  const minutesNow = walkInNow.getHours() * 60 + walkInNow.getMinutes();
 
   let slot = Math.ceil((minutesNow - START_MINUTES) / SLOT_MINUTES);
 
