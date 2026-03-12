@@ -3710,11 +3710,13 @@ function checkTimeAvailability() {
 window.saveAppointment = async () => {
 
   const editorLabel =
-    currentUserRole === 'manager'
-      ? 'Manager'
-      : currentUserRole === 'reception'
-        ? 'Reception'
-        : staff.find(s => s.id === currentUserStaffId)?.name || 'Staff';
+  currentUserRole === 'manager'
+    ? (currentUserStaffId
+        ? staff.find(s => s.id === currentUserStaffId)?.name || 'Manager'
+        : 'Manager')
+    : currentUserRole === 'reception'
+      ? 'Reception'
+      : staff.find(s => s.id === currentUserStaffId)?.name || 'Staff';
 
   if (aStaff.value !== ANYONE_ID && !aDuration.value) {
     document.getElementById('durationError').style.display = 'block';
