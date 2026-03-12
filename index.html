@@ -7285,7 +7285,13 @@ document.getElementById('durationError').style.display = 'none';
   appointmentModal.classList.remove('hidden');
 document.getElementById('appointmentStatusBlock').style.display = "none";
   // дата = текущая выбранная
-  aDate.value = calendarDate.value;
+  const now = new Date();
+const todayStr =
+  now.getFullYear() + '-' +
+  String(now.getMonth() + 1).padStart(2, '0') + '-' +
+  String(now.getDate()).padStart(2, '0');
+
+aDate.value = todayStr;
 
   fillSelects();
 // ===== WALK-IN LOCK STAFF =====
@@ -7294,7 +7300,6 @@ aStaff.disabled = true;
 aStaff.style.opacity = '0.6';
 
 // ===== WALK-IN LOCK DATE =====
-aDate.value = calendarDate.value;
 aDate.setAttribute('readonly', true);
 
 // скрываем кнопку смены даты
