@@ -4139,8 +4139,10 @@ window.saveStaffMeta = async (staffId) => {
     email: email || null,
     role: role
   });
- const nameEl = document.querySelector(`[data-staff-name="${staffId}"]`);
-const staffName = nameEl ? nameEl.value.trim() : null;
+const nameEl = document.querySelector(`[data-staff-name="${staffId}"]`);
+const staffName = nameEl
+  ? ((nameEl.value ?? nameEl.textContent ?? '').trim())
+  : null;
 
 const authOk = await ensureAuthUser(email, role, staffId, staffName);
 if (!authOk) return;
