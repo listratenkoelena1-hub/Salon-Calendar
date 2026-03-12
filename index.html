@@ -2764,7 +2764,8 @@ let drEntries = [];
 let drExtras = [];
 let drWithdrawals = [];
 let springServices = [];
-let springMode = false;      
+let springMode = false; 
+let drViewMode = "normal"; // normal | spring | mine      
 let currentPaymentParent = null;
 let tempPayments = [];
 // ===== EXTRAS SPLIT PAYMENT (Sell Product / Gift) =====
@@ -5160,13 +5161,19 @@ function renderDailyReport() {
         // ===== DAILY REPORT WIDTH (staff compact / manager wide) =====
   const drBox = document.getElementById('dailyReportContent');
   if (drBox) {
-   const isWide =
+  const isWide =
   drViewMode !== "spring" &&
-  (currentUserRole === 'reception' || (currentUserRole === 'manager' && !isManagerWithColumn()));
+  drViewMode !== "mine" &&
+  (currentUserRole === 'reception' || currentUserRole === 'manager');
     drBox.classList.toggle('daily-report-wide', isWide);
   }
        // ===== SPRING MODE: показываем staff-таблицу для Spring Help =====
   if (drViewMode === "spring") {
+  renderSpringDailyReport();
+  return;
+}
+
+if (drViewMode === "spring") {
   renderSpringDailyReport();
   return;
 }
@@ -5176,7 +5183,7 @@ if (currentUserRole === 'reception') {
   return;
 }
 
-if (currentUserRole === 'manager') {
+if (currentUserRole === 'manager' && drViewMode !== "mine") {
   renderManagerDailyReport();
   return;
 }
@@ -6035,7 +6042,7 @@ window.openMyDailyReport = () => {
   if (!isManagerWithColumn()) return;
 
   springMode = false;
-  drViewMode = "normal";
+  drViewMode = "mine";
 
   drCurrentDate = new Date();
   drCurrentDate.setHours(0, 0, 0, 0);
@@ -6047,7 +6054,7 @@ window.openMyDailyReport = () => {
   content.classList.remove('daily-report-wide');
 
   const selfStaff = staff.find(s => s.id === currentUserStaffId);
-  const selfStaffName = selfStaff ? selfStaff.name : 'Daily Report';
+  const selfStaffName = selfStaff ? selfStaff.name : 'My';
 
   if (title) title.textContent = `${selfStaffName} Daily Report`;
 
