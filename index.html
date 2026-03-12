@@ -2621,29 +2621,35 @@ function isManagerWithColumn() {
   return currentUserRole === 'manager' && !!currentUserStaffId;
 }
 async function ensureAuthUser(email, role, staffId = null, staffName = null) {
-  if (!email) return;
+  if (!email) return true;
 
   try {
     const createStaffAuthUser = httpsCallable(functions, "createStaffAuthUser");
 
-    await createStaffAuthUser({
+    const result = await createStaffAuthUser({
       email: email.trim().toLowerCase(),
       role: role,
       staffId: staffId,
       staffName: staffName
     });
 
-    await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+    const isNewUser = result?.data?.isNewUser === true;
 
+    if (isNewUser) {
+      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+    }
+
+    return true;
   } catch (error) {
-    console.error("Auth user create error:", error);
+    console.error("Auth user create/update error:", error);
 
     const message =
       error?.message ||
       error?.details ||
-      "Failed to create auth user";
+      "Failed to sync auth user";
 
     showToast(message, "error");
+    return false;
   }
 }
 
@@ -4134,8 +4140,10 @@ window.saveStaffMeta = async (staffId) => {
  const nameEl = document.querySelector(`[data-staff-name="${staffId}"]`);
 const staffName = nameEl ? nameEl.value.trim() : null;
 
-await ensureAuthUser(email, role, staffId, staffName);
-  const statusEl = document.getElementById(`staff-status-${staffId}`);
+const authOk = await ensureAuthUser(email, role, staffId, staffName);
+if (!authOk) return;
+
+const statusEl = document.getElementById(`staff-status-${staffId}`);
 if (statusEl) {
   statusEl.classList.add('show');
 
