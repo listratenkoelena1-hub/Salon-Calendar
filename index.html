@@ -7307,7 +7307,6 @@ changeDateBtn.style.display = 'none';
 
 
   // вычисляем ближайший слот (15 минут)
-  const now = new Date();
   const minutesNow = now.getHours() * 60 + now.getMinutes();
 
   let slot = Math.ceil((minutesNow - START_MINUTES) / SLOT_MINUTES);
