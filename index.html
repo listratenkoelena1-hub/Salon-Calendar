@@ -2710,18 +2710,23 @@ function initAppointmentDatePicker() {
     appointmentDatePicker.destroy();
   }
 
-  appointmentDatePicker = flatpickr(aDate, {
-    dateFormat: "Y-m-d",
-    defaultDate: aDate.value,
-    allowInput: false,
-    clickOpens: false,
-    onChange: function(selectedDates, dateStr) {
-      if (dateStr) {
-        aDate.value = dateStr;
-        checkTimeAvailability();
-      }
+appointmentDatePicker = flatpickr(aDate, {
+  dateFormat: "Y-m-d",
+  defaultDate: aDate.value,
+  allowInput: false,
+  clickOpens: false,
+
+  positionElement: aDate,
+  position: "below left",
+  static: false,
+
+  onChange: function(selectedDates, dateStr) {
+    if (dateStr) {
+      aDate.value = dateStr;
+      checkTimeAvailability();
     }
-  });
+  }
+});
 }
 
 changeDateBtn.onclick = () => {
