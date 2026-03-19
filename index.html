@@ -742,6 +742,22 @@ padding:10px 14px;
 .current-time-row td:last-child {
   border-right: 1px solid rgba(255, 0, 0, 0.35);
 }
+.week-today-col {
+  border-left: 1.5px solid rgba(255, 0, 0, 0.45) !important;
+  border-right: 1.5px solid rgba(255, 0, 0, 0.45) !important;
+}
+
+.week-today-top {
+  border-top: 1.5px solid rgba(255, 0, 0, 0.45) !important;
+}
+
+.week-today-bottom {
+  border-bottom: 1.5px solid rgba(255, 0, 0, 0.45) !important;
+}
+
+.current-time-cell {
+  border-top: 1.5px solid rgba(255, 0, 0, 0.55) !important;
+}      
   .off-checkbox-row {
   display: flex;
   align-items: center;
@@ -2963,33 +2979,66 @@ const END_MINUTES = 20 * 60; // 8:00 PM
 const SLOT_MINUTES = 15;
 
 function highlightCurrentTimeRow() {
-  // убрать старую подсветку
   document
-    .querySelectorAll('.current-time-row')
-    .forEach(r => r.classList.remove('current-time-row'));
+    .querySelectorAll('.current-time-row, .week-today-col, .week-today-top, .week-today-bottom, .current-time-cell')
+    .forEach(el => {
+      el.classList.remove(
+        'current-time-row',
+        'week-today-col',
+        'week-today-top',
+        'week-today-bottom',
+        'current-time-cell'
+      );
+    });
+
+  const now = new Date();
+  const todayStr = toInputDate(now);
+  const minutesNow = now.getHours() * 60 + now.getMinutes();
+
+  if (calendarViewMode === 'week') {
+    const weekDates = getWeekDatesFromValue(calendarDate.value).map(toInputDate);
+
+    if (!weekDates.includes(todayStr)) return;
+
+    const colCells = document.querySelectorAll(`[data-date="${todayStr}"]`);
+    colCells.forEach(el => el.classList.add('week-today-col'));
+
+    const headerCell = document.querySelector(`th[data-date="${todayStr}"]`);
+    if (headerCell) headerCell.classList.add('week-today-top');
+
+    const bodyCells = document.querySelectorAll(`td[data-date="${todayStr}"]`);
+    if (bodyCells.length) {
+      bodyCells[bodyCells.length - 1].classList.add('week-today-bottom');
+    }
+
+    if (minutesNow < START_MINUTES || minutesNow > END_MINUTES) return;
+
+    const slotIndex = Math.floor((minutesNow - START_MINUTES) / SLOT_MINUTES);
+
+    const currentCell = document.querySelector(
+      `.slot[data-slot="${slotIndex}"][data-date="${todayStr}"]`
+    );
+
+    if (currentCell) {
+      currentCell.classList.add('current-time-cell');
+    }
+
+    return;
+  }
 
   const selected = getLocalDateFromInput(calendarDate.value);
-  const now = new Date();
 
-  // только если выбран сегодняшний день
   if (
     selected.getFullYear() !== now.getFullYear() ||
     selected.getMonth() !== now.getMonth() ||
     selected.getDate() !== now.getDate()
   ) return;
 
-  const minutesNow = now.getHours() * 60 + now.getMinutes();
-
   if (minutesNow < START_MINUTES || minutesNow > END_MINUTES) return;
 
-  const slotIndex = Math.floor(
-    (minutesNow - START_MINUTES) / SLOT_MINUTES
-  );
+  const slotIndex = Math.floor((minutesNow - START_MINUTES) / SLOT_MINUTES);
 
-  const cell = document.querySelector(
-    `.slot[data-slot="${slotIndex}"]`
-  );
-
+  const cell = document.querySelector(`.slot[data-slot="${slotIndex}"]`);
   if (!cell) return;
 
   const row = cell.parentElement;
@@ -3271,8 +3320,11 @@ function renderWeekCalendar() {
       day: 'numeric'
     });
 
-    h += `
-      <th style="background:${currentStaff.color}; white-space:normal; line-height:1.2;">
+        h += `
+      <th
+        data-date="${toInputDate(date)}"
+        style="background:${currentStaff.color}; white-space:normal; line-height:1.2;"
+      >
         <div>${weekday}</div>
         <div style="font-size:11px; font-weight:500; margin-top:2px;">${shortDate}</div>
       </th>
@@ -4849,9 +4901,8 @@ function openOffWorkEdit(record) {
   offVacation.disabled = true;
   offStaff.disabled = true;
 
-  offTimeRange.style.display = 'none';
+  toggleSmoothSection(offTimeRange, false);
   vacationRange.style.display = 'block';
-
   initVacationPicker();
 
   offSaveBtn.style.display = 'none';
@@ -4896,9 +4947,12 @@ offVacation.checked = false;
 offVacation.disabled = true;
 
   offAllDay.checked = record.allDay;
+  toggleSmoothSection(offTimeRange, !record.allDay);
 
-  // offTimeRange.style.display = record.allDay ? 'none' : 'block'; //
-toggleSmoothSection(offTimeRange, !record.allDay);
+  if (record.allDay) {
+    offStart.value = 0;
+    offEnd.value = SLOTS - 1;
+  }
   offStart.innerHTML =
     [...Array(SLOTS).keys()]
       .map(i => `<option value="${i}">${timeLabel(i)}</option>`)
@@ -4918,10 +4972,11 @@ toggleSmoothSection(offTimeRange, !record.allDay);
 function openWeeklyOffFromCell(cell) {
   const staffId = cell.dataset.weeklyStaffId;
   const weeklyId = cell.dataset.weeklyId;
+  const weeklyRecord = weeklyOff.find(w => w.id === weeklyId);
 
   offWorkModal.classList.remove('hidden');
 
-  offDate.value = calendarDate.value;
+  offDate.value = cell.dataset.date || calendarDate.value;
 
   offStaff.innerHTML = staff
     .filter(s => s.id !== ANYONE_ID)
@@ -4931,6 +4986,25 @@ function openWeeklyOffFromCell(cell) {
   offStaff.value = staffId;
 
   offWeekly.checked = true;
+  offVacation.checked = false;
+  offVacation.disabled = true;
+
+  offAllDay.checked = !!weeklyRecord?.allDay;
+
+  offStart.innerHTML =
+    [...Array(SLOTS).keys()]
+      .map(i => `<option value="${i}">${timeLabel(i)}</option>`)
+      .join('');
+
+  offEnd.innerHTML = offStart.innerHTML;
+
+  if (weeklyRecord && !weeklyRecord.allDay) {
+    offStart.value = weeklyRecord.start;
+    offEnd.value = weeklyRecord.end >= SLOTS ? (SLOTS - 1) : weeklyRecord.end;
+    toggleSmoothSection(offTimeRange, true);
+  } else {
+    toggleSmoothSection(offTimeRange, false);
+  }
 
   // read-only режим
   offStaff.disabled = true;
@@ -4939,16 +5013,14 @@ function openWeeklyOffFromCell(cell) {
   offStart.disabled = true;
   offEnd.disabled = true;
   offSaveBtn.style.display = 'none';
-
-  // показать кнопки удаления weekly
-  removeWeeklyDayBtn.classList.remove('hidden');
-  removeWeeklyAllBtn.classList.remove('hidden');
   offRemoveBtn.style.display = 'none';
 
+  removeWeeklyDayBtn.classList.remove('hidden');
+  removeWeeklyAllBtn.classList.remove('hidden');
+  removeVacationBtn.classList.add('hidden');
 
-
-  // сохранить контекст
   offWorkModal.dataset.weeklyId = weeklyId;
+  offWorkModal.dataset.vacationId = '';
 }
 
 window.closeOffWork = () => {
@@ -7727,6 +7799,32 @@ window.goToday = () => {
     calendarDate.value = toInputDate(getStartOfWeek(now));
     updateDateLabel();
     renderCalendar();
+
+    setTimeout(() => {
+      highlightCurrentTimeRow();
+
+      const todayStr = toInputDate(now);
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+      if (currentMinutes >= START_MINUTES && currentMinutes <= END_MINUTES) {
+        const slotIndex = Math.floor((currentMinutes - START_MINUTES) / SLOT_MINUTES);
+
+        const currentCell = document.querySelector(
+          `.slot[data-slot="${slotIndex}"][data-date="${todayStr}"]`
+        );
+
+        if (currentCell) {
+          currentCell.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+          return;
+        }
+      }
+
+      const todayHeader = document.querySelector(`th[data-date="${todayStr}"]`);
+      if (todayHeader) {
+        todayHeader.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+    }, 50);
+
     return;
   }
 
