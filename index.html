@@ -2156,27 +2156,41 @@ stroke-linejoin="round">
 </div>
       
 <div id="bottomToolbar">
-  <button class="bottom-tool-btn" onclick="openDailyReport()">
-<svg xmlns="http://www.w3.org/2000/svg"
-width="26"
-height="26"
-viewBox="0 0 24 24"
-fill="none"
-stroke="currentColor"
-stroke-width="2"
-stroke-linecap="round"
-stroke-linejoin="round">
+  <button
+    id="dailyReportBtn"
+    class="bottom-tool-btn hidden"
+    onclick="openDailyReport()"
+    type="button"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg"
+    width="26"
+    height="26"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round">
 
-<path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-<path d="M13 21h-7a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v3"/>
-<path d="M16 3v4"/>
-<path d="M8 3v4"/>
-<path d="M4 11h12.5"/>
-<path d="M21 15h-2.5a1.5 1.5 0 0 0 0 3h1a1.5 1.5 0 0 1 0 3h-2.5"/>
-<path d="M19 21v1m0 -8v1"/>
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M13 21h-7a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v3"/>
+    <path d="M16 3v4"/>
+    <path d="M8 3v4"/>
+    <path d="M4 11h12.5"/>
+    <path d="M21 15h-2.5a1.5 1.5 0 0 0 0 3h1a1.5 1.5 0 0 1 0 3h-2.5"/>
+    <path d="M19 21v1m0 -8v1"/>
+    </svg>
+  </button>
 
-</svg>
-</button>
+  <button
+    id="weekViewBtn"
+    class="bottom-tool-btn hidden"
+    onclick="toggleWeekView()"
+    type="button"
+    style="font-size:14px; font-weight:600; width:auto; min-width:92px; padding:0 14px;"
+  >
+    Week View
+  </button>
 
   <button id="bottomOffWorkBtn" class="bottom-tool-btn" onclick="openOffWork()">
 <svg xmlns="http://www.w3.org/2000/svg"
@@ -2620,6 +2634,89 @@ let currentUserStaffId = null;
 function isManagerWithColumn() {
   return currentUserRole === 'manager' && !!currentUserStaffId;
 }
+let calendarViewMode = 'general'; // general | week
+
+function toInputDate(date) {
+  return (
+    date.getFullYear() + '-' +
+    String(date.getMonth() + 1).padStart(2, '0') + '-' +
+    String(date.getDate()).padStart(2, '0')
+  );
+}
+
+function getStartOfWeek(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - d.getDay()); // Sunday
+  return d;
+}
+
+function addDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function getWeekDatesFromValue(dateStr) {
+  const base = getLocalDateFromInput(dateStr);
+  const start = getStartOfWeek(base);
+  return Array.from({ length: 7 }, (_, i) => addDays(start, i));
+}
+
+function getCurrentWeekRangeLabel() {
+  const weekDates = getWeekDatesFromValue(calendarDate.value);
+  const start = weekDates[0];
+  const end = weekDates[6];
+
+  const startText = start.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric'
+  });
+
+  const endText = end.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric'
+  });
+
+  return `${startText} – ${endText}`;
+}
+
+function getWeekViewStaff() {
+  return staff.find(s => s.id === currentUserStaffId) || null;
+}
+
+window.toggleWeekView = () => {
+  if (currentUserRole !== 'staff') return;
+
+  calendarViewMode =
+    calendarViewMode === 'general' ? 'week' : 'general';
+
+  updateDateLabel();
+  updateBottomToolbarByRole();
+  renderCalendar();
+};
+
+function updateBottomToolbarByRole() {
+  const dailyReportBtn = document.getElementById('dailyReportBtn');
+  const weekViewBtn = document.getElementById('weekViewBtn');
+
+  if (dailyReportBtn) {
+    dailyReportBtn.classList.add('hidden');
+    dailyReportBtn.style.display = 'none';
+  }
+
+  if (!weekViewBtn) return;
+
+  if (currentUserRole === 'staff') {
+    weekViewBtn.classList.remove('hidden');
+    weekViewBtn.style.display = '';
+    weekViewBtn.textContent =
+      calendarViewMode === 'week' ? 'General View' : 'Week View';
+  } else {
+    weekViewBtn.classList.add('hidden');
+    weekViewBtn.style.display = 'none';
+  }
+}      
 async function ensureAuthUser(email, role, staffId = null, staffName = null) {
   if (!email) return true;
 
@@ -3109,36 +3206,125 @@ onSnapshot(collection(db, "SpringServices"), snapshot => {
   renderDailyReport();
 });
 
-function renderCalendar(){
+function renderCalendar() {
+  if (calendarViewMode === 'week') {
+    renderWeekCalendar();
+    return;
+  }
 
-calendar.innerHTML='';
-let h='<tr><th class="time">Time</th>';
-staff.forEach(s=>h+=`<th style="background:${s.color}">${s.name}</th>`);
-h+='</tr>';
-calendar.innerHTML += h;
-let morningRow = `<tr class="morning-row" onclick="toggleMorning()">
-  <td class="time morning">Morning ▸</td>`;
-staff.forEach((_, s) =>
-  morningRow += `<td class="slot morning" data-slot="-1" data-staff="${s}"></td>`
-);
+  renderGeneralCalendar();
+}
+function renderGeneralCalendar() {
+  calendar.innerHTML = '';
 
-morningRow += '</tr>';
-calendar.innerHTML += morningRow;
-for (let i = 0; i < SLOTS; i++) {
-  if (!morningExpanded && i < MORNING_SLOTS) continue;
-  let r = `<tr>
-    <td class="time">${timeLabel(i)}</td>`;
+  let h = '<tr><th class="time">Time</th>';
+  staff.forEach(s => h += `<th style="background:${s.color}">${s.name}</th>`);
+  h += '</tr>';
+  calendar.innerHTML += h;
+
+  let morningRow = `<tr class="morning-row" onclick="toggleMorning()">
+    <td class="time morning">Morning ▸</td>`;
+
   staff.forEach((_, s) =>
-    r += `<td class="slot" data-slot="${i}" data-staff="${s}"></td>`
+    morningRow += `<td class="slot morning" data-slot="-1" data-staff="${s}"></td>`
   );
 
-  r += '</tr>';
-  calendar.innerHTML += r;
+  morningRow += '</tr>';
+  calendar.innerHTML += morningRow;
+
+  for (let i = 0; i < SLOTS; i++) {
+    if (!morningExpanded && i < MORNING_SLOTS) continue;
+
+    let r = `<tr><td class="time">${timeLabel(i)}</td>`;
+
+    staff.forEach((_, s) =>
+      r += `<td class="slot" data-slot="${i}" data-staff="${s}"></td>`
+    );
+
+    r += '</tr>';
+    calendar.innerHTML += r;
+  }
+
+  requestAnimationFrame(() => {
+    drawAppointments();
+  });
 }
-requestAnimationFrame(() => {
-  drawAppointments();
-});
-}
+
+function renderWeekCalendar() {
+  const currentStaff = getWeekViewStaff();
+
+  calendar.innerHTML = '';
+
+  if (!currentStaff) {
+    calendar.innerHTML = '<tr><th class="time">Time</th></tr>';
+    return;
+  }
+
+  const weekDates = getWeekDatesFromValue(calendarDate.value);
+
+  let h = '<tr><th class="time">Time</th>';
+
+  weekDates.forEach(date => {
+    const weekday = date.toLocaleDateString(undefined, { weekday: 'long' });
+    const shortDate = date.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric'
+    });
+
+    h += `
+      <th style="background:${currentStaff.color}; white-space:normal; line-height:1.2;">
+        <div>${weekday}</div>
+        <div style="font-size:11px; font-weight:500; margin-top:2px;">${shortDate}</div>
+      </th>
+    `;
+  });
+
+  h += '</tr>';
+  calendar.innerHTML += h;
+
+  let morningRow = `<tr class="morning-row" onclick="toggleMorning()">
+    <td class="time morning">Morning ▸</td>`;
+
+  weekDates.forEach((date, dayIndex) => {
+    morningRow += `
+      <td
+        class="slot morning"
+        data-slot="-1"
+        data-day-index="${dayIndex}"
+        data-date="${toInputDate(date)}"
+        data-staff-id="${currentStaff.id}"
+      ></td>
+    `;
+  });
+
+  morningRow += '</tr>';
+  calendar.innerHTML += morningRow;
+
+  for (let i = 0; i < SLOTS; i++) {
+    if (!morningExpanded && i < MORNING_SLOTS) continue;
+
+    let r = `<tr><td class="time">${timeLabel(i)}</td>`;
+
+    weekDates.forEach((date, dayIndex) => {
+      r += `
+        <td
+          class="slot"
+          data-slot="${i}"
+          data-day-index="${dayIndex}"
+          data-date="${toInputDate(date)}"
+          data-staff-id="${currentStaff.id}"
+        ></td>
+      `;
+    });
+
+    r += '</tr>';
+    calendar.innerHTML += r;
+  }
+
+  requestAnimationFrame(() => {
+    drawAppointmentsWeek();
+  });
+}      
 function buildAppointmentOverlay(a, color, pixelHeight = null) {
   const slots = Math.max(a.duration || 1, 1);
 
@@ -3472,7 +3658,248 @@ morningCell.innerHTML = buildAppointmentOverlay(
   });
 highlightCurrentTimeRow();
 }
+function drawAppointmentsWeek() {
+  const currentStaff = getWeekViewStaff();
+  if (!currentStaff) return;
 
+  document.querySelectorAll('.slot').forEach(c => {
+    c.innerHTML = '';
+    c.style.background = '';
+    c.classList.remove('busy', 'block-start', 'block-middle', 'block-end');
+    delete c.dataset.weeklyOff;
+    delete c.dataset.weeklyId;
+    delete c.dataset.weeklyStaffId;
+
+    const slot = +c.dataset.slot;
+
+    if (slot === -1) {
+      c.onclick = null;
+      return;
+    }
+
+    if (!morningExpanded && slot >= 0 && slot < MORNING_SLOTS) {
+      c.onclick = null;
+      return;
+    }
+
+    c.onclick = () => {
+      if (c.dataset.weeklyOff === '1') {
+        openWeeklyOffFromCell(c);
+        return;
+      }
+      openAddFromCell(c);
+    };
+  });
+
+  const weekDates = getWeekDatesFromValue(calendarDate.value);
+  const weekDateStrings = weekDates.map(toInputDate);
+
+  weekDateStrings.forEach(dateStr => {
+    const weekday = getLocalDateFromInput(dateStr).getDay();
+
+    weeklyOff
+      .filter(w => {
+        if (w.enabled === false) return false;
+        if (w.staffId !== currentStaff.id) return false;
+        if (w.weekday !== weekday) return false;
+
+        const checkDate = getLocalDateFromInput(dateStr);
+
+        if (w.startDate) {
+          const ruleStart = getLocalDateFromInput(w.startDate);
+          if (checkDate < ruleStart) return false;
+        }
+
+        if (w.endDate) {
+          const ruleEnd = getLocalDateFromInput(w.endDate);
+          if (checkDate > ruleEnd) return false;
+        }
+
+        return true;
+      })
+      .forEach(w => {
+        const hasException = offWork.some(o =>
+          o.weeklyException === true &&
+          o.weeklyId === w.id &&
+          o.date === dateStr
+        );
+
+        if (hasException) return;
+
+        if (w.allDay) {
+          document
+            .querySelectorAll(`.slot[data-date="${dateStr}"][data-staff-id="${currentStaff.id}"]`)
+            .forEach(cell => {
+              if (!cell.classList.contains('busy')) {
+                cell.style.background = '#e0e0e0';
+                cell.dataset.weeklyOff = '1';
+                cell.dataset.weeklyId = w.id;
+                cell.dataset.weeklyStaffId = w.staffId;
+              }
+            });
+          return;
+        }
+
+        for (let i = w.start; i < w.end; i++) {
+          const cell = document.querySelector(
+            `.slot[data-slot="${i}"][data-date="${dateStr}"][data-staff-id="${currentStaff.id}"]`
+          );
+
+          if (!cell) continue;
+
+          if (!cell.classList.contains('busy')) {
+            cell.style.background = '#e0e0e0';
+            cell.dataset.weeklyOff = '1';
+            cell.dataset.weeklyId = w.id;
+            cell.dataset.weeklyStaffId = w.staffId;
+          }
+        }
+      });
+
+    offWork
+      .filter(o => o.date === dateStr && o.staffId === currentStaff.id && o.weeklyException !== true)
+      .forEach(o => {
+        if (o.allDay) {
+          document
+            .querySelectorAll(`.slot[data-date="${dateStr}"][data-staff-id="${currentStaff.id}"]`)
+            .forEach(cell => {
+              cell.style.background = '#e0e0e0';
+              cell.onclick = () => {
+                if (!offWork.find(x => x.id === o.id)) return;
+                openOffWorkEdit(o);
+              };
+            });
+          return;
+        }
+
+        if (o.start === -1) {
+          const cell = document.querySelector(
+            `.slot[data-slot="-1"][data-date="${dateStr}"][data-staff-id="${currentStaff.id}"]`
+          );
+
+          if (cell) {
+            cell.style.background = '#e0e0e0';
+            cell.onclick = null;
+          }
+        }
+
+        for (let i = Math.max(o.start, 0); i < o.end; i++) {
+          const cell = document.querySelector(
+            `.slot[data-slot="${i}"][data-date="${dateStr}"][data-staff-id="${currentStaff.id}"]`
+          );
+
+          if (cell) {
+            cell.style.background = '#e0e0e0';
+            cell.onclick = () => openOffWorkEdit(o);
+          }
+        }
+      });
+  });
+
+  appointments
+    .filter(a =>
+      a.staffId === currentStaff.id &&
+      weekDateStrings.includes(a.date) &&
+      a.noShow !== true &&
+      a.canceled !== true
+    )
+    .forEach(a => {
+      if (a.start === -1) {
+        const cell = document.querySelector(
+          `.slot[data-slot="-1"][data-date="${a.date}"][data-staff-id="${currentStaff.id}"]`
+        );
+
+        if (!cell) return;
+
+        cell.style.background = currentStaff.color;
+        cell.classList.add('busy', 'block-start', 'block-end');
+        cell.innerHTML = `
+          <div class="app-client">${a.client || ''}</div>
+          <div class="app-service">${a.note || ''}</div>
+        `;
+        cell.onclick = () => openEdit(a.id);
+        return;
+      }
+
+      const fullDuration = Math.max(a.duration || 1, 1);
+      const color = currentStaff.color;
+
+      const visibleStart = getVisibleAppointmentStart(a);
+      const hiddenMorningSlots = Math.max(0, visibleStart - a.start);
+      const visibleDuration = Math.max(1, fullDuration - hiddenMorningSlots);
+
+      const firstVisibleCell = document.querySelector(
+        `.slot[data-slot="${visibleStart}"][data-date="${a.date}"][data-staff-id="${currentStaff.id}"]`
+      );
+
+      const realSlotHeight = firstVisibleCell
+        ? firstVisibleCell.getBoundingClientRect().height
+        : 23;
+
+      const overlayPixelHeight = Math.max(1, visibleDuration * realSlotHeight - 2);
+
+      for (let i = 0; i < visibleDuration; i++) {
+        const slotIndex = visibleStart + i;
+
+        const cell = document.querySelector(
+          `.slot[data-slot="${slotIndex}"][data-date="${a.date}"][data-staff-id="${currentStaff.id}"]`
+        );
+        if (!cell) continue;
+
+        cell.classList.add('busy');
+
+        const lastVisible = visibleDuration - 1;
+
+        if (i === 0 && i === lastVisible) {
+          cell.classList.add('block-start', 'block-end');
+          cell.innerHTML = buildAppointmentOverlay(
+            { ...a, start: visibleStart, duration: visibleDuration },
+            color,
+            overlayPixelHeight
+          );
+        } else if (i === 0) {
+          cell.classList.add('block-start');
+          cell.innerHTML = buildAppointmentOverlay(
+            { ...a, start: visibleStart, duration: visibleDuration },
+            color,
+            overlayPixelHeight
+          );
+        } else if (i === lastVisible) {
+          cell.classList.add('block-end');
+        } else {
+          cell.classList.add('block-middle');
+        }
+
+        cell.onclick = () => openEdit(a.id);
+      }
+
+      if (!morningExpanded && a.start < MORNING_SLOTS) {
+        const morningCell = document.querySelector(
+          `.slot[data-slot="-1"][data-date="${a.date}"][data-staff-id="${currentStaff.id}"]`
+        );
+
+        if (morningCell) {
+          morningCell.classList.add('busy', 'block-start', 'block-end');
+          morningCell.style.background = color;
+
+          const hiddenPartDuration = Math.max(1, Math.min(fullDuration, MORNING_SLOTS - a.start));
+          const morningOverlayHeight = 16;
+
+          morningCell.innerHTML = buildAppointmentOverlay(
+            {
+              ...a,
+              start: Math.max(MORNING_SLOTS - hiddenPartDuration, a.start),
+              duration: hiddenPartDuration
+            },
+            color,
+            morningOverlayHeight
+          );
+
+          morningCell.onclick = null;
+        }
+      }
+    });
+}
 function openAnyonePopup(cell, group) {
 
   anyonePopupList.innerHTML = '';
@@ -3547,13 +3974,21 @@ aCanceled.checked = false;
 aCancelComment.value = '';
 updateCancelUI();      
   appointmentModal.classList.remove('hidden');
-  aDate.value = calendarDate.value;
   fillSelects();
-aDuration.value = '';
-  const staffIndex = +cell.dataset.staff;
+  aDuration.value = '';
+
   const slotIndex = +cell.dataset.slot;
-  if (staff[staffIndex]) {
-    aStaff.value = staff[staffIndex].id;
+
+  if (calendarViewMode === 'week') {
+    aDate.value = cell.dataset.date;
+    aStaff.value = currentUserStaffId;
+  } else {
+    aDate.value = calendarDate.value;
+
+    const staffIndex = +cell.dataset.staff;
+    if (staff[staffIndex]) {
+      aStaff.value = staff[staffIndex].id;
+    }
   }
 
   aTime.value = slotIndex;
@@ -4952,26 +5387,46 @@ window.toggleMorning = () => {
 const dateLabel = document.getElementById('dateLabel');
 
 function updateDateLabel() {
-  const d = getLocalDateFromInput(calendarDate.value);
+  const selected = getLocalDateFromInput(calendarDate.value);
   const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  if (calendarViewMode === 'week') {
+    const weekStart = getStartOfWeek(selected);
+    const currentWeekStart = getStartOfWeek(today);
+
+    dateLabel.textContent = getCurrentWeekRangeLabel();
+
+    const isCurrentWeek =
+      weekStart.getFullYear() === currentWeekStart.getFullYear() &&
+      weekStart.getMonth() === currentWeekStart.getMonth() &&
+      weekStart.getDate() === currentWeekStart.getDate();
+
+    dateLabel.classList.toggle('date-today', isCurrentWeek);
+    return;
+  }
 
   const isToday =
-    d.getFullYear() === today.getFullYear() &&
-    d.getMonth() === today.getMonth() &&
-    d.getDate() === today.getDate();
+    selected.getFullYear() === today.getFullYear() &&
+    selected.getMonth() === today.getMonth() &&
+    selected.getDate() === today.getDate();
 
-  const text = d.toLocaleDateString(undefined, {
+  const text = selected.toLocaleDateString(undefined, {
     weekday: 'long',
     month: 'short',
     day: 'numeric'
   });
 
   dateLabel.textContent = text;
-
   dateLabel.classList.toggle('date-today', isToday);
 }
 
 calendarDate.onchange = () => {
+  if (calendarViewMode === 'week') {
+    const picked = getLocalDateFromInput(calendarDate.value);
+    calendarDate.value = toInputDate(getStartOfWeek(picked));
+  }
+
   updateDateLabel();
   renderCalendar();
 };
@@ -4990,13 +5445,19 @@ function initMainDatePicker() {
     clickOpens: false,
     allowInput: false,
     disableMobile: true,   // ← КЛЮЧЕВОЙ параметр
-    onChange: function(selectedDates, dateStr) {
-      if (dateStr) {
-        calendarDate.value = dateStr;
-        updateDateLabel();
-        renderCalendar();
-      }
-    }
+onChange: function(selectedDates, dateStr) {
+  if (!dateStr) return;
+
+  if (calendarViewMode === 'week') {
+    const picked = getLocalDateFromInput(dateStr);
+    calendarDate.value = toInputDate(getStartOfWeek(picked));
+  } else {
+    calendarDate.value = dateStr;
+  }
+
+  updateDateLabel();
+  renderCalendar();
+}
   });
 }
 
@@ -7231,12 +7692,14 @@ function applyAppointmentTintNow() {
 
 window.goPrevDay = () => {
   const d = getLocalDateFromInput(calendarDate.value);
-  d.setDate(d.getDate() - 1);
 
-  calendarDate.value =
-    d.getFullYear() + '-' +
-    String(d.getMonth() + 1).padStart(2, '0') + '-' +
-    String(d.getDate()).padStart(2, '0');
+  if (calendarViewMode === 'week') {
+    d.setDate(d.getDate() - 7);
+    calendarDate.value = toInputDate(getStartOfWeek(d));
+  } else {
+    d.setDate(d.getDate() - 1);
+    calendarDate.value = toInputDate(d);
+  }
 
   updateDateLabel();
   renderCalendar();
@@ -7244,24 +7707,30 @@ window.goPrevDay = () => {
 
 window.goNextDay = () => {
   const d = getLocalDateFromInput(calendarDate.value);
-  d.setDate(d.getDate() + 1);
 
-  calendarDate.value =
-    d.getFullYear() + '-' +
-    String(d.getMonth() + 1).padStart(2, '0') + '-' +
-    String(d.getDate()).padStart(2, '0');
+  if (calendarViewMode === 'week') {
+    d.setDate(d.getDate() + 7);
+    calendarDate.value = toInputDate(getStartOfWeek(d));
+  } else {
+    d.setDate(d.getDate() + 1);
+    calendarDate.value = toInputDate(d);
+  }
 
   updateDateLabel();
   renderCalendar();
 };
+
 window.goToday = () => {
   const now = new Date();
 
-  calendarDate.value =
-    now.getFullYear() + '-' +
-    String(now.getMonth() + 1).padStart(2, '0') + '-' +
-    String(now.getDate()).padStart(2, '0');
+  if (calendarViewMode === 'week') {
+    calendarDate.value = toInputDate(getStartOfWeek(now));
+    updateDateLabel();
+    renderCalendar();
+    return;
+  }
 
+  calendarDate.value = toInputDate(now);
   updateDateLabel();
   renderCalendar();
 
@@ -7427,13 +7896,19 @@ if (bottomOffWorkBtn) {
   }
 
   if (walkBtn) {
-  if (currentUserRole === 'staff' || managerWithColumn) {
-    walkBtn.classList.remove('hidden');
-  } else {
-    walkBtn.classList.add('hidden');
+    if (currentUserRole === 'staff' || managerWithColumn) {
+      walkBtn.classList.remove('hidden');
+    } else {
+      walkBtn.classList.add('hidden');
+    }
   }
-}
 
+  if (currentUserRole !== 'staff') {
+    calendarViewMode = 'general';
+  }
+
+  updateBottomToolbarByRole();
+  updateDateLabel();
   renderCalendar();
 
   document.getElementById('loginScreen').classList.add('hidden');
