@@ -2424,8 +2424,15 @@ stroke-linejoin="round">
 <div id="offWorkModal" class="modal hidden">
 <div class="modal-content">
 <h3>Off work</h3>
+
 <label>Date</label>
-<input id="offDate" type="date" readonly disabled>
+<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+  <input id="offDate" type="date" readonly disabled style="flex:0 0 auto;">
+  <button id="finishDayBtn" type="button" class="ap-btn-small" onclick="finishWork()">
+    Finish day
+  </button>
+</div>
+
 <label>Staff</label>
 <select id="offStaff"></select>
 
@@ -5104,7 +5111,18 @@ offVacation.disabled = false;
   offWorkModal.classList.remove('hidden');
 
   offDate.value = calendarDate.value;
+  const finishDayBtn = document.getElementById('finishDayBtn');
 
+  if (finishDayBtn) {
+    const todayStr = toInputDate(new Date());
+    const isTodaySelected = offDate.value === todayStr;
+    const canUseFinishDay =
+      (currentUserRole === 'staff' || currentUserRole === 'reception') &&
+      isTodaySelected;
+
+    finishDayBtn.disabled = !canUseFinishDay;
+    finishDayBtn.style.display = canUseFinishDay ? '' : 'none';
+  }
   offStaff.innerHTML = staff
     .filter(s => s.id !== ANYONE_ID)
     .map(s => `<option value="${s.id}">${s.name}</option>`)
@@ -5164,7 +5182,11 @@ function openOffWorkEdit(record) {
   offWorkModal.classList.remove('hidden');
 
   offDate.value = record.date;
-
+  const finishDayBtn = document.getElementById('finishDayBtn');
+  if (finishDayBtn) {
+    finishDayBtn.style.display = 'none';
+    finishDayBtn.disabled = true;
+  }
   offStaff.innerHTML = staff
     .filter(s => s.id !== ANYONE_ID)
     .map(s => `<option value="${s.id}">${s.name}</option>`)
@@ -5208,7 +5230,11 @@ offRemoveBtn.style.display = '';
   offWorkModal.classList.remove('hidden');
 
   offDate.value = record.date;
-
+  const finishDayBtn = document.getElementById('finishDayBtn');
+  if (finishDayBtn) {
+    finishDayBtn.style.display = 'none';
+    finishDayBtn.disabled = true;
+  }
   offStaff.innerHTML = staff
     .filter(s => s.id !== ANYONE_ID)
     .map(s => `<option value="${s.id}">${s.name}</option>`)
@@ -5254,7 +5280,11 @@ function openWeeklyOffFromCell(cell) {
   offWorkModal.classList.remove('hidden');
 
   offDate.value = cell.dataset.date || calendarDate.value;
-
+  const finishDayBtn = document.getElementById('finishDayBtn');
+  if (finishDayBtn) {
+    finishDayBtn.style.display = 'none';
+    finishDayBtn.disabled = true;
+  }
   offStaff.innerHTML = staff
     .filter(s => s.id !== ANYONE_ID)
     .map(s => `<option value="${s.id}">${s.name}</option>`)
@@ -6241,11 +6271,7 @@ html += `
       Tips Withdrawal
     </button>
 
-    <button class="dr-button"
-      ${(!isToday || !editingAllowed) ? 'disabled' : ''}
-      onclick="finishWork()">
-      Finish Work
-    </button>
+    
 
     <button class="dr-button"
       onclick="closeDailyReport()">
@@ -7400,11 +7426,18 @@ await addDoc(collection(db, "DayEntries"), {
 //   });
 // };
 window.finishWork = async () => {
-  if (!isDrEditingAllowed()) return;
-  if (currentUserRole !== "staff") return;
+  const isStaffUser = currentUserRole === "staff";
+  const isReceptionUser = currentUserRole === "reception";
 
-  const dateStr = getDrDateString();
-  const staffId = currentUserStaffId;
+  if (!isStaffUser && !isReceptionUser) return;
+
+  const dateStr = offDate.value;
+  const todayStr = toInputDate(new Date());
+
+  if (dateStr !== todayStr) return;
+
+  const staffId = isStaffUser ? currentUserStaffId : offStaff.value;
+  if (!staffId) return;
 
   const now = new Date();
   const minutesNow = now.getHours() * 60 + now.getMinutes();
@@ -7418,6 +7451,7 @@ window.finishWork = async () => {
 
   if (startSlot >= END_SLOT) {
     showToast("Finish Work completed.", "success", 3500);
+    closeOffWork();
     return;
   }
 
@@ -7444,6 +7478,7 @@ window.finishWork = async () => {
     end: END_SLOT
   });
 
+  closeOffWork();
   renderCalendar();
   showToast("Finish Work ✓", "success", 4500);
 };
@@ -8546,21 +8581,7 @@ window.addEventListener('DOMContentLoaded', () => {
     </div>
   </div>
 </div>
-<!-- OFF WORK CONFLICT MODAL -->
-<div id="offWorkHardConflictModal" class="modal hidden">
-  <div class="modal-content" style="max-width:340px;">
-    <h4>Off Work Already Exists</h4>
 
-    <p style="font-size:13px; margin-top:10px;">
-      This staff member already has off work for this period.
-      Please edit existing record instead of creating a new one.
-    </p>
-
-    <div class="modal-actions">
-      <button onclick="closeOffWorkHardConflict()">OK</button>
-    </div>
-  </div>
-</div>
 <!-- ===== SPLIT SERVICE MODAL ===== -->
 <div id="splitModal" class="modal hidden">
 
