@@ -3405,7 +3405,8 @@ async function replaceOffWorkWithMergedBlock({
   start,
   end,
   extraFields = {},
-  excludeId = null
+  excludeId = null,
+  finishWork = false
 }) {
   const merged = getMergedOffWorkRange({
     date,
@@ -3426,14 +3427,16 @@ async function replaceOffWorkWithMergedBlock({
     await deleteDoc(doc(db, 'OffWork', item.id));
   }
 
-  await addDoc(collection(db, 'OffWork'), {
-    date: date,
-    staffId: staffId,
-    allDay: merged.allDay,
-    start: merged.allDay ? null : merged.start,
-    end: merged.allDay ? null : merged.end,
-    ...extraFields
-  });
+await addDoc(collection(db, 'OffWork'), {
+  date: date,
+  staffId: staffId,
+  allDay: merged.allDay,
+  start: merged.allDay ? null : merged.start,
+  end: merged.allDay ? null : merged.end,
+  finishWork: finishWork,
+  finishWorkNotify: finishWork,
+  ...extraFields
+});
 
   return merged;
 }
@@ -7471,12 +7474,13 @@ window.finishWork = async () => {
     return;
   }
 
-  await replaceOffWorkWithMergedBlock({
-    date: dateStr,
-    staffId: staffId,
-    start: startSlot,
-    end: END_SLOT
-  });
+await replaceOffWorkWithMergedBlock({
+  date: dateStr,
+  staffId: staffId,
+  start: startSlot,
+  end: END_SLOT,
+  finishWork: true
+});
 
   closeOffWork();
   renderCalendar();
