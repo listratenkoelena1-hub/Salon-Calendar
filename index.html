@@ -3157,16 +3157,14 @@ function checkCalendarConflict({
   end,
   excludeId = null
 }) {
-
   if (!staffId || staffId === ANYONE_ID) return null;
 
-  // --- Appointment ---
   const appointmentConflict = appointments.some(a => {
     if (a.id === excludeId) return false;
     if (a.staffId !== staffId) return false;
     if (a.date !== date) return false;
     if (a.noShow === true) return false;
-    if (a.canceled === true) return false;    
+    if (a.canceled === true) return false;
 
     const aStart = a.start;
     const aEnd = a.start + a.duration;
@@ -3176,11 +3174,68 @@ function checkCalendarConflict({
 
   if (appointmentConflict) return "busy";
 
-  // --- OffWork ---
+  return null;
+}
+function rangesTouchOrOverlap(aStart, aEnd, bStart, bEnd) {
+  return Math.max(aStart, bStart) <= Math.min(aEnd, bEnd);
+}
+
+function getNormalizedRange({ allDay, start, end }) {
+  return {
+    allDay: !!allDay,
+    start: allDay ? 0 : start,
+    end: allDay ? SLOTS : end
+  };
+}
+
+function isWeeklyRuleActiveOnDate(rule, dateStr) {
+  if (rule.enabled === false) return false;
+
+  const checkDate = getLocalDateFromInput(dateStr);
+
+  if (rule.startDate) {
+    const ruleStart = getLocalDateFromInput(rule.startDate);
+    if (checkDate < ruleStart) return false;
+  }
+
+  if (rule.endDate) {
+    const ruleEnd = getLocalDateFromInput(rule.endDate);
+    if (checkDate > ruleEnd) return false;
+  }
+
+  return true;
+}
+
+function hasWeeklyExceptionForDate(weeklyId, dateStr) {
+  return offWork.some(o =>
+    o.weeklyException === true &&
+    o.weeklyId === weeklyId &&
+    o.date === dateStr
+  );
+}
+
+function getAppointmentPlacementConflict({
+  staffId,
+  date,
+  start,
+  end,
+  excludeId = null
+}) {
+  const appointmentConflict = checkCalendarConflict({
+    staffId,
+    date,
+    start,
+    end,
+    excludeId
+  });
+
+  if (appointmentConflict === "busy") return "busy";
+
   const offConflict = offWork.some(o => {
     if (o.id === excludeId) return false;
     if (o.staffId !== staffId) return false;
     if (o.date !== date) return false;
+    if (o.weeklyException === true) return false;
 
     if (o.allDay) return true;
 
@@ -3188,36 +3243,15 @@ function checkCalendarConflict({
   });
 
   if (offConflict) return "off";
-  // --- WeeklyOff ---
+
   const selectedDate = getLocalDateFromInput(date);
   const weekday = selectedDate.getDay();
 
   const weeklyConflict = weeklyOff.some(w => {
-if (w.startDate) {
-  const ruleStart = getLocalDateFromInput(w.startDate);
-  const checkDate = getLocalDateFromInput(date);
-
-  if (checkDate < ruleStart) return false;
-}
-if (w.endDate) {
-  const ruleEnd = getLocalDateFromInput(w.endDate);
-  const checkDate = getLocalDateFromInput(date);
-
-  if (checkDate > ruleEnd) return false;
-}
-
     if (w.staffId !== staffId) return false;
     if (w.weekday !== weekday) return false;
-    if (w.enabled === false) return false;
-
-    // исключение (weeklyException)
-    const hasException = offWork.some(o =>
-      o.weeklyException === true &&
-      o.weeklyId === w.id &&
-      o.date === date
-    );
-
-    if (hasException) return false;
+    if (!isWeeklyRuleActiveOnDate(w, date)) return false;
+    if (hasWeeklyExceptionForDate(w.id, date)) return false;
 
     if (w.allDay) return true;
 
@@ -3229,6 +3263,202 @@ if (w.endDate) {
   return null;
 }
 
+function hasAppointmentConflictOnly({
+  staffId,
+  date,
+  start,
+  end,
+  excludeId = null
+}) {
+  return checkCalendarConflict({
+    staffId,
+    date,
+    start,
+    end,
+    excludeId
+  }) === "busy";
+}
+
+function getExistingManualOffWorkForDate({
+  date,
+  staffId,
+  excludeId = null
+}) {
+  return offWork.filter(o => {
+    if (o.id === excludeId) return false;
+    if (o.staffId !== staffId) return false;
+    if (o.date !== date) return false;
+    if (o.weeklyException === true) return false;
+    return true;
+  });
+}
+
+function getMergedOffWorkRange({
+  date,
+  staffId,
+  start,
+  end,
+  excludeId = null
+}) {
+  const existing = getExistingManualOffWorkForDate({
+    date,
+    staffId,
+    excludeId
+  });
+
+  let mergedStart = start;
+  let mergedEnd = end;
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    for (const item of existing) {
+      const itemStart = item.allDay ? 0 : item.start;
+      const itemEnd = item.allDay ? SLOTS : item.end;
+
+      if (rangesTouchOrOverlap(mergedStart, mergedEnd, itemStart, itemEnd)) {
+        const nextStart = Math.min(mergedStart, itemStart);
+        const nextEnd = Math.max(mergedEnd, itemEnd);
+
+        if (nextStart !== mergedStart || nextEnd !== mergedEnd) {
+          mergedStart = nextStart;
+          mergedEnd = nextEnd;
+          changed = true;
+        }
+      }
+    }
+  }
+
+  const overlappedDocs = existing.filter(item => {
+    const itemStart = item.allDay ? 0 : item.start;
+    const itemEnd = item.allDay ? SLOTS : item.end;
+    return rangesTouchOrOverlap(mergedStart, mergedEnd, itemStart, itemEnd);
+  });
+
+  return {
+    start: mergedStart,
+    end: mergedEnd,
+    allDay: mergedStart === 0 && mergedEnd === SLOTS,
+    overlappedDocs
+  };
+}
+
+function getWeeklyRulesToException({
+  date,
+  staffId,
+  start,
+  end
+}) {
+  const selectedDate = getLocalDateFromInput(date);
+  const weekday = selectedDate.getDay();
+
+  return weeklyOff.filter(w => {
+    if (w.staffId !== staffId) return false;
+    if (w.weekday !== weekday) return false;
+    if (!isWeeklyRuleActiveOnDate(w, date)) return false;
+    if (hasWeeklyExceptionForDate(w.id, date)) return false;
+
+    const weeklyStart = w.allDay ? 0 : w.start;
+    const weeklyEnd = w.allDay ? SLOTS : w.end;
+
+    return rangesOverlap(start, end, weeklyStart, weeklyEnd);
+  });
+}
+
+async function applyWeeklyExceptionsForRange({
+  date,
+  staffId,
+  start,
+  end
+}) {
+  const rules = getWeeklyRulesToException({
+    date,
+    staffId,
+    start,
+    end
+  });
+
+  for (const rule of rules) {
+    await addDoc(collection(db, 'OffWork'), {
+      date: date,
+      staffId: staffId,
+      allDay: true,
+      start: null,
+      end: null,
+      weeklyException: true,
+      weeklyId: rule.id
+    });
+  }
+}
+
+async function replaceOffWorkWithMergedBlock({
+  date,
+  staffId,
+  start,
+  end,
+  extraFields = {},
+  excludeId = null
+}) {
+  const merged = getMergedOffWorkRange({
+    date,
+    staffId,
+    start,
+    end,
+    excludeId
+  });
+
+  await applyWeeklyExceptionsForRange({
+    date,
+    staffId,
+    start: merged.start,
+    end: merged.end
+  });
+
+  for (const item of merged.overlappedDocs) {
+    await deleteDoc(doc(db, 'OffWork', item.id));
+  }
+
+  await addDoc(collection(db, 'OffWork'), {
+    date: date,
+    staffId: staffId,
+    allDay: merged.allDay,
+    start: merged.allDay ? null : merged.start,
+    end: merged.allDay ? null : merged.end,
+    ...extraFields
+  });
+
+  return merged;
+}
+
+async function replaceDateWithAllDayVacation({
+  date,
+  staffId,
+  vacationId
+}) {
+  const existing = getExistingManualOffWorkForDate({ date, staffId });
+
+  for (const item of existing) {
+    await deleteDoc(doc(db, 'OffWork', item.id));
+  }
+
+  await applyWeeklyExceptionsForRange({
+    date,
+    staffId,
+    start: 0,
+    end: SLOTS
+  });
+
+  await addDoc(collection(db, 'OffWork'), {
+    date: date,
+    staffId: staffId,
+    allDay: true,
+    start: null,
+    end: null,
+    vacation: true,
+    vacationId: vacationId
+  });
+}
 function timeLabel(i){
 
   if (i === -1) return 'Morning';
@@ -4194,13 +4424,13 @@ function checkTimeAvailability() {
   }
 
   const end = data.start + data.duration;
-  const conflictType = checkCalendarConflict({
-    staffId: data.staffId,
-    date: data.date,
-    start: data.start,
-    end: end,
-    excludeId: editId
-  });
+const conflictType = getAppointmentPlacementConflict({
+  staffId: data.staffId,
+  date: data.date,
+  start: data.start,
+  end: end,
+  excludeId: editId
+});
 
   if (conflictType === "busy") {
     timeStatus.textContent = '✖ Slot busy';
@@ -4318,13 +4548,13 @@ window.saveAppointment = async () => {
   if (shouldCheckConflict) {
     const end = data.start + data.duration;
 
-    const conflictType = checkCalendarConflict({
-      staffId: data.staffId,
-      date: data.date,
-      start: data.start,
-      end: end,
-      excludeId: editId
-    });
+const conflictType = getAppointmentPlacementConflict({
+  staffId: data.staffId,
+  date: data.date,
+  start: data.start,
+  end: end,
+  excludeId: editId
+});
 
     if (conflictType === "busy") {
       conflictModal.classList.remove('hidden');
@@ -5176,24 +5406,22 @@ offVacation.onchange = () => {
 };
 
 
-
-
-
 window.saveOffWork = async () => {
-// ===== ROLE SECURITY =====
-if (currentUserRole === 'staff' || isManagerWithColumn()) {
-  offStaff.value = currentUserStaffId;
-}
-const normalizedEnd =
-  offAllDay.checked
-    ? SLOTS
-    : (+offEnd.value === SLOTS - 1 ? SLOTS : +offEnd.value);
+  // ===== ROLE SECURITY =====
+  if (currentUserRole === 'staff' || isManagerWithColumn()) {
+    offStaff.value = currentUserStaffId;
+  }
+
+  const normalizedEnd =
+    offAllDay.checked
+      ? SLOTS
+      : (+offEnd.value === SLOTS - 1 ? SLOTS : +offEnd.value);
+
   // =========================================
   // VACATION SAVE
   // =========================================
   if (offVacation.checked) {
-
-       if (!vacationFrom || !vacationTo) {
+    if (!vacationFrom || !vacationTo) {
       showToast("Please select vacation dates", "warning");
       return;
     }
@@ -5209,9 +5437,7 @@ const normalizedEnd =
       d.setDate(d.getDate() + 1);
     }
 
-    // 🔴 Универсальная проверка конфликтов
     for (const day of days) {
-
       const dateStr =
         day.getFullYear() +
         '-' +
@@ -5219,28 +5445,19 @@ const normalizedEnd =
         '-' +
         String(day.getDate()).padStart(2, '0');
 
-      const conflictType = checkCalendarConflict({
+      const hasBusy = hasAppointmentConflictOnly({
         staffId: offStaff.value,
         date: dateStr,
         start: 0,
         end: SLOTS
       });
 
-      if (conflictType === "busy") {
-  conflictModal.classList.remove('hidden');
-  return;
-}
-
-if (conflictType === "off") {
-  document
-    .getElementById('offWorkHardConflictModal')
-    .classList.remove('hidden');
-  return;
-}
-
+      if (hasBusy) {
+        conflictModal.classList.remove('hidden');
+        return;
+      }
     }
 
-    // ===== SAVE VACATION DOCUMENT =====
     const vacationDoc = await addDoc(collection(db, 'Vacations'), {
       staffId: offStaff.value,
       startDate: vacationFrom.toISOString().slice(0, 10),
@@ -5250,8 +5467,7 @@ if (conflictType === "off") {
 
     const vacationId = vacationDoc.id;
 
-    await Promise.all(days.map(day => {
-
+    for (const day of days) {
       const dateStr =
         day.getFullYear() +
         '-' +
@@ -5259,73 +5475,68 @@ if (conflictType === "off") {
         '-' +
         String(day.getDate()).padStart(2, '0');
 
-      return addDoc(collection(db, 'OffWork'), {
+      await replaceDateWithAllDayVacation({
         date: dateStr,
         staffId: offStaff.value,
-        allDay: true,
-        vacation: true,
-        vacationId: vacationId
+        vacationId
       });
-    }));
-showToast("Vacation saved", "success");
+    }
+
+    showToast("Vacation saved", "success");
     closeOffWork();
     return;
   }
+
   // =========================================
   // WEEKLY OFF SAVE
   // =========================================
   if (offWeekly.checked) {
-
     const selectedDate = getLocalDateFromInput(offDate.value);
     const weekday = selectedDate.getDay();
 
     const today = new Date();
-    today.setHours(0,0,0,0);
+    today.setHours(0, 0, 0, 0);
 
     if (selectedDate < today) {
       return;
     }
-// 🔴 FULL FUTURE CONFLICT CHECK FOR WEEKLY
 
-const weeklyStart = offAllDay.checked ? 0 : +offStart.value;
-const weeklyEnd = normalizedEnd;
+    const weeklyStart = offAllDay.checked ? 0 : +offStart.value;
+    const weeklyEnd = normalizedEnd;
 
-const futureConflict = appointments.some(a => {
+    const futureConflict = appointments.some(a => {
+      if (a.staffId !== offStaff.value) return false;
+      if (a.noShow === true) return false;
+      if (a.canceled === true) return false;
 
-  if (a.staffId !== offStaff.value) return false;
-if (a.noShow === true) return false;
-if (a.canceled === true) return false;
-  const appDate = getLocalDateFromInput(a.date);
+      const appDate = getLocalDateFromInput(a.date);
 
-  // только будущие даты
-  if (appDate < selectedDate) return false;
+      if (appDate < selectedDate) return false;
+      if (appDate.getDay() !== weekday) return false;
 
-  // тот же день недели
-  if (appDate.getDay() !== weekday) return false;
+      const appStart = a.start;
+      const appEnd = a.start + a.duration;
 
-  const appStart = a.start;
-  const appEnd = a.start + a.duration;
+      return rangesOverlap(weeklyStart, weeklyEnd, appStart, appEnd);
+    });
 
-  return rangesOverlap(weeklyStart, weeklyEnd, appStart, appEnd);
-});
+    if (futureConflict) {
+      conflictModal.classList.remove('hidden');
+      return;
+    }
 
-if (futureConflict) {
-  conflictModal.classList.remove('hidden');
-  return;
-}
-
-   const weeklyData = {
-  staffId: offStaff.value,
-  weekday: weekday,
-  startDate: offDate.value,
-  allDay: offAllDay.checked,
-  start: offAllDay.checked ? 0 : +offStart.value,
-  end: normalizedEnd,
-  enabled: true
-};
+    const weeklyData = {
+      staffId: offStaff.value,
+      weekday: weekday,
+      startDate: offDate.value,
+      allDay: offAllDay.checked,
+      start: offAllDay.checked ? 0 : +offStart.value,
+      end: normalizedEnd,
+      enabled: true
+    };
 
     await addDoc(collection(db, "WeeklyOff"), weeklyData);
-showToast("Weekly off saved", "success");
+    showToast("Weekly off saved", "success");
     closeOffWork();
     return;
   }
@@ -5333,34 +5544,33 @@ showToast("Weekly off saved", "success");
   // =========================================
   // NORMAL OFF WORK
   // =========================================
+  const data = {
+    date: offDate.value,
+    staffId: offStaff.value,
+    allDay: offAllDay.checked,
+    start: offAllDay.checked ? 0 : +offStart.value,
+    end: normalizedEnd
+  };
 
-const data = {
-  date: offDate.value,
-  staffId: offStaff.value,
-  allDay: offAllDay.checked,
-  start: offAllDay.checked ? 0 : +offStart.value,
-  end: normalizedEnd
-};
-if (isOlderThan7Days(data.date)) {
-showToast("Off work older than 7 days cannot be edited", "warning");      
-  return;
-}
+  if (isOlderThan7Days(data.date)) {
+    showToast("Off work older than 7 days cannot be edited", "warning");
+    return;
+  }
 
-  // ===== TIME VALIDATION =====
   if (!data.allDay && data.end <= data.start) {
     return;
   }
-const today = new Date();
-today.setHours(0,0,0,0);
 
-const selectedDate = getLocalDateFromInput(data.date);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-if (selectedDate < today) {
-  return;
-}
+  const selectedDate = getLocalDateFromInput(data.date);
 
-  // 🔴 Универсальная проверка конфликтов
-  const conflictType = checkCalendarConflict({
+  if (selectedDate < today) {
+    return;
+  }
+
+  const hasBusy = hasAppointmentConflictOnly({
     staffId: data.staffId,
     date: data.date,
     start: data.start,
@@ -5368,37 +5578,22 @@ if (selectedDate < today) {
     excludeId: editingOffWorkId
   });
 
- if (conflictType === "busy") {
-  conflictModal.classList.remove('hidden');
-  return;
-}
+  if (hasBusy) {
+    conflictModal.classList.remove('hidden');
+    return;
+  }
 
-if (conflictType === "off") {
-  document
-    .getElementById('offWorkHardConflictModal')
-    .classList.remove('hidden');
-  return;
-}
+  await replaceOffWorkWithMergedBlock({
+    date: data.date,
+    staffId: data.staffId,
+    start: data.start,
+    end: data.end,
+    excludeId: editingOffWorkId
+  });
 
-
-  // ===== SAVE =====
-   if (editingOffWorkId) {
-await updateDoc(doc(db, "OffWork", editingOffWorkId), {
-  date: data.date,
-  staffId: data.staffId,
-  allDay: offAllDay.checked,
-  start: offAllDay.checked ? null : +offStart.value,
-  end: offAllDay.checked ? null : normalizedEnd
-});
+  if (editingOffWorkId) {
     showToast("Off work updated", "success");
   } else {
-   await addDoc(collection(db, "OffWork"), {
-  date: data.date,
-  staffId: data.staffId,
-  allDay: offAllDay.checked,
-  start: offAllDay.checked ? null : +offStart.value,
-  end: offAllDay.checked ? null : normalizedEnd
-});
     showToast("Off work saved", "success");
   }
 
@@ -7205,10 +7400,7 @@ await addDoc(collection(db, "DayEntries"), {
 //   });
 // };
 window.finishWork = async () => {
-  // редактировать можно только сегодня (как и в Daily Report)
   if (!isDrEditingAllowed()) return;
-
-  // только staff
   if (currentUserRole !== "staff") return;
 
   const dateStr = getDrDateString();
@@ -7217,93 +7409,44 @@ window.finishWork = async () => {
   const now = new Date();
   const minutesNow = now.getHours() * 60 + now.getMinutes();
 
-const START_MIN = START_MINUTES;
-const END_MIN = END_MINUTES;
+  const START_MIN = START_MINUTES;
+  const END_MIN = END_MINUTES;
   const END_SLOT = Math.round((END_MIN - START_MIN) / SLOT_MINUTES);
 
-  // ближайший слот вверх
   let startSlot = Math.ceil((minutesNow - START_MIN) / SLOT_MINUTES);
   if (startSlot < 0) startSlot = 0;
 
-  // если уже поздно
   if (startSlot >= END_SLOT) {
     showToast("Finish Work completed.", "success", 3500);
     return;
   }
 
-  // 1) СНАЧАЛА проверяем: есть ли appointments (busy) до конца дня
-  for (let i = startSlot; i < END_SLOT; i++) {
-    const conflictType = checkCalendarConflict({
-      staffId,
-      date: dateStr,
-      start: i,
-      end: i + 1
-    });
+  const hasBusy = hasAppointmentConflictOnly({
+    staffId,
+    date: dateStr,
+    start: startSlot,
+    end: END_SLOT
+  });
 
-    // appointment = "busy"
-    if (conflictType === "busy") {
-      showToast(
-        "Finish Work blocked: there are upcoming appointments.",
-        "error",
-        5000
-      );
-      return;
-    }
+  if (hasBusy) {
+    showToast(
+      "Finish Work blocked: there are upcoming appointments.",
+      "error",
+      5000
+    );
+    return;
   }
 
-  // 2) Если appointments нет — создаём OffWork на свободные слоты (пропуская off/weekly)
-  const ranges = [];
-  let runStart = null;
-
-  for (let i = startSlot; i < END_SLOT; i++) {
-    const conflictType = checkCalendarConflict({
-      staffId,
-      date: dateStr,
-      start: i,
-      end: i + 1
-    });
-
-    const isFree = !conflictType; // null => свободно (нет off/weekly/appointment)
-
-    if (isFree) {
-      if (runStart === null) runStart = i;
-    } else {
-      if (runStart !== null) {
-        ranges.push({ start: runStart, end: i });
-        runStart = null;
-      }
-    }
-  }
-
-  if (runStart !== null) {
-    ranges.push({ start: runStart, end: END_SLOT });
-  }
-
-  // создаём только если реально есть свободные слоты
-  if (ranges.length > 0) {
-const finishWorkBatchId = crypto.randomUUID();
-
-for (let index = 0; index < ranges.length; index++) {
-  const r = ranges[index];
-
-  await addDoc(collection(db, "OffWork"), {
+  await replaceOffWorkWithMergedBlock({
     date: dateStr,
     staffId: staffId,
-    allDay: false,
-    start: r.start,
-    end: r.end,
-    finishWork: true,
-    finishWorkBatchId: finishWorkBatchId,
-    finishWorkNotify: index === 0
+    start: startSlot,
+    end: END_SLOT
   });
-}
-    renderCalendar();
-  }
 
-  // 3) Всегда успех (если appointments не было)
+  renderCalendar();
   showToast("Finish Work ✓", "success", 4500);
-};      
-      
+};
 window.openSplitModal = (parentId) => {
 if (!isDrEditingAllowed()) return;
   const entry = drEntries.find(e => e.id === parentId);
@@ -8125,11 +8268,7 @@ if (alreadyWithdrawnToday) {
 
   closeWithdrawal();
 };
-window.closeOffWorkHardConflict = () => {
-  document
-    .getElementById('offWorkHardConflictModal')
-    .classList.add('hidden');
-};
+
       window.showToast = (message, type = "success", duration = 3000) => {
   const container = document.getElementById("toastContainer");
   if (!container) return;
