@@ -1,0 +1,1801 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rose's Nails Booking</title>
+  <style>
+    :root {
+      --ink: #24302f;
+      --muted: #66736f;
+      --line: rgba(36, 48, 47, 0.14);
+      --paper: #fffdf8;
+      --mint: #d7f2e3;
+      --rose: #ffd7dd;
+      --lilac: #ded9ff;
+      --sky: #ccecff;
+      --sun: #ffe69b;
+      --coral: #ff9c8f;
+      --green: #4b8f73;
+      --shadow: 0 18px 50px rgba(38, 45, 43, 0.14);
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        linear-gradient(120deg, rgba(215, 242, 227, 0.72), rgba(255, 253, 248, 0.8) 38%, rgba(255, 215, 221, 0.62)),
+        var(--paper);
+      letter-spacing: 0;
+    }
+
+    button, input, textarea, select { font: inherit; letter-spacing: 0; }
+    button { cursor: pointer; }
+
+    body.modal-open {
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    .page {
+      min-height: 100vh;
+      position: relative;
+      overflow: hidden;
+      padding: 18px;
+      display: grid;
+      place-items: center;
+    }
+
+    .petal {
+      position: absolute;
+      width: 88px;
+      height: 34px;
+      border-radius: 80% 18% 80% 18%;
+      opacity: 0.42;
+      transform: rotate(var(--turn));
+      background: var(--tone);
+      filter: saturate(0.92);
+    }
+
+    .p1 { --tone: var(--rose); --turn: 18deg; top: 38px; left: -24px; }
+    .p2 { --tone: var(--sky); --turn: -32deg; top: 9%; right: -26px; }
+    .p3 { --tone: var(--sun); --turn: 42deg; bottom: 11%; left: -34px; }
+    .p4 { --tone: var(--lilac); --turn: -16deg; bottom: 38px; right: -22px; }
+
+    .app {
+      width: min(100%, 980px);
+      min-height: min(760px, calc(100vh - 36px));
+      background: rgba(255, 253, 248, 0.86);
+      border: 1px solid rgba(255, 255, 255, 0.84);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .topbar {
+      min-height: 76px;
+      padding: 18px 18px 10px;
+      display: grid;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .mark { display: none; }
+
+
+    .brand-title { font-weight: 760; line-height: 1.1; }
+    .brand-sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .language-hint {
+      color: var(--muted);
+      font-size: 11px;
+      text-align: right;
+      margin-top: 4px;
+    }
+
+    .screen-heading-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .screen-heading-row h2 { margin: 0; }
+
+    .language {
+      width: 138px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.64);
+      padding: 9px 10px;
+      color: var(--ink);
+    }
+
+    .progress {
+      height: 8px;
+      background: rgba(36,48,47,0.08);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .progress > div {
+      width: 16.66%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--green), var(--coral), #9b87ff);
+      transition: width 260ms ease;
+    }
+
+    .viewport { overflow: hidden; min-height: 0; }
+
+    .slides {
+      min-height: 100%;
+      display: flex;
+      transition: transform 320ms ease;
+    }
+
+    .screen {
+      width: 100%;
+      flex: 0 0 100%;
+      padding: 22px 18px 18px;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 18px;
+    }
+
+    h1, h2, p { margin: 0; }
+    h1, h2 { line-height: 1.06; letter-spacing: 0; }
+    h1 { font-size: clamp(34px, 9vw, 54px); max-width: 720px; }
+    h2 { font-size: clamp(27px, 7vw, 42px); max-width: 720px; }
+    .lead { color: var(--muted); font-size: 17px; line-height: 1.5; max-width: 620px; margin-top: 12px; }
+
+    .content {
+      min-height: 0;
+      display: grid;
+      align-content: start;
+      gap: 14px;
+    }
+
+    .field-grid {
+      display: grid;
+      gap: 12px;
+      max-width: 620px;
+      width: 100%;
+    }
+
+    label { font-size: 13px; color: var(--muted); font-weight: 680; }
+
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.74);
+      color: var(--ink);
+      padding: 13px 14px;
+      outline: none;
+    }
+
+    input:focus, textarea:focus, select:focus {
+      border-color: rgba(75,143,115,0.72);
+      box-shadow: 0 0 0 4px rgba(75,143,115,0.13);
+    }
+
+    textarea { min-height: 132px; resize: vertical; line-height: 1.45; }
+
+    .checkline {
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+      max-width: 660px;
+    }
+
+    .checkline input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--green); }
+
+    .note {
+      max-width: 680px;
+      border: 1px solid rgba(75,143,115,0.18);
+      border-radius: 8px;
+      padding: 12px 13px;
+      background: rgba(215,242,227,0.54);
+      color: #3d5f54;
+      line-height: 1.45;
+      font-size: 14px;
+    }
+
+    .note.warn {
+      background: rgba(255,230,155,0.42);
+      border-color: rgba(170,126,37,0.20);
+      color: #6c5520;
+    }
+
+    .chips, .time-grid, .staff-grid, .photo-row, .service-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .chip, .time, .staff-card, .photo-tile, .service-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.62);
+      color: var(--ink);
+    }
+
+    .chip {
+      padding: 10px 12px;
+      font-weight: 680;
+    }
+
+    .chip.active, .time.active, .staff-card.active {
+      border-color: rgba(75,143,115,0.74);
+      background: rgba(215,242,227,0.74);
+    }
+
+    .date-wrap {
+      display: grid;
+      gap: 12px;
+      max-width: 420px;
+    }
+
+    .staff-card {
+      min-width: 132px;
+      padding: 13px;
+      text-align: left;
+    }
+
+    .staff-name { font-weight: 760; }
+    .staff-meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+    .time {
+      min-width: 92px;
+      padding: 11px 12px;
+      text-align: center;
+      font-weight: 740;
+    }
+
+    .photo-input {
+      display: none;
+    }
+
+    .photo-tile {
+      width: clamp(92px, 28vw, 112px);
+      aspect-ratio: 1;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      position: relative;
+      color: var(--muted);
+      text-align: center;
+      padding: 10px;
+      font-size: 13px;
+    }
+
+    .photo-tile img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center center;
+      display: block;
+      grid-area: 1 / 1;
+    }
+
+    .photo-plus {
+      display: block;
+      font-size: 36px;
+      line-height: 1;
+      color: var(--green);
+      font-weight: 420;
+    }
+
+    .photo-slot {
+      cursor: pointer;
+      align-content: center;
+      justify-items: center;
+      gap: 6px;
+    }
+
+    .menu-button {
+      width: fit-content;
+      border: 1px solid rgba(36,48,47,0.16);
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(255,215,221,0.86), rgba(204,236,255,0.86));
+      padding: 12px 14px;
+      font-weight: 780;
+      color: var(--ink);
+    }
+
+    .review {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      max-width: 760px;
+    }
+
+    .review-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: rgba(255,255,255,0.56);
+      min-width: 0;
+    }
+
+    .review-label { color: var(--muted); font-size: 12px; font-weight: 740; }
+    .review-value { margin-top: 4px; overflow-wrap: anywhere; }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-top: 1px solid var(--line);
+      padding-top: 14px;
+    }
+
+    .btn {
+      border: 1px solid transparent;
+      border-radius: 8px;
+      min-height: 46px;
+      padding: 12px 16px;
+      font-weight: 800;
+      color: var(--ink);
+      background: rgba(255,255,255,0.70);
+    }
+
+    .btn.primary {
+      color: white;
+      background: #2f7962;
+      box-shadow: 0 10px 24px rgba(47,121,98,0.24);
+    }
+
+    .btn:disabled { opacity: 0.42; cursor: not-allowed; box-shadow: none; }
+
+    .call {
+      color: #276b58;
+      font-weight: 780;
+      text-decoration: none;
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(23,31,30,0.34);
+      display: none;
+      place-items: end center;
+      padding: 16px;
+      z-index: 20;
+    }
+
+    .modal.open { display: grid; }
+
+    .menu-panel {
+      width: min(100%, 760px);
+      max-height: min(84vh, 760px);
+      background: var(--paper);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+    }
+
+    .menu-head, .menu-foot {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      text-align: center;
+    }
+
+    .menu-foot { border-top: 1px solid var(--line); border-bottom: 0; }
+    .menu-body { padding: 16px; overflow: auto; display: grid; gap: 10px; }
+    .menu-row {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.66);
+      color: var(--ink);
+      padding: 13px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-weight: 820;
+      text-align: left;
+    }
+    .menu-row.open {
+      background: linear-gradient(135deg, rgba(224,244,224,0.82), rgba(255,226,232,0.72));
+    }
+    .menu-row-sub {
+      width: calc(100% - 24px);
+      margin-left: 24px;
+      padding: 11px 12px;
+      font-weight: 760;
+      background: rgba(255,255,255,0.46);
+    }
+    .menu-service-list {
+      display: grid;
+      gap: 10px;
+      padding: 4px 0 8px;
+    }
+    .menu-service-list-sub {
+      width: calc(100% - 24px);
+      margin-left: 24px;
+    }
+
+    .service-card {
+      width: 100%;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: start;
+      text-align: left;
+    }
+
+    .service-title { font-weight: 780; }
+    .service-group-title {
+      margin: 18px 0 8px;
+      font-weight: 820;
+      color: var(--ink);
+    }
+    .service-official {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .service-description {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .service-card.disabled {
+      opacity: .72;
+      cursor: default;
+    }
+    .service-meta { color: var(--muted); font-size: 13px; margin-top: 5px; line-height: 1.35; }
+    .service-card input { width: 20px; height: 20px; accent-color: var(--green); }
+
+    .success-mark {
+      width: 88px;
+      height: 88px;
+      border-radius: 18px;
+      background:
+        linear-gradient(135deg, var(--mint), transparent 55%),
+        linear-gradient(45deg, var(--rose), var(--sun));
+      display: grid;
+      place-items: center;
+      font-size: 42px;
+      font-weight: 900;
+      color: #2f7962;
+    }
+
+    @media (min-width: 760px) {
+      .app {
+        grid-template-columns: 310px minmax(0, 1fr);
+      }
+
+      .topbar {
+        min-height: auto;
+        border-right: 1px solid var(--line);
+        border-bottom: 0;
+        align-content: space-between;
+        padding: 24px;
+      }
+
+      .brand-row { display: grid; gap: 18px; }
+      .language-hint {
+      color: var(--muted);
+      font-size: 11px;
+      text-align: right;
+      margin-top: 4px;
+    }
+
+    .screen-heading-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .screen-heading-row h2 {
+      margin: 0;
+    }
+
+    .language { width: 100%; max-width: 150px; }
+      .screen { padding: 34px; min-height: min(760px, calc(100vh - 36px)); }
+      .modal { place-items: center; }
+    }
+
+    @media (max-width: 520px) {
+      .page { padding: 0; display: block; }
+      .app { min-height: 100vh; border-radius: 0; border: 0; }
+      .screen { padding: 20px 16px 16px; }
+      .review { grid-template-columns: 1fr; }
+      .actions { position: sticky; bottom: 0; background: rgba(255,253,248,0.88); backdrop-filter: blur(10px); }
+      .btn { flex: 1; }
+      .staff-card { min-width: calc(50% - 5px); }
+      .time { min-width: calc(33.33% - 7px); }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="petal p1"></div>
+    <div class="petal p2"></div>
+    <div class="petal p3"></div>
+    <div class="petal p4"></div>
+
+    <section class="app" aria-label="Salon booking request">
+      <aside class="topbar">
+        <div class="brand-row">
+          <div class="brand">
+            <div>
+              <div class="brand-title">Rose's Nails</div>
+              <div class="brand-sub">Londonderry Ltd.</div>
+            </div>
+          </div>
+          <div class="language-wrap">
+            <select id="language" class="language" aria-label="Language">
+              <option>English</option>
+              <option>Українська</option>
+              <option>Français</option>
+            </select>
+            <div class="language-hint">Choose your preferred language.</div>
+          </div>
+        </div>
+        <div>
+          <div class="brand-sub" id="stepLabel">Step 1 of 6</div>
+          <div class="progress" aria-hidden="true"><div id="progressFill"></div></div>
+        </div>
+      </aside>
+
+      <div class="viewport">
+        <div class="slides" id="slides">
+          <section class="screen">
+            <header>
+              <h1>Let's request your appointment.</h1>
+              <div class="note">Please submit one request per client. If you are booking for more than one person, send a separate request for each person.</div>
+            </header>
+            <div class="content">
+              <div class="field-grid">
+                <div>
+                  <label for="clientName">Name</label>
+                  <input id="clientName" autocomplete="name" placeholder="Your name">
+                </div>
+                <div>
+                  <label for="clientPhone">Phone number</label>
+                  <input id="clientPhone" autocomplete="tel" inputmode="tel" placeholder="Your phone number">
+                </div>
+                <div>
+                  <label for="clientEmail">Email (optional)</label>
+                  <input id="clientEmail" type="email" autocomplete="email" placeholder="you@example.com">
+                  <div class="note">Add your email to receive booking updates faster.</div>
+                </div>
+              </div>
+              <label class="checkline">
+                <input id="consent" type="checkbox">
+                <span>I agree that the salon may use my name, phone, optional email, request details, and uploaded photos to review this booking request and contact me about this appointment. We use your phone and optional email only to contact you about your booking request.</span>
+              </label>
+
+            </div>
+            <nav class="actions">
+              <span></span>
+              <button class="btn primary" data-next disabled>Continue</button>
+            </nav>
+          </section>
+
+          <section class="screen">
+            <header>
+              <h2>When would you like to come?</h2>
+              <div class="note">Online requests are available at least 3 hours ahead.<br>If you need to come sooner, please contact salon or walk in.</div>
+            </header>
+            <div class="content">
+              <div class="date-wrap">
+                <div>
+                  <label for="requestDate">Date</label>
+                  <input id="requestDate" type="date">
+                </div>
+              </div>
+
+            </div>
+            <nav class="actions">
+              <button class="btn" data-back>Back</button>
+              <button class="btn primary" data-next disabled>Continue</button>
+            </nav>
+          </section>
+
+          <section class="screen">
+            <header>
+              <div class="screen-heading-row"><h2>What would you like to do?</h2><button class="menu-button" id="openMenu" type="button">Menu</button></div>
+              <div class="note">Choose from hints, check our menu or write in your own words.</div>
+            </header>
+            <div class="content">
+              <div class="chips" id="categoryChips"></div>
+<div>
+                <label for="serviceText">Service details</label>
+                <textarea id="serviceText" placeholder="Write in detail what you would like to do, and add anything else you want us to know."></textarea>
+              </div>
+              <div>
+                <label>Pictures</label>
+                <div class="note">Upload pictures of your nails or inspiration pictures.</div>
+                <input id="photoInput" class="photo-input" type="file" accept="image/*" multiple>
+                <div class="photo-row" id="photoRow">
+                  <button class="photo-tile photo-slot" type="button" data-photo-trigger data-index="0">
+                    <span class="photo-plus">+</span>
+                    <span>Picture 1</span>
+                  </button>
+                  <button class="photo-tile photo-slot" type="button" data-photo-trigger data-index="1">
+                    <span class="photo-plus">+</span>
+                    <span>Picture 2</span>
+                  </button>
+                  <button class="photo-tile photo-slot" type="button" data-photo-trigger data-index="2">
+                    <span class="photo-plus">+</span>
+                    <span>Picture 3</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+            <nav class="actions">
+              <button class="btn" data-back>Back</button>
+              <button class="btn primary" data-next disabled>Continue</button>
+            </nav>
+          </section>
+
+          <section class="screen">
+            <header>
+              <h2>Choose technician</h2>
+              <div class="note">Pick a technician and available time.</div>
+            </header>
+            <div class="content">
+              <div class="staff-grid" id="staffGrid"></div>
+              <div class="time-grid" id="timeGrid"></div>
+              <div class="note warn" id="serviceWarning" style="display:none">One selected service may need a different technician. If we need to adjust your appointment, we will contact you.</div>
+            </div>
+            <nav class="actions">
+              <button class="btn" data-back>Back</button>
+              <button class="btn primary" data-next disabled>Continue</button>
+            </nav>
+          </section>
+
+          <section class="screen">
+            <header>
+              <h2>Review your request</h2>
+            </header>
+            <div class="content">
+              <div class="review" id="review"></div>
+            </div>
+            <nav class="actions">
+              <button class="btn" data-back>Back</button>
+              <button class="btn primary" id="sendRequest" type="button">Send Request</button>
+            </nav>
+          </section>
+
+          <section class="screen">
+            <header>
+              <div class="success-mark" aria-hidden="true"></div>
+              <h2 style="margin-top:18px">Request received.</h2>
+              <p class="lead">Your request has been received. We'll contact you by phone to confirm it. If you added an email, booking updates may also be sent there.</p>
+            </header>
+            <div class="content">
+              <div class="note">If you do not hear from us within about an hour, please contact salon.</div>
+            </div>
+            <nav class="actions">
+              <button class="btn" id="startOver" type="button">Start Over</button>
+              <span></span>
+            </nav>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal" id="menuModal" role="dialog" aria-modal="true" aria-label="Service menu">
+    <div class="menu-panel">
+      <div class="menu-head">
+        <div class="brand-title">Service Menu</div>
+      </div>
+      <div class="menu-body" id="serviceMenu"></div>
+      <div class="menu-foot">
+        <span class="brand-sub">Selected services will appear in your request.</span>
+        <button class="btn primary" id="doneMenu" type="button">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
+    import {
+      getFunctions,
+      httpsCallable
+    } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-functions.js";
+
+    const firebaseApp = initializeApp({
+      apiKey: "AIzaSyC5BecKxYxQ9V5qbmXBNkTsvnIZBtK_dx8",
+      authDomain: "rosesnails-calendar.firebaseapp.com",
+      projectId: "rosesnails-calendar"
+    });
+    const firebaseFunctions = getFunctions(firebaseApp, "us-central1");
+    const createOnlineBookingRequest = httpsCallable(firebaseFunctions, "createOnlineBookingRequest");
+    const getOnlineBookingAvailability = httpsCallable(firebaseFunctions, "getOnlineBookingAvailability");
+
+    const state = {
+      step: 0,
+      selectedCategories: [],
+      selectedServices: [],
+      staff: '',
+      time: '',
+      photos: []
+    };
+    let availability = null;
+    let availabilityError = '';
+    let activeChipGroup = '';
+
+    const baseChips = [
+      { label: 'Manicure', group: 'manicure', match: /\b(manicure|mani)\b/i },
+      { label: 'Pedicure', group: 'pedicure', match: /\b(pedicure|pedi)\b/i },
+      { label: 'Waxing', group: 'waxing', match: /\b(wax|waxing)\b/i },
+      { label: 'Lashes', group: 'lashes', match: /\b(lash|lashes|eyelash|eyelashes)\b/i },
+      { label: 'Brows', group: 'brows', match: /\b(brow|brows|eyebrow|eyebrows)\b/i }
+    ];
+    const relatedChips = {
+      manicure: ['Gel polish', 'Shellac', 'Soft gel', 'Regular polish', 'Hard gel', 'Builder gel', 'Acrylics', 'Nail extension', 'Full set', 'Refill', 'Design', 'French', 'Ombre', 'Chrome', 'Cat eye', 'Removing', 'Change color', 'Gel overlay'],
+      pedicure: ['No color', 'Gel polish', 'Regular polish', 'Deluxe', 'Toenail extension', 'Toenail refill', 'Color toes', 'Design', 'French', 'Chrome', 'Cat eye', 'Ombre', 'Removing', 'Paraffin wax'],
+      waxing: ['Eyebrow wax', 'Eyebrow tinting', 'Body wax'],
+      lashes: ['Eyelash extensions', 'Refill lashes'],
+      brows: ['Eyebrow wax', 'Eyebrow tinting']
+    };
+    const serviceGroupLabels = {
+      manicure: 'Manicure',
+      pedicure: 'Pedicure',
+      acrylics: 'Acrylics',
+      brows: 'Brows',
+      waxing: 'Waxing',
+      lashes: 'Lashes'
+    };
+    const services = [
+      {
+        cat: 'Manicure',
+        title: 'Manicure',
+        official: 'Manicure Without Color',
+        price: '$30',
+        duration: '30 min',
+        description: 'Nail trimming and shaping, cuticle care using classic trimming or e-file technique, optional warm-water soak when needed, hot towel wrap, cuticle oil, and hand lotion.'
+      },
+      {
+        cat: 'Manicure',
+        title: 'Manicure + Regular Polish',
+        official: 'Manicure Regular Polish',
+        price: '$40',
+        duration: '45 min',
+        description: 'Removing previous regular polish colour if needed, nail trimming and shaping, cuticle care using classic trimming or e-file technique, optional warm-water soak when needed, regular polish application, hot towel wrap, cuticle oil, and hand lotion.'
+      },
+      {
+        cat: 'Manicure',
+        title: 'Apply Gel Polish, No Manicure',
+        price: '$35',
+        duration: '30 min',
+        description: 'Nail trimming and shaping, nail plate preparation, gel polish application, cuticle oil, and hand lotion.'
+      },
+      {
+        cat: 'Manicure',
+        title: 'Change Gel Polish Color, No Manicure',
+        price: '$40',
+        duration: '45 min',
+        description: 'Removal of previous gel polish, nail trimming and shaping, nail plate preparation, gel polish application, cuticle oil, and hand lotion.'
+      },
+      {
+        cat: 'Manicure',
+        title: 'Manicure + Gel Polish',
+        official: 'Manicure Shellac',
+        price: '$45',
+        duration: '45 min',
+        description: 'Nail trimming and shaping, cuticle care using classic trimming or e-file technique, optional warm-water soak when needed, nail plate preparation, gel polish / Shellac colour application, hot towel wrap, cuticle oil, and hand lotion.'
+      },
+      {
+        cat: 'Manicure',
+        title: 'Removing + Manicure + Gel Polish',
+        official: "Rose's House Special Mani + Gel Colour",
+        price: '$50',
+        duration: '45 min',
+        description: 'Removal of previous gel polish, nail trimming and shaping, cuticle care using classic trimming or e-file technique, optional warm-water soak when needed, nail plate preparation, gel polish / Shellac colour application, hot towel wrap, cuticle oil, and hand lotion.'
+      },
+      {
+        cat: 'Manicure',
+        title: 'Manicure + Hard Gel Overlay',
+        price: '$55',
+        duration: '60 min',
+        description: 'A hard gel overlay for natural nails, including very short nails with little or no natural nail length. Nail trimming and shaping, cuticle care using classic trimming or e-file technique, nail plate preparation, hard gel overlay application, optional one-colour gel polish / Shellac application when needed, hot towel wrap, cuticle oil, and hand lotion.'
+      },
+      {
+        cat: 'Manicure',
+        title: 'Removing + Manicure + Hard Gel Overlay',
+        price: '$60',
+        duration: '60 min',
+        description: 'Removal of previous gel product, trimming and shaping the nails to a short natural length, cuticle care using classic trimming or e-file technique, nail plate preparation, hard gel overlay application, optional one-colour gel polish / Shellac application when needed, hot towel wrap, cuticle oil, and hand lotion.'
+      },
+      {
+        cat: 'Manicure',
+        title: 'Full Set / Nail Extension',
+        official: 'Nails Extension / Full Set Acrylic or Liquid Gel Extension',
+        price: '$75 and up',
+        duration: '90 min',
+        description: 'Nail plate preparation, cuticle care using classic trimming or e-file technique, nail extensions using tips, gel tips, paper forms, or dual forms. Hard gel or acrylic powder application, nail shaping, optional one-colour gel polish / Shellac application when needed, hot towel wrap, cuticle oil, and hand lotion.<br>Price may increase depending on nail length.'
+      },
+      {
+        cat: 'Manicure',
+        title: 'Refill',
+        official: 'Refill With Acrylic Or Liquid Gel + Shellac Colour',
+        price: '$65 and up',
+        duration: '90 min',
+        description: 'Partial removal of previous product, nail plate preparation, cuticle care using classic trimming or e-file technique, hard gel or acrylic refill, nail shaping, optional one-colour gel polish / Shellac application when needed, hot towel wrap, cuticle oil, and hand lotion.<br>Price may increase depending on nail length.'
+      },
+      {
+        cat: 'Manicure',
+        title: 'Deluxe Manicure + Gel Polish',
+        official: 'Deluxe Manicure Shellac',
+        price: '$55',
+        duration: '45 min',
+        description: 'Nail trimming and shaping, cuticle care using classic trimming or e-file technique, professional hand scrub and mask, nail plate preparation, one-colour gel polish / Shellac application, hot towel wrap, professional hand lotion, and cuticle oil.'
+      },
+      {
+        cat: 'Pedicure',
+        title: 'Spa Pedicure, No Color',
+        official: 'Spa Pedi Cleaning Only',
+        price: '$45',
+        duration: '60 min',
+        description: 'Toenail trimming and shaping, foot soak, cuticle treatment, heel smoothing and callus care, foot and leg scrub, hot towel wrap, cuticle oil, and lotion.'
+      },
+      {
+        cat: 'Pedicure',
+        title: 'Spa Pedicure + Regular Polish',
+        official: '',
+        price: '$55',
+        duration: '60 min',
+        description: 'Removal of previous polish if needed, toenail trimming and shaping, foot soak, cuticle treatment, heel smoothing and callus care, foot and leg scrub, regular polish application, hot towel wrap, cuticle oil, and lotion.'
+      },
+      {
+        cat: 'Pedicure',
+        title: 'Spa Pedicure + Gel Polish',
+        official: 'House Special Pedicure With Shellac',
+        price: '$60',
+        duration: '60 min',
+        description: 'Removal of previous polish if needed, toenail trimming and shaping, foot soak, cuticle treatment, heel smoothing and callus care, foot and leg scrub, nail plate preparation, gel polish / Shellac colour application, hot towel wrap, cuticle oil, and lotion.'
+      },
+      {
+        cat: 'Pedicure',
+        title: 'Deluxe Pedicure + Regular Polish',
+        official: 'Deluxe Spa Pedicure, Polish Colour',
+        price: '$70',
+        duration: '90 min',
+        description: 'Removal of previous polish if needed, toenail trimming and shaping, foot soak, cuticle treatment, heel smoothing and callus care, deluxe foot and leg care using professional pedicure cosmetics including scrub and mask, regular polish application, hot towel wrap, cuticle oil, special lotion, and paraffin treatment.'
+      },
+      {
+        cat: 'Pedicure',
+        title: 'Deluxe Pedicure + Gel Polish',
+        official: 'Deluxe Spa Pedicure Shellac',
+        price: '$80',
+        duration: '90 min',
+        description: 'Removal of previous polish if needed, toenail trimming and shaping, foot soak, cuticle treatment, heel smoothing and callus care, deluxe foot and leg care using professional pedicure cosmetics including scrub and mask, nail plate preparation, gel polish / Shellac colour application, hot towel wrap, cuticle oil, special lotion, and paraffin treatment.'
+      },
+      {
+        cat: 'Pedicure',
+        title: 'Apply Gel Polish, No Pedicure',
+        price: '$35',
+        duration: '30 min',
+        description: 'For toenails with no previous gel polish / Shellac on them. Toenail trimming and shaping, nail plate preparation, gel polish application, and cuticle oil.'
+      },
+      {
+        cat: 'Pedicure',
+        title: 'Change Gel Polish Color, No Pedicure',
+        price: '$40',
+        duration: '45 min',
+        description: 'Removal of previous gel polish / Shellac, toenail trimming and shaping, nail plate preparation, gel polish application, and cuticle oil.'
+      },
+      {
+        cat: 'Pedicure',
+        title: 'Full Set / Toenail Extension, No Pedicure',
+        price: '$65',
+        duration: '60 min',
+        description: 'Toenail plate preparation, toenail extension application, hard gel or acrylic powder application, shaping, optional one-colour gel polish / Shellac application when needed, and cuticle oil.'
+      },
+      {
+        cat: 'Pedicure',
+        title: 'Refill Toenail, No Pedicure',
+        price: '$60',
+        duration: '60 min',
+        description: 'Partial removal of previous product, toenail plate preparation, hard gel or acrylic refill, shaping, optional one-colour gel polish / Shellac application when needed, and cuticle oil.'
+      },
+      {
+        cat: 'Pedicure Combos',
+        title: 'Manicure + Pedicure, No Color / Cleaning Only',
+        price: '$70',
+        duration: '90 min',
+        description: 'Combo description will be reviewed next.'
+      },
+      {
+        cat: 'Pedicure Combos',
+        title: 'Manicure + Pedicure with Regular Polish',
+        price: '$85',
+        duration: '105 min',
+        description: 'Combo description will be reviewed next.'
+      },
+      {
+        cat: 'Pedicure Combos',
+        title: 'Manicure + Pedicure with Gel Polish / Shellac',
+        official: 'Package Manicure Shellac + Spa Pedicure Shellac',
+        price: '$110',
+        duration: '105 min',
+        description: 'Combo description will be reviewed next.'
+      },
+      {
+        cat: 'Pedicure Combos',
+        title: 'Deluxe Pedicure + Manicure with Gel Polish / Shellac',
+        official: 'Package Deluxe Spa Pedicure + Spa Manicure',
+        price: '$135',
+        duration: '150 min',
+        description: 'Combo description will be reviewed next.'
+      },
+      {
+        cat: 'Extra Services and Design',
+        title: 'Removing Gel Polish',
+        official: 'Remove Gel Colour',
+        price: '$10',
+        duration: '15 min',
+        description: 'Removal of gel polish / Shellac colour.'
+      },
+      {
+        cat: 'Extra Services and Design',
+        title: 'Removing Builder Gel',
+        price: '$15',
+        duration: '15 min',
+        description: 'Removal of builder gel or hard gel overlay product.'
+      },
+      {
+        cat: 'Extra Services and Design',
+        title: 'Removing Acrylic',
+        official: 'Remove Acrylic',
+        price: '$20',
+        duration: '15 min',
+        description: 'Removal of acrylic or extension product.'
+      },
+      {
+        cat: 'Extra Services and Design',
+        title: 'French Tip / Ombre / Cat Eye / Chrome',
+        official: 'French',
+        price: '$10',
+        duration: '15 min',
+        description: 'Add-on finish such as French tip, ombre, cat eye, or chrome.'
+      },
+      {
+        cat: 'Extra Services and Design',
+        title: 'One Nail Design',
+        official: 'Nail Design',
+        price: 'from $5',
+        duration: '15 min',
+        description: 'Design add-on for one nail. Final price may depend on complexity.'
+      },
+      {
+        cat: 'Extra Services and Design',
+        title: 'One Nail Extension',
+        price: '$7.50',
+        duration: '15 min',
+        description: 'Repair or extension for one fingernail.'
+      },
+      {
+        cat: 'Extra Services and Design',
+        title: 'Paraffin Wax Treatment',
+        price: '$10',
+        duration: '15 min',
+        description: 'Paraffin wax add-on treatment.'
+      },
+      {
+        cat: 'Extra Services and Design',
+        title: 'Cut Nails',
+        price: '$10',
+        duration: '15 min',
+        description: 'Nail trimming service.'
+      },
+      {
+        cat: 'Extra Services and Design',
+        title: 'Change Nails Shape',
+        price: '$5',
+        duration: '15 min',
+        description: 'Reshaping existing nails.'
+      },
+      {
+        cat: 'Waxing Services',
+        title: 'Eyebrow Wax',
+        official: 'Eye brow Wax',
+        price: '$10',
+        duration: '15 min',
+        description: ''
+      },
+      {
+        cat: 'Waxing Services',
+        title: 'Eyebrow Wax + Tinting',
+        price: '$15',
+        duration: '20 min',
+        description: ''
+      },
+      {
+        cat: 'Body Wax',
+        title: 'Lip Wax',
+        official: 'Lips Wax',
+        price: '$5',
+        duration: '15 min',
+        description: ''
+      },
+      {
+        cat: 'Body Wax',
+        title: 'Underarms Wax',
+        official: 'Under Arms Wax',
+        price: '$15',
+        duration: '15 min',
+        description: ''
+      },
+      {
+        cat: 'Body Wax',
+        title: 'Half Arms Wax',
+        official: 'Half Arms Wax',
+        price: '$20',
+        duration: '15 min',
+        description: ''
+      },
+      {
+        cat: 'Body Wax',
+        title: 'Full Arms Wax',
+        official: 'Full Arms Wax',
+        price: '$30',
+        duration: '15 min',
+        description: ''
+      },
+      {
+        cat: 'Body Wax',
+        title: 'Back Wax',
+        official: 'Back Wax',
+        price: '$30',
+        duration: '15 min',
+        description: ''
+      },
+      {
+        cat: 'Body Wax',
+        title: 'Half Leg Wax',
+        official: 'Half Leg Wax',
+        price: '$30',
+        duration: '15 min',
+        description: ''
+      },
+      {
+        cat: 'Body Wax',
+        title: 'Full Leg Wax',
+        official: 'Full Leg Wax',
+        price: '$50',
+        duration: '30 min',
+        description: ''
+      },
+      {
+        cat: 'Body Wax',
+        title: 'Bikini Wax',
+        official: 'Bikini Wax',
+        price: '$35',
+        duration: '15 min',
+        description: 'Waxing around the bikini line. The exact area can vary by client.'
+      },
+      {
+        cat: 'Body Wax',
+        title: 'Brazilian Wax',
+        official: 'Brazilian Wax',
+        price: '$50',
+        duration: '15 min',
+        description: 'Brazilian waxing.'
+      },
+      {
+        cat: 'Lashes',
+        title: 'Professional Eyelash Extensions',
+        official: 'Professional Eye Lash Extensions',
+        price: '$105 and up',
+        duration: '',
+        description: 'Classic eyelash extensions, hybrid eyelash extensions, cat eye, drama volume, 2D, 3D, 4D, and mega volume styles.<br>Price may increase depending on lash volume.'
+      },
+      {
+        cat: 'Lashes',
+        title: 'Refill Lashes',
+        official: 'Refill Lashes',
+        price: '$90',
+        duration: '',
+        description: 'Lash extension refill service. Details will be reviewed with the lash technician.'
+      },
+      {
+        cat: 'Kids Manicure Services',
+        title: 'Kids manicure services will be added after review',
+        price: '',
+        duration: '',
+        description: 'Placeholder for kids manicure services.'
+      },
+      {
+        cat: 'Kids Pedicure Services',
+        title: 'Kids pedicure services will be added after review',
+        price: '',
+        duration: '',
+        description: 'Placeholder for kids pedicure services.'
+      }
+    ];
+
+    const slides = document.getElementById('slides');
+    const progressFill = document.getElementById('progressFill');
+    const stepLabel = document.getElementById('stepLabel');
+    const nameInput = document.getElementById('clientName');
+    const phoneInput = document.getElementById('clientPhone');
+    const emailInput = document.getElementById('clientEmail');
+    const consentInput = document.getElementById('consent');
+    const dateInput = document.getElementById('requestDate');
+    const serviceText = document.getElementById('serviceText');
+    const serviceWarning = document.getElementById('serviceWarning');
+    const sendRequestButton = document.getElementById('sendRequest');
+
+    function go(step) {
+      state.step = Math.max(0, Math.min(5, step));
+      slides.style.transform = `translateX(-${state.step * 100}%)`;
+      progressFill.style.width = `${((state.step + 1) / 6) * 100}%`;
+      stepLabel.textContent = `Step ${state.step + 1} of 6`;
+      if (state.step === 4) renderReview();
+      updateButtons();
+    }
+
+    function isValidPhoneNumber(value) {
+      const digits = String(value || '').replace(/\D/g, '');
+      return digits.length === 10 || (digits.length === 11 && digits.startsWith('1'));
+    }
+
+    function isValidOptionalEmail(value) {
+      const email = String(value || '').trim();
+      if (!email) return true;
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+
+    function updateButtons() {
+      document.querySelectorAll('[data-next]').forEach((button, index) => {
+        const valid = [
+          nameInput.value.trim() && isValidPhoneNumber(phoneInput.value) && isValidOptionalEmail(emailInput.value) && consentInput.checked,
+          dateInput.value,
+          serviceText.value.trim() || state.selectedServices.length,
+          state.staff && state.time
+        ][index];
+        button.disabled = !valid;
+      });
+    }
+
+    document.querySelectorAll('[data-next]').forEach(button => button.addEventListener('click', () => go(state.step + 1)));
+    document.querySelectorAll('[data-back]').forEach(button => button.addEventListener('click', () => go(state.step - 1)));
+    [nameInput, phoneInput, emailInput, consentInput, dateInput].forEach(el => el.addEventListener('input', updateButtons));
+    serviceText.addEventListener('input', () => {
+      renderCategories();
+      refreshAvailability();
+      updateButtons();
+    });
+    dateInput.addEventListener('change', refreshAvailability);
+    serviceText.addEventListener('change', refreshAvailability);
+    consentInput.addEventListener('change', updateButtons);
+
+    function hasServiceText(patternOrText) {
+      const text = serviceText.value || '';
+      if (patternOrText instanceof RegExp) return patternOrText.test(text);
+      return text.toLowerCase().includes(String(patternOrText || '').toLowerCase());
+    }
+
+    function renderCategories() {
+      const wrap = document.getElementById('categoryChips');
+      const chips = [];
+
+      baseChips.forEach(chip => {
+        if (chip.group !== activeChipGroup) {
+          chips.push({ label: chip.label, group: chip.group, kind: 'base' });
+        }
+      });
+
+      if (activeChipGroup) {
+        (relatedChips[activeChipGroup] || []).forEach(label => {
+          if (!hasServiceText(label)) chips.push({ label, group: activeChipGroup, kind: 'related' });
+        });
+      }
+
+      wrap.innerHTML = chips.map(chip => `
+        <button class="chip ${chip.kind === 'base' ? 'chip-base' : 'chip-related'}" type="button" data-chip="${escapeHtml(chip.label)}" data-group="${escapeHtml(chip.group)}" data-kind="${chip.kind}">
+          ${escapeHtml(chip.label)}
+        </button>
+      `).join('');
+      wrap.querySelectorAll('button').forEach(button => {
+        button.addEventListener('click', () => {
+          if (button.dataset.kind === 'base') activeChipGroup = button.dataset.group;
+          addServiceText(button.dataset.chip);
+          renderCategories();
+          renderStaff();
+          refreshAvailability();
+          updateButtons();
+        });
+      });
+    }
+
+    function renderStaff() {
+      const wrap = document.getElementById('staffGrid');
+      const visibleStaff = getVisibleStaff();
+
+      if (!dateInput.value) {
+        wrap.innerHTML = '<div class="note warn">Choose a date first.</div>';
+        return;
+      }
+
+      if (availabilityError) {
+        wrap.innerHTML = '<div class="note warn">Live availability could not be loaded. Please try again or call the salon.</div>';
+        return;
+      }
+
+      if (!visibleStaff.length) {
+        wrap.innerHTML = '<div class="note warn">No times are available for this service on the selected date.</div>';
+        return;
+      }
+
+      if (state.staff && !visibleStaff.some(item => item.id === state.staff)) {
+        state.staff = '';
+        state.time = '';
+      }
+
+      wrap.innerHTML = visibleStaff.map(item => `
+        <button class="staff-card ${state.staff === item.id ? 'active' : ''}" type="button" data-staff="${item.id}">
+          <div class="staff-name">${escapeHtml(item.name)}</div>
+          <div class="staff-meta">${escapeHtml(item.meta)}</div>
+        </button>
+      `).join('');
+      wrap.querySelectorAll('button').forEach(button => {
+        button.addEventListener('click', () => {
+          state.staff = button.dataset.staff;
+          state.time = '';
+          serviceWarning.style.display = needsWarning() ? 'block' : 'none';
+          renderStaff();
+          renderTimes();
+          updateButtons();
+        });
+      });
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function getStaffMeta(item) {
+      const groups = Array.isArray(item.serviceGroups) ? item.serviceGroups : [];
+      const labels = groups
+        .map(group => serviceGroupLabels[group] || group)
+        .filter(Boolean);
+      return labels.length ? labels.join(', ') : 'Available';
+    }
+
+    function getVisibleStaff() {
+      if (!availability || !Array.isArray(availability.times) || !Array.isArray(availability.staff)) {
+        return [];
+      }
+
+      const availableStaffIds = new Set();
+      let hasAnyoneAvailability = false;
+
+      availability.times.forEach(item => {
+        if (item.anyoneAvailable) hasAnyoneAvailability = true;
+        (item.availableStaff || []).forEach(staffId => availableStaffIds.add(staffId));
+      });
+
+      const realStaff = availability.staff
+        .filter(item => availableStaffIds.has(item.id))
+        .map(item => ({
+          id: item.id,
+          name: item.name || 'Staff',
+          meta: getStaffMeta(item)
+        }));
+
+      if (hasAnyoneAvailability) {
+        realStaff.push({
+          id: 'anyone',
+          name: 'Anyone Available',
+          meta: 'Fastest match'
+        });
+      }
+
+      return realStaff;
+    }
+
+    function getAvailableTimesForStaff(staffId) {
+      if (!staffId) return [];
+      if (availability?.times?.length) {
+        return availability.times.filter(item => {
+          if (staffId === 'anyone') return item.anyoneAvailable;
+          return item.availableStaff.includes(staffId);
+        });
+      }
+      return [];
+    }
+
+    function getSelectedTimeSlot() {
+      const source = availability?.times?.length ? availability.times : [];
+      const item = source.find(time => time.label === state.time);
+      return item ? item.slot : null;
+    }
+
+    function makeRequestId() {
+      const randomPart = crypto?.randomUUID
+        ? crypto.randomUUID()
+        : Math.random().toString(36).slice(2) + Date.now().toString(36);
+      return randomPart.replace(/[^A-Za-z0-9_-]/g, '');
+    }
+
+    function renderTimes() {
+      const wrap = document.getElementById('timeGrid');
+      const availableTimes = getAvailableTimesForStaff(state.staff);
+      wrap.innerHTML = availableTimes.length
+        ? availableTimes.map(item => `<button class="time ${state.time === item.label ? 'active' : ''}" type="button" data-time="${item.label}">${item.label}</button>`).join('')
+        : '';
+      wrap.querySelectorAll('button').forEach(button => {
+        button.addEventListener('click', () => {
+          state.time = button.dataset.time;
+          renderTimes();
+          updateButtons();
+        });
+      });
+    }
+
+    function getSelectedServiceGroups() {
+      const text = serviceText.value || '';
+      const groups = [];
+      if (/brow|eyebrow|tint/i.test(text)) groups.push('brows');
+      if (/lash|eyelash/i.test(text)) groups.push('lashes');
+      if (/wax|waxing/i.test(text)) groups.push('waxing');
+      if (/acrylic|extension|refill|hard gel/i.test(text)) groups.push('acrylics');
+      if (/pedicure|\bpedi\b|toe/i.test(text)) groups.push('pedicure');
+      if (/manicure|\bmani\b|nail|gel|shellac|french|design/i.test(text)) groups.push('manicure');
+      return [...new Set(groups.length ? groups : ['manicure', 'pedicure'])];
+    }
+
+    async function refreshAvailability() {
+      if (!dateInput.value) return;
+
+      try {
+        const result = await getOnlineBookingAvailability({
+          date: dateInput.value,
+          serviceGroups: getSelectedServiceGroups(),
+          selectedServices: serviceText.value
+            .split(',')
+            .map(item => item.trim())
+            .filter(Boolean)
+            .slice(0, 12),
+          serviceDetails: serviceText.value.trim()
+        });
+        availability = result.data;
+        availabilityError = '';
+      } catch (error) {
+        console.warn('Availability could not be loaded:', error);
+        availability = null;
+        availabilityError = error?.message || 'availability-error';
+      }
+
+      renderStaff();
+      renderTimes();
+      updateButtons();
+    }
+
+    function needsWarning() {
+      return false;
+    }
+
+    let openMenuGroup = '';
+    let openMenuSubgroup = '';
+
+    function serviceMatchesCat(service, cat) {
+      return service.cat === cat;
+    }
+
+    function addServiceText(title) {
+      const parts = serviceText.value
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean);
+      if (!parts.includes(title)) parts.push(title);
+      serviceText.value = parts.join(', ');
+    }
+
+    function scrollMenuItemIntoView(selector) {
+      requestAnimationFrame(() => {
+        const item = document.querySelector(selector);
+        if (item) item.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      });
+    }
+
+    function openMenuModal() {
+      document.getElementById('menuModal').classList.add('open');
+      document.body.classList.add('modal-open');
+    }
+
+    function closeMenuModal() {
+      document.getElementById('menuModal').classList.remove('open');
+      document.body.classList.remove('modal-open');
+    }
+
+    function renderServiceCards(group) {
+      return group.services.map(service => {
+        const checked = state.selectedServices.includes(service.title) ? 'checked' : '';
+        const disabled = service.price ? '' : 'disabled';
+        const official = service.official ? `<span class="service-official">${service.official}</span>` : '';
+        const meta = [service.price].filter(Boolean).join(' - ');
+        return `
+          <label class="service-card ${disabled}">
+            <span>
+              <span class="service-title">${service.title}</span>
+              ${official}
+              <span class="service-meta">${meta}</span>
+              ${service.description ? `<span class="service-description">${service.description}</span>` : ''}
+            </span>
+            <input type="checkbox" data-service="${service.title}" ${checked} ${disabled}>
+          </label>
+        `;
+      }).join('');
+    }
+
+    function renderMenuSubgroup(parentKey, subgroup) {
+      const key = `${parentKey}:${subgroup.name}`;
+      const isOpen = openMenuSubgroup === key;
+      return `
+        <button class="menu-row menu-row-sub ${isOpen ? 'open' : ''}" type="button" data-subgroup="${key}">
+          <span>${subgroup.name}</span><span aria-hidden="true">${isOpen ? '−' : '+'}</span>
+        </button>
+        ${isOpen ? `<div class="menu-service-list menu-service-list-sub">${renderServiceCards(subgroup)}</div>` : ''}
+      `;
+    }
+
+    function renderMenu() {
+      const wrap = document.getElementById('serviceMenu');
+      const topGroups = [
+        {
+          key: 'manicure',
+          name: 'Manicure',
+          services: services.filter(service => serviceMatchesCat(service, 'Manicure')),
+          subgroups: [
+            { name: 'Extra Services and Design', services: services.filter(service => serviceMatchesCat(service, 'Extra Services and Design')) },
+            { name: 'Combo Services', services: services.filter(service => serviceMatchesCat(service, 'Pedicure Combos')) },
+            { name: 'Kids Manicure Services', services: services.filter(service => serviceMatchesCat(service, 'Kids Manicure Services')) }
+          ]
+        },
+        {
+          key: 'pedicure',
+          name: 'Pedicure',
+          services: services.filter(service => serviceMatchesCat(service, 'Pedicure')),
+          subgroups: [
+            { name: 'Combo Services', services: services.filter(service => serviceMatchesCat(service, 'Pedicure Combos')) },
+            { name: 'Extra Services and Design', services: services.filter(service => serviceMatchesCat(service, 'Extra Services and Design')) },
+            { name: 'Kids Pedicure Services', services: services.filter(service => serviceMatchesCat(service, 'Kids Pedicure Services')) }
+          ]
+        },
+        {
+          key: 'waxing',
+          name: 'Waxing',
+          services: services.filter(service => serviceMatchesCat(service, 'Waxing Services')),
+          subgroups: [
+            { name: 'Body Wax', services: services.filter(service => serviceMatchesCat(service, 'Body Wax')) }
+          ]
+        },
+        {
+          key: 'lashes',
+          name: 'Lashes',
+          services: services.filter(service => serviceMatchesCat(service, 'Lashes')),
+          subgroups: []
+        }
+      ];
+
+      wrap.innerHTML = topGroups.map(group => {
+        const isOpen = openMenuGroup === group.key;
+        return `
+          <button class="menu-row ${isOpen ? 'open' : ''}" type="button" data-group="${group.key}">
+            <span>${group.name}</span><span aria-hidden="true">${isOpen ? '−' : '+'}</span>
+          </button>
+          ${isOpen ? `
+            <div class="menu-service-list">
+              ${renderServiceCards(group)}
+              ${group.subgroups.map(subgroup => renderMenuSubgroup(group.key, subgroup)).join('')}
+            </div>
+          ` : ''}
+        `;
+      }).join('');
+      wrap.querySelectorAll('[data-group]').forEach(button => {
+        button.addEventListener('click', () => {
+          const key = button.dataset.group;
+          openMenuGroup = openMenuGroup === key ? '' : key;
+          openMenuSubgroup = '';
+          renderMenu();
+          if (openMenuGroup) scrollMenuItemIntoView(`[data-group="${key}"]`);
+        });
+      });
+      wrap.querySelectorAll('[data-subgroup]').forEach(button => {
+        button.addEventListener('click', () => {
+          const key = button.dataset.subgroup;
+          openMenuSubgroup = openMenuSubgroup === key ? '' : key;
+          renderMenu();
+          if (openMenuSubgroup) scrollMenuItemIntoView(`[data-subgroup="${key}"]`);
+        });
+      });
+      wrap.querySelectorAll('input').forEach(input => {
+        input.addEventListener('change', () => {
+          const title = input.dataset.service;
+          if (input.checked) {
+            if (!state.selectedServices.includes(title)) state.selectedServices.push(title);
+            addServiceText(title);
+          } else {
+            state.selectedServices = state.selectedServices.filter(item => item !== title);
+          }
+          refreshAvailability();
+          updateButtons();
+        });
+      });
+    }
+
+    document.getElementById('openMenu').addEventListener('click', () => {
+      renderMenu();
+      openMenuModal();
+    });
+    
+    document.getElementById('doneMenu').addEventListener('click', closeMenuModal);
+
+    async function compressPhoto(file) {
+      const imageUrl = URL.createObjectURL(file);
+      try {
+        const img = await new Promise((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = reject;
+          image.src = imageUrl;
+        });
+
+        const maxSide = 1800;
+        const scale = Math.min(1, maxSide / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
+        const width = Math.max(1, Math.round((img.naturalWidth || img.width) * scale));
+        const height = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        let quality = 0.86;
+        let dataUrl = canvas.toDataURL('image/jpeg', quality);
+        while (dataUrl.length > 1500000 && quality > 0.62) {
+          quality -= 0.08;
+          dataUrl = canvas.toDataURL('image/jpeg', quality);
+        }
+
+        return {
+          name: file.name || 'photo.jpg',
+          contentType: 'image/jpeg',
+          dataUrl,
+          size: Math.round((dataUrl.length * 3) / 4)
+        };
+      } finally {
+        URL.revokeObjectURL(imageUrl);
+      }
+    }
+
+    let activePhotoIndex = 0;
+    const photoInput = document.getElementById('photoInput');
+
+    document.querySelectorAll('[data-photo-trigger]').forEach(button => {
+      button.addEventListener('click', () => {
+        activePhotoIndex = Number(button.dataset.index) || 0;
+        photoInput.value = '';
+        photoInput.click();
+      });
+    });
+
+    function renderPhotoSlots() {
+      document.querySelectorAll('.photo-slot').forEach((slot, index) => {
+        const photo = state.photos[index];
+        slot.innerHTML = photo
+          ? `<img alt="Selected photo preview" src="${photo.dataUrl}">`
+          : `<span class="photo-plus">+</span><span>Picture ${index + 1}</span>`;
+      });
+    }
+
+    function resetPhotoSlots() {
+      renderPhotoSlots();
+    }
+
+    photoInput.addEventListener('change', async event => {
+      const files = Array.from(event.target.files || []).filter(file => file.type.startsWith('image/'));
+      const slots = [...document.querySelectorAll('.photo-slot')];
+      const maxPhotos = slots.length;
+      let targetIndex = activePhotoIndex;
+
+      for (const file of files) {
+        if (targetIndex >= maxPhotos) break;
+        const tile = slots[targetIndex];
+        if (!tile) continue;
+        tile.innerHTML = '<span>Preparing...</span>';
+        try {
+          const photo = await compressPhoto(file);
+          state.photos[targetIndex] = photo;
+          tile.innerHTML = `<img alt="Selected photo preview" src="${photo.dataUrl}">`;
+        } catch (error) {
+          state.photos[targetIndex] = null;
+          tile.innerHTML = '<span>Could not load</span>';
+        }
+        targetIndex += 1;
+      }
+
+      renderPhotoSlots();
+    });
+
+    function renderReview() {
+      const staffName = getVisibleStaff().find(item => item.id === state.staff)?.name || 'Anyone';
+      const items = [
+        ['Name', nameInput.value.trim()],
+        ['Phone', phoneInput.value.trim()],
+        ['Email', emailInput.value.trim() || ''],
+        ['Date', dateInput.value],
+        ['Technician', staffName],
+        ['Time', state.time],
+        ['Service details', serviceText.value.trim() || 'Written in notes'],
+        ['Pictures', `${state.photos.filter(Boolean).length} selected`]
+      ];
+      document.getElementById('review').innerHTML = items.map(([label, value]) => `
+        <div class="review-item">
+          <div class="review-label">${label}</div>
+          <div class="review-value">${value || '-'}</div>
+        </div>
+      `).join('');
+    }
+
+    sendRequestButton.addEventListener('click', async () => {
+      const start = getSelectedTimeSlot();
+      if (start == null) return;
+
+      sendRequestButton.disabled = true;
+      sendRequestButton.textContent = 'Sending...';
+
+      try {
+        await createOnlineBookingRequest({
+          requestId: makeRequestId(),
+          client: nameInput.value.trim(),
+          phone: phoneInput.value.trim(),
+          email: emailInput.value.trim(),
+          date: dateInput.value,
+          staffId: state.staff || 'anyone',
+          start,
+          selectedLanguage: 'English',
+          serviceGroups: getSelectedServiceGroups(),
+          selectedServices: serviceText.value
+            .split(',')
+            .map(item => item.trim())
+            .filter(Boolean)
+            .slice(0, 12),
+          serviceDetails: serviceText.value.trim(),
+          photos: state.photos.filter(Boolean).map(photo => ({ name: photo.name, dataUrl: photo.dataUrl })),
+          consentAccepted: consentInput.checked
+        });
+        go(5);
+      } catch (error) {
+        const rawMessage = error?.message || '';
+        const message = /no longer available|available time|technician is not available|does not provide/i.test(rawMessage)
+          ? 'Sorry, this time is no longer available. Please go back and choose another technician or time.'
+          : rawMessage || 'This request could not be sent. Please contact salon.';
+        alert(message);
+      } finally {
+        sendRequestButton.disabled = false;
+        sendRequestButton.textContent = 'Send Request';
+      }
+    });
+    document.getElementById('startOver').addEventListener('click', () => {
+      state.selectedCategories = [];
+      state.selectedServices = [];
+      state.staff = '';
+      state.time = '';
+      state.photos = [];
+      document.querySelectorAll('input, textarea').forEach(el => {
+        if (el.type === 'checkbox') el.checked = false;
+        else if (el.type !== 'file' && el.type !== 'date') el.value = '';
+      });
+      resetPhotoSlots();
+      setInitialDate();
+      renderCategories();
+      renderStaff();
+      renderTimes();
+      go(0);
+    });
+
+    function toLocalInputDate(date) {
+      const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+      return local.toISOString().slice(0, 10);
+    }
+
+    const MIN_LEAD_HOURS = 3;
+    const REQUEST_DURATION_HOURS = 1;
+
+    function getSalonHours(date) {
+      const day = date.getDay();
+      return {
+        open: 10,
+        close: day >= 1 && day <= 5 ? 20 : 18
+      };
+    }
+
+    function atSalonHour(date, hour) {
+      const value = new Date(date);
+      value.setHours(hour, 0, 0, 0);
+      return value;
+    }
+
+    function getFirstBookableDate(now = new Date()) {
+      const earliestRequestStart = new Date(now.getTime() + MIN_LEAD_HOURS * 60 * 60 * 1000);
+
+      for (let offset = 0; offset < 30; offset += 1) {
+        const candidate = new Date(now);
+        candidate.setDate(now.getDate() + offset);
+        candidate.setHours(0, 0, 0, 0);
+
+        const hours = getSalonHours(candidate);
+        const lastStart = atSalonHour(candidate, hours.close - REQUEST_DURATION_HOURS);
+        if (earliestRequestStart <= lastStart) return candidate;
+      }
+
+      return now;
+    }
+
+    function setInitialDate() {
+      const firstBookableDate = getFirstBookableDate();
+      const firstBookableValue = toLocalInputDate(firstBookableDate);
+      dateInput.min = firstBookableValue;
+      dateInput.value = firstBookableValue;
+    }
+
+    setInitialDate();
+    renderCategories();
+    renderStaff();
+    renderTimes();
+    go(0);
+  </script>
+</body>
+</html>
+
+
+
+
+

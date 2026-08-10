@@ -1,0 +1,181 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rose's Nails Booking Photos</title>
+  <style>
+    :root {
+      --ink: #222326;
+      --muted: #6c6f76;
+      --line: rgba(34, 35, 38, 0.14);
+      --paper: #fffdf8;
+      --rose: #f3b5c7;
+      --leaf: #b8d8c0;
+      --sky: #b9dced;
+      --sun: #f6dc8f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        linear-gradient(135deg, rgba(243,181,199,0.34), rgba(184,216,192,0.28) 34%, rgba(185,220,237,0.32) 68%, rgba(246,220,143,0.34)),
+        var(--paper);
+    }
+    main {
+      width: min(920px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 28px 0 40px;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 4px 0 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .close-photo-review {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 42px;
+      border: 1px solid rgba(34, 35, 38, 0.14);
+      border-radius: 50%;
+      background: rgba(255,255,255,0.84);
+      color: var(--ink);
+      box-shadow: 0 5px 16px rgba(0,0,0,0.10);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .close-photo-review svg {
+      width: 21px;
+      height: 21px;
+      display: block;
+    }
+    .close-photo-review:active {
+      transform: scale(0.97);
+    }
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+    .status {
+      margin: 18px 0;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.72);
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .photos {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+      align-items: start;
+    }
+    .photo {
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.78);
+    }
+    .photo img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    .photo figcaption {
+      padding: 10px 12px;
+      font-size: 13px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Booking Photos</h1>
+      </div>
+      <button id="closePhotoReviewBtn" class="close-photo-review" type="button" aria-label="Close and return to calendar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 6 6 18"></path>
+          <path d="m6 6 12 12"></path>
+        </svg>
+      </button>
+    </header>
+    <div id="status" class="status">Opening photos...</div>
+    <div id="photos" class="photos hidden"></div>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
+    import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-functions.js";
+
+    const firebaseApp = initializeApp({
+      apiKey: "AIzaSyC5BecKxYxQ9V5qbmXBNkTsvnIZBtK_dx8",
+      authDomain: "rosesnails-calendar.firebaseapp.com",
+      projectId: "rosesnails-calendar"
+    });
+
+    const status = document.getElementById('status');
+    const photosEl = document.getElementById('photos');
+    const closeBtn = document.getElementById('closePhotoReviewBtn');
+    const token = new URLSearchParams(location.search).get('t') || '';
+    const calendarUrl = 'https://rosesnails-calendar.web.app/';
+
+    function closePhotoReview() {
+      if (document.referrer && new URL(document.referrer).origin === location.origin && history.length > 1) {
+        history.back();
+        return;
+      }
+      location.href = calendarUrl;
+    }
+
+    closeBtn?.addEventListener('click', closePhotoReview);
+
+    function showUnavailable(message) {
+      status.textContent = message || 'This photo link is not available.';
+      photosEl.classList.add('hidden');
+    }
+
+    if (!token) {
+      showUnavailable('This photo link is missing or invalid.');
+    } else {
+      const getOnlineBookingPhotos = httpsCallable(getFunctions(firebaseApp, "us-central1"), "getOnlineBookingPhotos");
+      getOnlineBookingPhotos({ token })
+        .then(result => {
+          const photos = result.data?.photos || [];
+          if (!photos.length) {
+            showUnavailable('This photo link has no available photos.');
+            return;
+          }
+          status.textContent = 'These photos are available from this temporary link for up to 24 hours after the booking request was sent.';
+          photosEl.innerHTML = photos.map((photo, index) => `
+            <figure class="photo">
+              <img src="${photo.dataUrl}" alt="Booking photo ${index + 1}">
+              <figcaption>${photo.name || 'Booking photo'}</figcaption>
+            </figure>
+          `).join('');
+          photosEl.classList.remove('hidden');
+        })
+        .catch(error => {
+          const message = error?.message || '';
+          if (message.toLowerCase().includes('expired')) showUnavailable('This photo link has expired.');
+          else showUnavailable('This photo link is not available.');
+        });
+    }
+  </script>
+</body>
+</html>
