@@ -1,0 +1,46 @@
+name: Deploy to production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy" to confirm publishing to the live sites'
+        required: true
+      target:
+        description: 'Which live site(s) to publish'
+        required: true
+        type: choice
+        options:
+          - booking
+          - calendar
+          - both
+
+jobs:
+  deploy:
+    if: github.repository == 'listratenkoelena1-hub/Salon-Calendar' && github.event.inputs.confirm == 'deploy'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm install -g firebase-tools
+
+      - name: Write service account key
+        run: echo "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-key.json"
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Deploy live hosting
+        working-directory: salon-calendar
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-key.json
+        run: |
+          case "${{ github.event.inputs.target }}" in
+            booking) ONLY="hosting:booking" ;;
+            calendar) ONLY="hosting:calendar" ;;
+            both) ONLY="hosting:booking,hosting:calendar" ;;
+          esac
+          firebase deploy --only "$ONLY" --project rosesnails-calendar --non-interactive

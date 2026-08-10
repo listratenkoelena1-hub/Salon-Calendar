@@ -1,0 +1,38 @@
+name: Deploy preview channel
+
+on:
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - 'salon-calendar/**'
+      - '.github/workflows/preview-deploy.yml'
+
+jobs:
+  preview:
+    if: github.repository == 'listratenkoelena1-hub/Salon-Calendar'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm install -g firebase-tools
+
+      - name: Write service account key
+        run: echo "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-key.json"
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Deploy to preview channel
+        working-directory: salon-calendar
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-key.json
+        run: |
+          CHANNEL_ID=$(echo "${{ github.ref_name }}" | tr -c 'a-zA-Z0-9-' '-' | cut -c1-30)
+          firebase hosting:channel:deploy "$CHANNEL_ID" \
+            --expires 7d \
+            --project rosesnails-calendar \
+            --non-interactive
