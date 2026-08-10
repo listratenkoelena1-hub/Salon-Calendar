@@ -344,11 +344,50 @@
       text-transform: uppercase;
     }
 
-    .info-panel-text {
+    .info-articles {
+      display: grid;
+      gap: 2px;
+      max-height: 140px;
+      overflow-y: auto;
+    }
+
+    .info-article-title {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      padding: 4px 2px;
+      margin: 0;
+      font-family: inherit;
       color: #5d463c;
       font-size: 13px;
       font-weight: 650;
       line-height: 1.32;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .info-article-title[aria-expanded="true"] {
+      color: var(--deep-green);
+    }
+
+    .info-article-body {
+      max-height: min(60vh, 420px);
+      overflow-y: auto;
+      padding: 2px 2px 8px;
+      color: #5d463c;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.45;
+    }
+
+    .info-article-body p {
+      margin: 0 0 8px;
+    }
+
+    .info-article-body p:last-child {
+      margin-bottom: 0;
     }
 
 
@@ -1292,7 +1331,7 @@
               </div>
               <div class="info-panel" aria-label="Salon information">
                 <div class="info-panel-title">Information</div>
-                <div class="info-panel-text">Skip the phone calls — book online in minutes, no account needed. Choose your service, technician, and time, and we'll confirm your appointment shortly.</div>
+                <div class="info-articles" id="infoArticles"></div>
               </div>
               <h1>Let's request your appointment.</h1>
               <div class="note">Please submit one request per client. If you are booking for more than one person, send a separate request for each person.</div>
@@ -1565,6 +1604,38 @@
 
     const PRIVACY_CONSENT_VERSION = "privacy-consent-v2-2026-07-20";
     const BOOKING_PUBLIC_URL = "https://rosesnailsbooking.web.app";
+
+    const infoArticles = [
+      {
+        title: "Welcome to Rose's Nails Online Booking",
+        body: `
+          <p>Welcome! Skip the phone calls — book your next nail appointment online in minutes, no account needed.</p>
+          <p>Choose your service, technician, and time, and we'll confirm your appointment shortly. Nail care guides, service explanations, and salon updates will appear here as new articles.</p>
+        `
+      }
+    ];
+    let openInfoArticle = 0;
+
+    function renderInfoArticles() {
+      const list = document.getElementById('infoArticles');
+      if (!list) return;
+      list.innerHTML = infoArticles.map((article, index) => {
+        const isOpen = openInfoArticle === index;
+        return `
+          <div class="info-article">
+            <button class="info-article-title" type="button" data-info-index="${index}" aria-expanded="${isOpen}">${article.title}</button>
+            ${isOpen ? `<div class="info-article-body">${article.body}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+      list.querySelectorAll('[data-info-index]').forEach(button => {
+        button.addEventListener('click', () => {
+          const index = Number(button.dataset.infoIndex);
+          openInfoArticle = openInfoArticle === index ? -1 : index;
+          renderInfoArticles();
+        });
+      });
+    }
 
     const state = {
       step: 0,
@@ -2968,6 +3039,7 @@
     }
 
     setInitialDate();
+    renderInfoArticles();
     renderCategories();
     renderStaff();
     renderTimes();
