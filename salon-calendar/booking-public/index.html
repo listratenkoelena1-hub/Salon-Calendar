@@ -390,6 +390,39 @@
       margin-bottom: 0;
     }
 
+    .info-article-body h3 {
+      color: var(--deep-green);
+      font-size: 14px;
+      font-weight: 850;
+      margin: 14px 0 6px;
+    }
+
+    .info-article-body h3:first-child {
+      margin-top: 0;
+    }
+
+    .info-article-photo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      min-height: 120px;
+      margin: 8px 0;
+      padding: 10px;
+      border: 1px dashed rgba(89, 145, 62, 0.35);
+      border-radius: 12px;
+      background: rgba(89, 145, 62, 0.06);
+      color: var(--muted);
+      font-size: 12px;
+      font-style: italic;
+    }
+
+    .info-article-photo img {
+      display: block;
+      width: 100%;
+      border-radius: 12px;
+    }
+
 
     .screen-share-row {
       display: flex;
@@ -1611,6 +1644,32 @@
         body: `
           <p>Welcome! Skip the phone calls — book your next nail appointment online in minutes, no account needed.</p>
           <p>Choose your service, technician, and time, and we'll confirm your appointment shortly.</p>
+        `
+      },
+      {
+        title: "Edmonton Nail Trends: Fall/Winter 2026–27",
+        body: `
+          <p>Fall and winter 2026–27 bring together two opposite directions: quiet minimalism and expressive colours with eye-catching finishes. Natural-looking nails remain popular, while deep shades, magnetic effects, and modern designs add a richer seasonal feel.</p>
+          <div class="info-article-photo">Photo: Milky white and black cherry manicures</div>
+
+          <h3>Soft and Natural Shades</h3>
+          <p>Sheer milky white, soft pink, and warm ivory remain among the season's most versatile choices. Wear them alone or add a thin French tip, a pearly finish, or one small detail.</p>
+          <div class="info-article-photo">Photo: Milky white nails and short micro-French manicure</div>
+
+          <h3>Deep Colours</h3>
+          <p>Key shades for the colder months include burgundy, black cherry, espresso brown, plum, emerald green, and petrol blue. They look especially modern on short or almond-shaped nails with a smooth, high-gloss finish.</p>
+          <div class="info-article-photo">Photo: Black cherry, espresso brown, and emerald green nails</div>
+
+          <h3>Magnetic, Velvet, and Chrome</h3>
+          <p>Cat-eye is becoming deeper and more dimensional. Ruby, emerald, bronze, and plum magnetic shades are especially current. Chrome now appears mostly as fine tips, thin lines, or small metallic details.</p>
+          <div class="info-article-photo">Photo: Ruby cat-eye, emerald velvet, and silver chrome nails</div>
+
+          <h3>Seasonal Designs</h3>
+          <p>Micro-French, tortoiseshell, blooming gel, and translucent watercolour designs are among the season's key looks. There is no need to copy dramatic runway nails exactly — each trend can be adapted to a comfortable length and your preferred shape.</p>
+          <div class="info-article-photo">Photo: Tortoiseshell French and blooming gel designs</div>
+
+          <p>Choose a calm milky manicure, a rich autumn colour, or a bold magnetic effect — what matters most is finding a look that feels like you.</p>
+          <p><strong>Save your favourite inspiration and book your next appointment.</strong></p>
         `
       }
     ];
