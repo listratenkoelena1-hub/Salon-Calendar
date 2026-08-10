@@ -6,6 +6,14 @@ on:
       confirm:
         description: 'Type "deploy" to confirm publishing to the live sites'
         required: true
+      target:
+        description: 'Which live site(s) to publish'
+        required: true
+        type: choice
+        options:
+          - booking
+          - calendar
+          - both
 
 jobs:
   deploy:
@@ -30,4 +38,9 @@ jobs:
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-key.json
         run: |
-          firebase deploy --only hosting --project rosesnails-calendar --non-interactive
+          case "${{ github.event.inputs.target }}" in
+            booking) ONLY="hosting:booking" ;;
+            calendar) ONLY="hosting:calendar" ;;
+            both) ONLY="hosting:booking,hosting:calendar" ;;
+          esac
+          firebase deploy --only "$ONLY" --project rosesnails-calendar --non-interactive
