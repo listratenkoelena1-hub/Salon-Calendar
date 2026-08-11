@@ -392,6 +392,11 @@
       font-weight: 850;
     }
 
+    .info-article-title--new {
+      color: var(--orange);
+      font-weight: 800;
+    }
+
     .info-article-body {
       max-height: min(60vh, 420px);
       overflow-y: auto;
@@ -1697,9 +1702,11 @@
       if (!list) return;
       list.innerHTML = infoArticles.map((article, index) => {
         const isOpen = openInfoArticle === index;
+        const isNewest = index === 1 && !isOpen;
+        const titleClass = isNewest ? 'info-article-title info-article-title--new' : 'info-article-title';
         return `
           <div class="info-article">
-            <button class="info-article-title" type="button" data-info-index="${index}" aria-expanded="${isOpen}">${article.title}</button>
+            <button class="${titleClass}" type="button" data-info-index="${index}" aria-expanded="${isOpen}">${article.title}</button>
             ${isOpen ? `<div class="info-article-body">${article.body}</div>` : ''}
           </div>
         `;
