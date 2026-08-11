@@ -349,6 +349,24 @@
       gap: 2px;
       max-height: 140px;
       overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(89, 145, 62, 0.28) transparent;
+    }
+
+    .info-articles::-webkit-scrollbar,
+    .info-article-body::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .info-articles::-webkit-scrollbar-track,
+    .info-article-body::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .info-articles::-webkit-scrollbar-thumb,
+    .info-article-body::-webkit-scrollbar-thumb {
+      background: rgba(89, 145, 62, 0.28);
+      border-radius: 4px;
     }
 
     .info-article-title {
@@ -382,6 +400,8 @@
       font-size: 13px;
       font-weight: 500;
       line-height: 1.45;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(89, 145, 62, 0.28) transparent;
     }
 
     .info-article-body p {
