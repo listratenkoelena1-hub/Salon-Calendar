@@ -1,0 +1,18 @@
+{
+  "projects": {
+    "default": "rosesnails-calendar"
+  },
+  "targets": {
+    "rosesnails-calendar": {
+      "hosting": {
+        "booking": [
+          "rosesnailsbooking"
+        ],
+        "calendar": [
+          "rosesnails-calendar"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

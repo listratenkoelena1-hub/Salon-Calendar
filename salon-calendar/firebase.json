@@ -1,0 +1,83 @@
+﻿{
+    "hosting":  [
+                    {
+                        "target":  "calendar",
+                        "public":  ".",
+                        "ignore":  [
+                                       "firebase.json",
+                                       "booking-public/**",
+                                       "**/.*",
+                                       "**/node_modules/**",
+                                       "backups-calendar/**",
+                                       "backups-online-booking/**",
+                                       "design-mockups/**"
+                                   ],
+                        "headers":  [
+                                        {
+                                            "source":  "**",
+                                            "headers":  [
+                                                            {
+                                                                "key":  "X-Robots-Tag",
+                                                                "value":  "noindex, nofollow"
+                                                            }
+                                                        ]
+                                        }
+                                    ],
+                        "rewrites":  [
+                                         {
+                                             "source":  "/booking",
+                                             "destination":  "/online-booking.html"
+                                         },
+                                         {
+                                             "source":  "/booking-photo",
+                                             "destination":  "/booking-photo.html"
+                                         },
+                                         {
+                                             "source":  "**",
+                                             "destination":  "/index.html"
+                                         }
+                                     ]
+                    },
+                    {
+                        "target":  "booking",
+                        "public":  "booking-public",
+                        "ignore":  [
+                                       "firebase.json",
+                                       "**/.*",
+                                       "**/node_modules/**",
+                                       "backups-calendar/**",
+                                       "backups-online-booking/**",
+                                       "design-mockups/**"
+                                   ],
+                        "headers":  [
+                                        {
+                                            "source":  "/booking-photo.html",
+                                            "headers":  [
+                                                            {
+                                                                "key":  "X-Robots-Tag",
+                                                                "value":  "noindex, nofollow"
+                                                            }
+                                                        ]
+                                        }
+                                    ],
+                        "rewrites":  [
+                                         {
+                                             "source":  "/booking",
+                                             "destination":  "/index.html"
+                                         },
+                                         {
+                                             "source":  "/online-booking.html",
+                                             "destination":  "/index.html"
+                                         },
+                                         {
+                                             "source":  "/booking-photo",
+                                             "destination":  "/booking-photo.html"
+                                         },
+                                         {
+                                             "source":  "**",
+                                             "destination":  "/index.html"
+                                         }
+                                     ]
+                    }
+                ]
+}
