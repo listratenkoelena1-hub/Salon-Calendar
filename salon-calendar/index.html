@@ -4818,6 +4818,7 @@ let staffMessagesUnreadBoundaryPendingAbove = false;
 let staffMessagesAcknowledgedIds = new Set();
 let staffMessagesMayClearUnread = false;
 let staffPushStatuses = {};
+let staffPushStatusesState = 'idle';
 let calendarViewMode = 'general'; // general | week
 const WEEK_VIEW_ICON = `
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
@@ -11302,6 +11303,14 @@ function renderStaff() {
 
 function buildStaffPushStatus(staffId) {
   if (currentUserRole !== 'manager') return '';
+  if (staffPushStatusesState !== 'ready') {
+    const unavailable = staffPushStatusesState === 'unavailable';
+    const label = unavailable ? 'Status available after server approval' : 'Checking notifications…';
+    const details = unavailable
+      ? 'The status service is prepared in this test branch, but the production Cloud Function has not been deployed without your approval.'
+      : 'Checking active notification devices.';
+    return `<span class="staff-push-status" data-push-status="${escapeHtml(staffId)}"><span class="staff-push-status-dot"></span>${escapeHtml(label)}<span class="staff-push-popover hidden">${escapeHtml(details)}</span></span>`;
+  }
   const status = staffPushStatuses[staffId];
   const connected = Number(status?.enabledDevices || 0) > 0;
   const label = connected ? 'Notifications connected' : 'Notifications not connected';
@@ -11324,12 +11333,16 @@ function bindStaffPushStatusPopovers() {
 }
 
 async function refreshStaffPushStatuses() {
+  staffPushStatusesState = 'loading';
   try {
     const result = await getStaffPushStatuses();
     staffPushStatuses = result.data?.statuses || {};
+    staffPushStatusesState = 'ready';
     if (!staffModal.classList.contains('hidden')) renderStaff();
   } catch (err) {
+    staffPushStatusesState = 'unavailable';
     console.warn('Notification connection statuses are not available yet:', err);
+    if (!staffModal.classList.contains('hidden')) renderStaff();
   }
 }
 
