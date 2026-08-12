@@ -20,7 +20,8 @@ messaging.onBackgroundMessage((payload) => {
     body,
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    data: payload.data || {}
+    data: payload.data || {},
+    tag: 'calendar-message-' + (payload.data?.notificationId || Date.now())
   });
 });
 
@@ -49,6 +50,13 @@ self.addEventListener('install', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
+  }
+  if (event.data && event.data.type === 'CLEAR_CALENDAR_NOTIFICATIONS') {
+    event.waitUntil(
+      self.registration.getNotifications({ includeTriggered: true }).then(notifications => {
+        notifications.forEach(notification => notification.close());
+      })
+    );
   }
 });
 
