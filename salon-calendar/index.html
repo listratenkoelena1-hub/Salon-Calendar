@@ -4302,7 +4302,7 @@ stroke-linejoin="round">
     <div id="staffPinnedNotificationBar"></div>
     <div id="staffMessageTabs" class="staff-message-tabs" role="tablist">
       <button class="staff-message-tab active" type="button" data-message-filter="all">All</button>
-      <button class="staff-message-tab" type="button" data-message-filter="for-me">For me</button>
+      <button class="staff-message-tab" id="staffMessagesForMeTab" type="button" data-message-filter="for-me">For me</button>
       <button class="staff-message-tab" type="button" data-message-filter="unread">Unread</button>
       <button class="staff-message-tab" type="button" data-message-filter="chat">Chat</button>
     </div>
@@ -9348,6 +9348,9 @@ function getFilteredStaffNotifications() {
 }
 
 function bindStaffMessageTabs() {
+  const forMeTab = document.getElementById('staffMessagesForMeTab');
+  if (forMeTab) forMeTab.classList.toggle('hidden', currentUserRole === 'manager');
+  if (currentUserRole === 'manager' && staffMessagesFilter === 'for-me') staffMessagesFilter = 'all';
   document.querySelectorAll('[data-message-filter]').forEach(button => {
     button.classList.toggle('active', button.dataset.messageFilter === staffMessagesFilter);
     button.onclick = () => {
@@ -11337,7 +11340,12 @@ function bindStaffPushStatusPopovers() {
       document.querySelectorAll('.staff-push-popover').forEach(item => { if (item !== popover) item.classList.add('hidden'); });
       if (popover) {
         const rect = status.getBoundingClientRect();
-        popover.style.top = `${Math.min(window.innerHeight - 130, rect.bottom + 6)}px`;
+        const popoverHeight = Math.min(180, popover.scrollHeight || 110);
+        const placeAbove = rect.bottom + popoverHeight + 12 > window.innerHeight;
+        popover.style.top = `${Math.max(8, placeAbove ? rect.top - popoverHeight - 6 : rect.bottom + 6)}px`;
+        popover.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 328))}px`;
+        popover.style.right = 'auto';
+        popover.style.width = `${Math.min(300, window.innerWidth - 36)}px`;
       }
       popover?.classList.toggle('hidden');
     };
