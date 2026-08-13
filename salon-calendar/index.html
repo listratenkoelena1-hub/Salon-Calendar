@@ -1656,6 +1656,21 @@ padding:10px 14px;
   min-width: 50px;
   border-radius: 14px;
 }
+.staff-message-media-row { display: flex; align-items: center; gap: 6px; }
+.staff-message-media-icon { min-width: 38px !important; width: 38px; height: 38px; padding: 7px; border: 0; background: transparent; color: #44645f; }
+.staff-message-media-icon svg { width: 22px; height: 22px; display: block; fill: none; stroke: currentColor; stroke-width: 1.9; }
+.staff-message-media-icon.recording { color: #c33; background: #fff0f0; animation: staff-message-pulse 1s ease-in-out infinite; }
+.staff-message-attachment-preview { display: none; width: 100%; align-items: center; gap: 9px; padding: 8px; border-radius: 12px; background: #f3f7f6; }
+.staff-message-attachment-preview.active { display: flex; }
+.staff-message-attachment-preview img { width: 58px; height: 58px; border-radius: 9px; object-fit: cover; }
+.staff-message-attachment-preview audio { min-width: 0; width: 100%; height: 36px; }
+.staff-message-attachment-info { min-width: 0; flex: 1; color: #555; font-size: 12px; }
+.staff-message-recording-time { font-weight: 850; color: #b42d2d; }
+.staff-message-attachment-remove { min-width: 32px !important; width: 32px; height: 32px; padding: 0; border: 0; background: transparent; font-size: 20px; color: #777; }
+.staff-message-media { margin-top: 8px; }
+.staff-message-media-image { display: block; width: min(220px, 100%); max-height: 240px; border-radius: 11px; object-fit: cover; background: #eee; cursor: pointer; }
+.staff-message-media-audio { display: block; width: min(260px, 100%); height: 40px; }
+.staff-message-media-loading { padding: 8px 0; color: #777; font-size: 12px; }
 
 .staff-notification-body {
   font-size: 14px;
@@ -4312,7 +4327,20 @@ stroke-linejoin="round">
         <span id="staffMessageReplyText" class="staff-message-reply-text"></span>
         <button type="button" onclick="clearStaffMessageReply()">x</button>
       </div>
+      <div id="staffMessageAttachmentPreview" class="staff-message-attachment-preview">
+        <div id="staffMessageAttachmentContent" class="staff-message-attachment-info"></div>
+        <button class="staff-message-attachment-remove" type="button" onclick="clearStaffMessageAttachment()" aria-label="Remove attachment">×</button>
+      </div>
       <input id="staffMessageInput" type="text" placeholder="Write a message..." maxlength="500">
+      <div class="staff-message-media-row">
+        <input id="staffMessagePhotoInput" class="hidden" type="file" accept="image/*">
+        <button id="staffMessagePhotoBtn" class="staff-message-media-icon" type="button" onclick="chooseStaffMessagePhoto()" aria-label="Add photo">
+          <svg viewBox="0 0 24 24"><path d="M4 7h3l1.5-2h7L17 7h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        </button>
+        <button id="staffMessageVoiceBtn" class="staff-message-media-icon" type="button" onclick="toggleStaffVoiceRecording()" aria-label="Record voice message">
+          <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6"/></svg>
+        </button>
+      </div>
       <button id="staffMessageSendBtn" type="button" class="btn-primary" onclick="sendStaffChatMessage()">Send</button>
     </div>
     <div class="modal-actions">
@@ -4779,6 +4807,13 @@ import {
   onMessage,
   isSupported as isMessagingSupported
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-messaging.js";
+import {
+  getStorage,
+  ref as storageRef,
+  uploadBytes,
+  getBlob,
+  deleteObject
+} from "https://www.gstatic.com/firebasejs/12.8.0/firebase-storage.js";
       
 const firebaseConfig = {
   apiKey: "AIzaSyC5BecKxYxQ9V5qbmXBNkTsvnIZBtK_dx8",
@@ -4793,6 +4828,7 @@ const app = initializeApp(firebaseConfig);
 
 const db = getFirestore(app);
 const auth = getAuth(app);
+const storage = getStorage(app);
 const functions = getFunctions(app, "us-central1");
 const registerPushDevice = httpsCallable(functions, "registerPushDevice");
 const getStaffPushStatuses = httpsCallable(functions, "getStaffPushStatuses");
@@ -4819,6 +4855,13 @@ let staffMessagesAcknowledgedIds = new Set();
 let staffMessagesMayClearUnread = false;
 let staffPushStatuses = {};
 let staffPushStatusesState = 'idle';
+let staffMessageAttachment = null;
+let staffVoiceRecorder = null;
+let staffVoiceStream = null;
+let staffVoiceChunks = [];
+let staffVoiceStartedAt = 0;
+let staffVoiceTimer = null;
+let staffMessageMediaObjectUrls = [];
 let calendarViewMode = 'general'; // general | week
 const WEEK_VIEW_ICON = `
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
@@ -8951,7 +8994,7 @@ function buildStaffNotificationDoc({
   };
 }
 
-function buildStaffChatMessageDoc({ text, senderLabel, recipientStaffId = '', recipientStaffName = '', visibleToManager = false, messageGroupId = '', replyTo = null }) {
+function buildStaffChatMessageDoc({ text, senderLabel, recipientStaffId = '', recipientStaffName = '', visibleToManager = false, messageGroupId = '', replyTo = null, attachment = null }) {
   const cleanText = stripNotificationHtml(text).slice(0, 500);
   const cleanSender = stripNotificationHtml(senderLabel || getCurrentActorLabel() || 'Calendar');
   const senderReadKey = getNotificationReadKey();
@@ -8960,8 +9003,8 @@ function buildStaffChatMessageDoc({ text, senderLabel, recipientStaffId = '', re
     recipientStaffName,
     visibleToManager,
     visibleToAllStaff: true,
-    title: 'Message',
-    body: cleanText,
+    title: attachment?.type === 'photo' ? 'Photo' : attachment?.type === 'audio' ? 'Voice message' : 'Message',
+    body: cleanText || (attachment?.type === 'photo' ? 'Photo' : attachment?.type === 'audio' ? 'Voice message' : ''),
     senderLabel: cleanSender,
     senderUid: auth.currentUser?.uid || '',
     senderStaffId: currentUserStaffId || '',
@@ -8983,6 +9026,15 @@ function buildStaffChatMessageDoc({ text, senderLabel, recipientStaffId = '', re
       messageGroupId: String(replyTo.messageGroupId || replyTo.id || ''),
       senderLabel: stripNotificationHtml(replyTo.senderLabel || ''),
       preview: getStaffNotificationPlainBody(replyTo).slice(0, 160)
+    } : null,
+    attachment: attachment ? {
+      type: String(attachment.type || ''),
+      storagePath: String(attachment.storagePath || ''),
+      contentType: String(attachment.contentType || ''),
+      size: Number(attachment.size || 0),
+      durationSeconds: Number(attachment.durationSeconds || 0),
+      width: Number(attachment.width || 0),
+      height: Number(attachment.height || 0)
     } : null
   };
 }
@@ -9368,6 +9420,38 @@ function getStaffChatCardStyle(item) {
   return sender?.color ? `background:${escapeHtml(sender.color)};border-color:rgba(0,0,0,.12);` : '';
 }
 
+function buildStaffMessageMedia(item) {
+  const attachment = item?.attachment;
+  if (!attachment?.storagePath || !['photo', 'audio'].includes(attachment.type)) return '';
+  return `<div class="staff-message-media" data-message-media-path="${escapeHtml(attachment.storagePath)}" data-message-media-type="${escapeHtml(attachment.type)}"><div class="staff-message-media-loading"><span class="staff-notification-loading-dot"></span>Loading ${attachment.type === 'photo' ? 'photo' : 'voice message'}…</div></div>`;
+}
+
+function releaseStaffMessageMediaUrls() {
+  staffMessageMediaObjectUrls.forEach(url => URL.revokeObjectURL(url));
+  staffMessageMediaObjectUrls = [];
+}
+
+async function hydrateStaffMessageMedia() {
+  const containers = Array.from(document.querySelectorAll('[data-message-media-path]'));
+  await Promise.all(containers.map(async container => {
+    try {
+      const blob = await getBlob(storageRef(storage, container.dataset.messageMediaPath));
+      const url = URL.createObjectURL(blob);
+      staffMessageMediaObjectUrls.push(url);
+      if (!container.isConnected) return;
+      if (container.dataset.messageMediaType === 'photo') {
+        container.innerHTML = `<img class="staff-message-media-image" src="${escapeHtml(url)}" alt="Message photo">`;
+        container.querySelector('img')?.addEventListener('click', () => window.open(url, '_blank', 'noopener'));
+      } else {
+        container.innerHTML = `<audio class="staff-message-media-audio" src="${escapeHtml(url)}" controls preload="metadata"></audio>`;
+      }
+    } catch (err) {
+      console.warn('Message attachment could not be loaded:', err);
+      if (container.isConnected) container.innerHTML = '<div class="staff-message-media-loading">Attachment could not be loaded.</div>';
+    }
+  }));
+}
+
 function renderStaffNotifications() {
   const list = document.getElementById('staffNotificationsList');
   if (!list) return;
@@ -9383,6 +9467,7 @@ function renderStaffNotifications() {
     list.innerHTML = `<div class="staff-notification-state">${escapeHtml(staffMessagesLoadError)}<button type="button" onclick="retryStaffNotifications()">Retry</button></div>`;
     return;
   }
+  releaseStaffMessageMediaUrls();
   const visibleNotifications = getFilteredStaffNotifications();
   if (!visibleNotifications.length) {
     list.innerHTML = '<div class="staff-notification-empty">No messages yet.</div>';
@@ -9429,6 +9514,7 @@ function renderStaffNotifications() {
         ${kindLabel}
         ${replyQuote}
         <div class="staff-notification-body">${item.senderLabel ? '<strong>' + escapeHtml(item.senderLabel) + '</strong>\n' : ''}${escapeHtml(getStaffNotificationDisplayBody(item))}</div>
+        ${buildStaffMessageMedia(item)}
         ${photo}
         <div class="staff-notification-footer">${escapeHtml(formatNotificationCreatedAt(item))}</div>
       </div>
@@ -9463,6 +9549,7 @@ function renderStaffNotifications() {
       button.closest('.staff-notification-card')?.classList.remove('swipe-reply-hint');
     });
   });
+  hydrateStaffMessageMedia();
 }
 
 async function markStaffNotificationRead(item) {
@@ -9618,6 +9705,8 @@ function attachStaffNotificationSwipe(card) {
 function setStaffMessageSendBusy(isBusy) {
   const input = document.getElementById('staffMessageInput');
   const button = document.getElementById('staffMessageSendBtn');
+  const photoButton = document.getElementById('staffMessagePhotoBtn');
+  const voiceButton = document.getElementById('staffMessageVoiceBtn');
   if (input) input.disabled = isBusy;
   if (button) {
     button.disabled = isBusy;
@@ -9625,15 +9714,184 @@ function setStaffMessageSendBusy(isBusy) {
   }
 }
 
+function formatVoiceCountdown(seconds) {
+  return `0:${String(Math.max(0, seconds)).padStart(2, '0')}`;
+}
+
+function renderStaffMessageAttachmentPreview() {
+  const preview = document.getElementById('staffMessageAttachmentPreview');
+  const content = document.getElementById('staffMessageAttachmentContent');
+  if (!preview || !content) return;
+  if (!staffMessageAttachment && !staffVoiceRecorder) {
+    preview.classList.remove('active');
+    content.innerHTML = '';
+    return;
+  }
+  if (photoButton) photoButton.disabled = isBusy;
+  if (voiceButton) voiceButton.disabled = isBusy;
+  preview.classList.add('active');
+  if (staffVoiceRecorder?.state === 'recording') {
+    const elapsed = Math.min(30, Math.floor((Date.now() - staffVoiceStartedAt) / 1000));
+    content.innerHTML = `<span class="staff-message-recording-time">Recording · ${formatVoiceCountdown(30 - elapsed)} remaining</span>`;
+    return;
+  }
+  if (staffMessageAttachment?.type === 'photo') {
+    content.innerHTML = `<img src="${escapeHtml(staffMessageAttachment.previewUrl)}" alt="Selected photo"><span>Photo ready to send · ${Math.max(1, Math.round(staffMessageAttachment.blob.size / 1024))} KB</span>`;
+    return;
+  }
+  if (staffMessageAttachment?.type === 'audio') {
+    content.innerHTML = `<audio src="${escapeHtml(staffMessageAttachment.previewUrl)}" controls preload="metadata"></audio><span>${Math.ceil(staffMessageAttachment.durationSeconds)} sec</span>`;
+  }
+}
+
+function stopStaffVoiceTracks() {
+  staffVoiceStream?.getTracks().forEach(track => track.stop());
+  staffVoiceStream = null;
+  clearInterval(staffVoiceTimer);
+  staffVoiceTimer = null;
+  document.getElementById('staffMessageVoiceBtn')?.classList.remove('recording');
+}
+
+window.clearStaffMessageAttachment = () => {
+  if (staffVoiceRecorder?.state === 'recording') staffVoiceRecorder.stop();
+  stopStaffVoiceTracks();
+  if (staffMessageAttachment?.previewUrl) URL.revokeObjectURL(staffMessageAttachment.previewUrl);
+  staffMessageAttachment = null;
+  staffVoiceRecorder = null;
+  staffVoiceChunks = [];
+  const photoInput = document.getElementById('staffMessagePhotoInput');
+  if (photoInput) photoInput.value = '';
+  renderStaffMessageAttachmentPreview();
+};
+
+async function compressStaffMessagePhoto(file) {
+  if (!file?.type?.startsWith('image/')) throw new Error('Please select a photo.');
+  const sourceUrl = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; image.src = sourceUrl; });
+    const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext('2d').drawImage(image, 0, 0, width, height);
+    const type = canvas.toDataURL('image/webp').startsWith('data:image/webp') ? 'image/webp' : 'image/jpeg';
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, type, 0.78));
+    if (!blob || blob.size > 3 * 1024 * 1024) throw new Error('This photo is too large after compression.');
+    return { blob, width, height, contentType: type };
+  } finally {
+    URL.revokeObjectURL(sourceUrl);
+  }
+}
+
+window.chooseStaffMessagePhoto = () => {
+  if (staffVoiceRecorder?.state === 'recording') return showToast('Stop the voice recording first.', 'warning');
+  document.getElementById('staffMessagePhotoInput')?.click();
+};
+
+document.getElementById('staffMessagePhotoInput')?.addEventListener('change', async event => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    const photo = await compressStaffMessagePhoto(file);
+    clearStaffMessageAttachment();
+    staffMessageAttachment = { type: 'photo', ...photo, previewUrl: URL.createObjectURL(photo.blob) };
+    renderStaffMessageAttachmentPreview();
+  } catch (err) {
+    console.warn('Photo could not be prepared:', err);
+    showToast(err.message || 'Photo could not be prepared', 'error');
+  }
+});
+
+function getSupportedVoiceMimeType() {
+  return ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find(type => MediaRecorder.isTypeSupported?.(type)) || '';
+}
+
+window.toggleStaffVoiceRecording = async () => {
+  if (staffVoiceRecorder?.state === 'recording') {
+    staffVoiceRecorder.stop();
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    showToast('Voice recording is not supported on this device.', 'error');
+    return;
+  }
+  clearStaffMessageAttachment();
+  try {
+    staffVoiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mimeType = getSupportedVoiceMimeType();
+    staffVoiceChunks = [];
+    staffVoiceStartedAt = Date.now();
+    staffVoiceRecorder = new MediaRecorder(staffVoiceStream, mimeType ? { mimeType, audioBitsPerSecond: 64000 } : { audioBitsPerSecond: 64000 });
+    staffVoiceRecorder.ondataavailable = event => { if (event.data?.size) staffVoiceChunks.push(event.data); };
+    staffVoiceRecorder.onstop = () => {
+      const durationSeconds = Math.min(30, Math.max(1, (Date.now() - staffVoiceStartedAt) / 1000));
+      const contentType = staffVoiceRecorder.mimeType || mimeType || 'audio/webm';
+      const blob = new Blob(staffVoiceChunks, { type: contentType });
+      stopStaffVoiceTracks();
+      staffVoiceRecorder = null;
+      if (blob.size > 2 * 1024 * 1024) {
+        staffMessageAttachment = null;
+        showToast('Voice message is too large.', 'error');
+      } else {
+        staffMessageAttachment = { type: 'audio', blob, contentType, durationSeconds, previewUrl: URL.createObjectURL(blob) };
+      }
+      renderStaffMessageAttachmentPreview();
+    };
+    staffVoiceRecorder.start(500);
+    document.getElementById('staffMessageVoiceBtn')?.classList.add('recording');
+    renderStaffMessageAttachmentPreview();
+    staffVoiceTimer = setInterval(() => {
+      renderStaffMessageAttachmentPreview();
+      if (Date.now() - staffVoiceStartedAt >= 30000 && staffVoiceRecorder?.state === 'recording') staffVoiceRecorder.stop();
+    }, 250);
+  } catch (err) {
+    stopStaffVoiceTracks();
+    staffVoiceRecorder = null;
+    console.warn('Voice recording could not start:', err);
+    showToast('Microphone permission is required for voice messages.', 'error');
+  }
+};
+
+function getStaffMessageAttachmentExtension(attachment) {
+  if (attachment.type === 'photo') return attachment.contentType === 'image/webp' ? 'webp' : 'jpg';
+  if (attachment.contentType.includes('mp4')) return 'm4a';
+  return 'webm';
+}
+
+async function uploadStaffMessageAttachment(messageGroupId) {
+  if (!staffMessageAttachment?.blob) return null;
+  const extension = getStaffMessageAttachmentExtension(staffMessageAttachment);
+  const path = `messenger-media/${new Date().toISOString().slice(0, 10)}/${messageGroupId}.${extension}`;
+  await uploadBytes(storageRef(storage, path), staffMessageAttachment.blob, {
+    contentType: staffMessageAttachment.contentType,
+    customMetadata: { senderUid: auth.currentUser?.uid || '', expiresInDays: '30' }
+  });
+  return {
+    type: staffMessageAttachment.type,
+    storagePath: path,
+    contentType: staffMessageAttachment.contentType,
+    size: staffMessageAttachment.blob.size,
+    durationSeconds: staffMessageAttachment.durationSeconds || 0,
+    width: staffMessageAttachment.width || 0,
+    height: staffMessageAttachment.height || 0
+  };
+}
+
 window.sendStaffChatMessage = async () => {
   const input = document.getElementById('staffMessageInput');
   const text = (input?.value || '').trim();
-  if (!text) return;
+  if (!text && !staffMessageAttachment) return;
+  if (staffVoiceRecorder?.state === 'recording') return showToast('Stop the recording before sending.', 'warning');
 
   setStaffMessageSendBusy(true);
+  let uploadedAttachment = null;
   try {
     const senderLabel = getCurrentActorLabel();
     const messageGroupId = crypto?.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(16).slice(2);
+    uploadedAttachment = await uploadStaffMessageAttachment(messageGroupId);
     const replyTo = staffMessageReplyTarget;
     const recipients = getActiveStaffList({ includeAnyone: false }).filter(s => s.id && s.id !== ANYONE_ID);
     const writes = recipients.map(recipient => addDoc(collection(db, 'staffNotifications'), buildStaffChatMessageDoc({
@@ -9643,21 +9901,25 @@ window.sendStaffChatMessage = async () => {
       recipientStaffName: recipient.name,
       visibleToManager: false,
       messageGroupId,
-      replyTo
+      replyTo,
+      attachment: uploadedAttachment
     })));
     writes.push(addDoc(collection(db, 'staffNotifications'), buildStaffChatMessageDoc({
       text,
       senderLabel,
       visibleToManager: true,
       messageGroupId,
-      replyTo
+      replyTo,
+      attachment: uploadedAttachment
     })));
     await Promise.all(writes);
     if (input) input.value = '';
     clearStaffMessageReply();
+    clearStaffMessageAttachment();
   } catch (err) {
     console.warn('Staff message was not sent:', err);
     showToast('Message was not sent', 'error');
+    if (uploadedAttachment?.storagePath) deleteObject(storageRef(storage, uploadedAttachment.storagePath)).catch(() => {});
   } finally {
     setStaffMessageSendBusy(false);
   }
@@ -9697,6 +9959,7 @@ window.openStaffNotifications = async () => {
 };
 
 window.closeStaffNotifications = () => {
+  if (staffVoiceRecorder?.state === 'recording') clearStaffMessageAttachment();
   const modal = document.getElementById('staffNotificationsModal');
   if (modal) modal.classList.add('hidden');
 };
