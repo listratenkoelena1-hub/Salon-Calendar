@@ -4640,7 +4640,6 @@ stroke-linejoin="round">
         </select>
 
         <label class="staff-anyone" title="Count this technician as available for Anyone bookings">
-          <span>Anyone</span>
           <input type="checkbox" id="newStaffAvailableForAnyone" checked>
         </label>
 
@@ -11285,7 +11284,6 @@ function renderStaff() {
           <option value="manager" ${s.role === 'manager' ? 'selected' : ''}>Manager</option>
         </select>
         <label class="staff-anyone" title="Count this technician as available for Anyone bookings">
-          <span>Anyone</span>
           <input type="checkbox" data-staff-anyone="${s.id}" ${isStaffAvailableForAnyone(s) ? 'checked' : ''}>
         </label>
         ${buildStaffPushStatus(s.id)}
