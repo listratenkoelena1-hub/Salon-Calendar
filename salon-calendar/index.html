@@ -4861,6 +4861,7 @@ let staffNotificationsUnsubscribe = null;
 let staffPinnedUnsubscribe = null;
 let staffPinnedNotificationIds = [];
 let staffPinnedMediaPaths = {};
+const staffPinToggleLocks = new Set();
 let activePinnedNotificationIndex = 0;
 let staffMessageReplyTarget = null;
 const STAFF_MESSAGES_PAGE_SIZE = 50;
@@ -9376,6 +9377,8 @@ function syncStaffPinnedCardState() {
 async function preservePinnedStaffMessageAttachment(item) {
   const attachment = item?.attachment;
   if (!attachment?.storagePath || attachment.storagePath.startsWith('messenger-pinned-media/')) return;
+  const pinKey = item.messageGroupId || item.id;
+  if (staffPinnedMediaPaths[pinKey]) return;
   const fileName = attachment.storagePath.split('/').pop();
   if (!fileName) return;
   const pinnedPath = `messenger-pinned-media/${new Date().toISOString().slice(0, 10)}/${fileName}`;
@@ -9384,7 +9387,6 @@ async function preservePinnedStaffMessageAttachment(item) {
     contentType: attachment.contentType || blob.type,
     customMetadata: { senderUid: auth.currentUser?.uid || '', preservedByPin: 'true' }
   });
-  const pinKey = item.messageGroupId || item.id;
   staffPinnedMediaPaths = { ...staffPinnedMediaPaths, [pinKey]: pinnedPath };
   await setDoc(getStaffPinnedDocRef(), {
     mediaPaths: staffPinnedMediaPaths,
@@ -9397,6 +9399,9 @@ async function toggleStaffNotificationPinned(notificationId) {
   if (!notificationId) return;
   const item = staffNotifications.find(entry => entry.id === notificationId);
   const pinKey = item?.messageGroupId || notificationId;
+  if (staffPinToggleLocks.has(pinKey)) return;
+  staffPinToggleLocks.add(pinKey);
+  try {
   const existingIndex = staffPinnedNotificationIds.indexOf(pinKey);
   const isPinning = existingIndex < 0;
   if (existingIndex >= 0) {
@@ -9423,6 +9428,9 @@ async function toggleStaffNotificationPinned(notificationId) {
       console.warn('Pinned attachment was not preserved:', err);
       showToast('Message pinned, but its attachment could not be preserved', 'error', 5500);
     }
+  }
+  } finally {
+    staffPinToggleLocks.delete(pinKey);
   }
 }
 
@@ -9620,10 +9628,18 @@ function renderStaffNotifications() {
     });
   });
   list.querySelectorAll('[data-pin-notification-id]').forEach(button => {
-    button.addEventListener('click', event => {
+    button.addEventListener('click', async event => {
       event.preventDefault();
       event.stopPropagation();
-      toggleStaffNotificationPinned(button.dataset.pinNotificationId);
+      if (button.dataset.pinBusy === 'true') return;
+      button.dataset.pinBusy = 'true';
+      button.disabled = true;
+      try {
+        await toggleStaffNotificationPinned(button.dataset.pinNotificationId);
+      } finally {
+        button.dataset.pinBusy = 'false';
+        button.disabled = false;
+      }
     });
   });
   list.querySelectorAll('[data-reply-notification-id]').forEach(button => {
