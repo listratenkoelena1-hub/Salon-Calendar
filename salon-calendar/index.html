@@ -11288,12 +11288,12 @@ function renderStaff() {
           <span>Anyone</span>
           <input type="checkbox" data-staff-anyone="${s.id}" ${isStaffAvailableForAnyone(s) ? 'checked' : ''}>
         </label>
+        ${buildStaffPushStatus(s.id)}
         <button class="staff-btn staff-save-btn primary" data-staff-save="${s.id}" onclick="saveStaffMeta('${s.id}')">Save</button>
         <button class="staff-btn staff-move-btn" onclick="moveStaff(${originalIndex}, -1)">^</button>
         <button class="staff-btn staff-move-btn" onclick="moveStaff(${originalIndex}, 1)">v</button>
         <button class="staff-btn staff-remove-btn danger" onclick="askStaffDelete('${s.id}')">Remove staff</button>
         <span id="staff-status-${s.id}" class="staff-saved">Saved</span>
-        ${buildStaffPushStatus(s.id)}
       </div>
     `;
   });
