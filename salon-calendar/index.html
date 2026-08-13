@@ -8865,10 +8865,19 @@ function stripNotificationHtml(value) {
 function getStaffNotificationPriority(eventType, message = '') {
   if (eventType === 'staff_message') return 'message';
   if (STAFF_NOTIFICATION_KEY_EVENTS.has(eventType)) return 'key';
-  if (eventType === 'updated_app' && /Changed:\s*(?:[^.]*\b(time|staff|technician|date)\b)/i.test(stripNotificationHtml(message))) {
+  if (eventType === 'updated_app' && hasImportantAppointmentChange(message)) {
     return 'key';
   }
   return 'secondary';
+}
+
+function hasImportantAppointmentChange(message = '') {
+  const plainText = stripNotificationHtml(message);
+  const changedMatch = plainText.match(/Changed:\s*([^\n.]*)/i);
+  if (!changedMatch) return false;
+  return changedMatch[1]
+    .split(',')
+    .some(change => /^(?:time|staff|technician|date)\s+to\b/i.test(change.trim()));
 }
 
 function buildStaffNotificationTitle(eventType) {
