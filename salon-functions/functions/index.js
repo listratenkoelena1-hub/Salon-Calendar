@@ -2012,8 +2012,16 @@ exports.registerPushDevice = onCall(
       throw new HttpsError("invalid-argument", "Missing push token.");
     }
 
-    const role = String(request.data?.role || "").trim();
-    const staffId = String(request.data?.staffId || "").trim();
+    const userProfileSnap = await db.collection("users").doc(request.auth.uid).get();
+    if (!userProfileSnap.exists) {
+      throw new HttpsError("permission-denied", "User profile not found.");
+    }
+    const userProfile = userProfileSnap.data() || {};
+    const role = String(userProfile.role || "").trim();
+    const staffId = String(userProfile.staffId || "").trim();
+    if (!["manager", "staff"].includes(role)) {
+      throw new HttpsError("permission-denied", "This account cannot register message notifications.");
+    }
     const userAgent = String(request.data?.userAgent || "").slice(0, 500);
     const rawDeviceId = String(request.data?.deviceId || "").trim();
     const safeDeviceId = rawDeviceId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80);
@@ -2071,6 +2079,33 @@ exports.registerPushDevice = onCall(
     }, { merge: true });
 
     return { ok: true };
+  }
+);
+
+exports.getStaffPushStatuses = onCall(
+  { region: "us-central1", maxInstances: 10 },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "You must be signed in.");
+    const callerSnap = await db.collection("users").doc(request.auth.uid).get();
+    if (!callerSnap.exists || callerSnap.data()?.role !== "manager") {
+      throw new HttpsError("permission-denied", "Only a manager can view notification status.");
+    }
+    const devicesSnap = await db.collection("staffPushDevices").where("enabled", "==", true).get();
+    const byStaffId = {};
+    devicesSnap.docs.forEach(docSnap => {
+      const device = docSnap.data() || {};
+      if (!device.staffId || device.role !== "staff") return;
+      const current = byStaffId[device.staffId] || { enabledDevices: 0, lastConnectedAt: null, userAgent: "" };
+      current.enabledDevices += 1;
+      const updatedMs = device.updatedAt?.toMillis ? device.updatedAt.toMillis() : 0;
+      const currentMs = current.lastConnectedAt || 0;
+      if (updatedMs >= currentMs) {
+        current.lastConnectedAt = updatedMs;
+        current.userAgent = String(device.userAgent || "").slice(0, 300);
+      }
+      byStaffId[device.staffId] = current;
+    });
+    return { statuses: byStaffId };
   }
 );
 

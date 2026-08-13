@@ -1173,6 +1173,81 @@ padding:10px 14px;
   flex: 1;
 }
 
+.staff-message-tabs {
+  display: flex;
+  gap: 16px;
+  padding: 0 4px 8px;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  overflow-x: auto;
+  flex: 0 0 auto;
+}
+.staff-message-tab {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 5px 0;
+  color: #777;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.staff-message-tab.active {
+  color: #2f6f67;
+  box-shadow: inset 0 -2px #2f6f67;
+}
+.staff-notification-state {
+  margin: auto;
+  padding: 24px 12px;
+  color: #777;
+  text-align: center;
+  line-height: 1.45;
+}
+.staff-notification-state button,
+.staff-load-earlier {
+  display: block;
+  margin: 10px auto 2px;
+  padding: 6px 14px;
+  font-size: 12px;
+}
+.staff-notification-loading-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: #2f6f67;
+  animation: staff-message-pulse 1s ease-in-out infinite;
+}
+@keyframes staff-message-pulse { 50% { opacity: .25; transform: scale(.8); } }
+.staff-notification-unread-divider {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 7px 0;
+  color: #b12727;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.staff-notification-unread-divider::before,
+.staff-notification-unread-divider::after { content: ""; height: 1px; flex: 1; background: rgba(177,39,39,.28); }
+.staff-notification-reply-quote {
+  margin: 0 0 7px 12px;
+  padding: 5px 8px;
+  border-left: 2px solid rgba(0,0,0,.24);
+  border-radius: 5px;
+  background: rgba(255,255,255,.52);
+  color: #666;
+  font-size: 11px;
+  line-height: 1.3;
+}
+.staff-notification-reply-arrow { margin-right: 5px; font-weight: 900; }
+.staff-push-status { position: relative; display: inline-flex; align-items: center; gap: 5px; width: 124px; margin: 0; color: #666; font-size: 10px; line-height: 1.15; white-space: nowrap; cursor: pointer; }
+.staff-push-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #aaa; }
+.staff-push-status.connected .staff-push-status-dot { background: #2f9b67; }
+.staff-push-popover { position: absolute; z-index: 30; left: 0; top: calc(100% + 5px); width: min(260px, 70vw); padding: 9px 10px; border: 1px solid rgba(0,0,0,.14); border-radius: 9px; background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.16); color: #444; line-height: 1.4; }
+
 .staff-notification-date-divider {
   display: flex;
   align-items: center;
@@ -2473,6 +2548,7 @@ body.modal-open{
     132px   /* services */
     110px   /* role */
     78px    /* anyone */
+    124px   /* notifications */
     64px    /* save */
     32px    /* up */
     32px    /* down */
@@ -4212,7 +4288,7 @@ stroke-linejoin="round">
     <div id="pushPermissionBody" class="push-permission-body"></div>
     <div id="pushPermissionEnabledNote" class="push-permission-enabled-note hidden"></div>
     <div class="push-permission-actions">
-      <button id="pushPermissionNotNowBtn" type="button" onclick="snoozePushPermissionPrompt()">Not now</button>
+      <button id="pushPermissionNotNowBtn" type="button" onclick="snoozePushPermissionPrompt()">Remind me later</button>
       <button id="pushPermissionCloseBtn" type="button" class="hidden" onclick="closePushPermissionModal()">Close</button>
       <button id="pushPermissionAllowBtn" type="button" class="btn-primary" onclick="requestCalendarPushPermission()">Allow notifications</button>
     </div>
@@ -4224,6 +4300,12 @@ stroke-linejoin="round">
     <h3 class="staff-notification-title">Messages</h3>
     <div id="staffNotificationInviteBar" class="staff-notification-invite-bar"></div>
     <div id="staffPinnedNotificationBar"></div>
+    <div id="staffMessageTabs" class="staff-message-tabs" role="tablist">
+      <button class="staff-message-tab active" type="button" data-message-filter="all">All</button>
+      <button class="staff-message-tab" type="button" data-message-filter="for-me">For me</button>
+      <button class="staff-message-tab" type="button" data-message-filter="unread">Unread</button>
+      <button class="staff-message-tab" type="button" data-message-filter="chat">Chat</button>
+    </div>
     <div id="staffNotificationsList" class="staff-notification-list"></div>
     <div class="staff-message-compose">
       <div id="staffMessageReplyPreview" class="staff-message-reply-preview">
@@ -4558,7 +4640,6 @@ stroke-linejoin="round">
         </select>
 
         <label class="staff-anyone" title="Count this technician as available for Anyone bookings">
-          <span>Anyone</span>
           <input type="checkbox" id="newStaffAvailableForAnyone" checked>
         </label>
 
@@ -4673,6 +4754,7 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
   getDocs,
   serverTimestamp,
   getDoc, 
@@ -4713,6 +4795,7 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const functions = getFunctions(app, "us-central1");
 const registerPushDevice = httpsCallable(functions, "registerPushDevice");
+const getStaffPushStatuses = httpsCallable(functions, "getStaffPushStatuses");
 const FCM_VAPID_KEY = "";
   let currentUserRole = null;
 let currentUserStaffId = null;
@@ -4723,6 +4806,19 @@ let staffPinnedUnsubscribe = null;
 let staffPinnedNotificationIds = [];
 let activePinnedNotificationIndex = 0;
 let staffMessageReplyTarget = null;
+const STAFF_MESSAGES_PAGE_SIZE = 50;
+let staffMessagesOldestSnapshot = null;
+let staffMessagesHasEarlier = false;
+let staffMessagesLoading = true;
+let staffMessagesLoadingEarlier = false;
+let staffMessagesLoadError = '';
+let staffMessagesFilter = 'all';
+let staffMessagesUnreadBoundaryMs = 0;
+let staffMessagesUnreadBoundaryPendingAbove = false;
+let staffMessagesAcknowledgedIds = new Set();
+let staffMessagesMayClearUnread = false;
+let staffPushStatuses = {};
+let staffPushStatusesState = 'idle';
 let calendarViewMode = 'general'; // general | week
 const WEEK_VIEW_ICON = `
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
@@ -5215,7 +5311,7 @@ function buildStaffHeaderRow() {
   const durationCells = isStaffDurationView
     ? STAFF_BOOKING_DURATION_SERVICES.map(service => `<span>${escapeHtml(service.label)}</span>`).join('')
     : '';
-  const managerTail = isStaffDurationView ? '' : '<span>Role</span><span>Anyone</span>';
+  const managerTail = isStaffDurationView ? '' : '<span>Role</span><span>Anyone</span><span>Notifications</span>';
   const actionTail = isStaffDurationView
     ? '<span>Save</span><span></span>'
     : '<span>Save</span><span></span><span></span><span></span><span></span>';
@@ -8560,7 +8656,7 @@ function getPushPermissionCopy() {
     ],
     enabled: 'Notifications already enabled on this phone.',
     allow: 'Allow notifications',
-    notNow: 'Not now',
+    notNow: 'Remind me later',
     close: 'Close',
     cardTitle: 'Messages',
     cardText: 'Open the new Messages guide and notification setup.'
@@ -8579,7 +8675,7 @@ function getPushPermissionCopy() {
     ],
     enabled: 'Notifications are already enabled on this phone.',
     allow: 'Allow notifications',
-    notNow: 'Not now',
+    notNow: 'Remind me later',
     close: 'Close',
     cardTitle: 'Messages',
     cardText: 'Open the new Messages guide and notification setup.'
@@ -8769,10 +8865,19 @@ function stripNotificationHtml(value) {
 function getStaffNotificationPriority(eventType, message = '') {
   if (eventType === 'staff_message') return 'message';
   if (STAFF_NOTIFICATION_KEY_EVENTS.has(eventType)) return 'key';
-  if (eventType === 'updated_app' && /Changed:\s*(?:[^.]*\b(time|staff|technician|date)\b)/i.test(stripNotificationHtml(message))) {
+  if (eventType === 'updated_app' && hasImportantAppointmentChange(message)) {
     return 'key';
   }
   return 'secondary';
+}
+
+function hasImportantAppointmentChange(message = '') {
+  const plainText = stripNotificationHtml(message);
+  const changedMatch = plainText.match(/Changed:\s*([^\n.]*)/i);
+  if (!changedMatch) return false;
+  return changedMatch[1]
+    .split(',')
+    .some(change => /^(?:time|staff|technician|date)\s+to\b/i.test(change.trim()));
 }
 
 function buildStaffNotificationTitle(eventType) {
@@ -8810,7 +8915,8 @@ function buildStaffNotificationDoc({
   recipientStaffName = staffName || getActivityLogStaffName(staffId),
   visibleToAllStaff = false,
   visibleToManager = true,
-  priorityOverride = ''
+  priorityOverride = '',
+  messageGroupId = ''
 }) {
   const body = stripNotificationHtml(message);
   const priority = priorityOverride || (visibleToAllStaff ? 'secondary' : getStaffNotificationPriority(eventType, message));
@@ -8840,11 +8946,12 @@ function buildStaffNotificationDoc({
     senderUid: auth.currentUser?.uid || '',
     senderStaffId: currentUserStaffId || '',
     senderRole: currentUserRole || '',
-    source: 'calendar'
+    source: 'calendar',
+    messageGroupId: messageGroupId || (crypto?.randomUUID ? crypto.randomUUID() : String(Date.now()))
   };
 }
 
-function buildStaffChatMessageDoc({ text, senderLabel, recipientStaffId = '', recipientStaffName = '', visibleToManager = false }) {
+function buildStaffChatMessageDoc({ text, senderLabel, recipientStaffId = '', recipientStaffName = '', visibleToManager = false, messageGroupId = '', replyTo = null }) {
   const cleanText = stripNotificationHtml(text).slice(0, 500);
   const cleanSender = stripNotificationHtml(senderLabel || getCurrentActorLabel() || 'Calendar');
   const senderReadKey = getNotificationReadKey();
@@ -8857,6 +8964,8 @@ function buildStaffChatMessageDoc({ text, senderLabel, recipientStaffId = '', re
     body: cleanText,
     senderLabel: cleanSender,
     senderUid: auth.currentUser?.uid || '',
+    senderStaffId: currentUserStaffId || '',
+    senderRole: currentUserRole || '',
     eventType: 'staff_message',
     entityType: 'message',
     entityId: '',
@@ -8868,7 +8977,13 @@ function buildStaffChatMessageDoc({ text, senderLabel, recipientStaffId = '', re
     readBy: senderReadKey ? { [senderReadKey]: true } : {},
     createdAt: serverTimestamp(),
     expiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
-    source: 'calendar_chat'
+    source: 'calendar_chat',
+    messageGroupId: messageGroupId || (crypto?.randomUUID ? crypto.randomUUID() : String(Date.now())),
+    replyTo: replyTo ? {
+      messageGroupId: String(replyTo.messageGroupId || replyTo.id || ''),
+      senderLabel: stripNotificationHtml(replyTo.senderLabel || ''),
+      preview: getStaffNotificationPlainBody(replyTo).slice(0, 160)
+    } : null
   };
 }
 
@@ -8885,6 +9000,7 @@ async function queueStaffNotification({
 
   try {
     const basePriority = getStaffNotificationPriority(eventType, message);
+    const messageGroupId = crypto?.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(16).slice(2);
     const recipients = getActiveStaffList({ includeAnyone: false }).filter(s => s.id && s.id !== ANYONE_ID);
     const writes = recipients.map(recipient => {
       const isPersonalRecipient = staffId && recipient.id === staffId;
@@ -8901,6 +9017,7 @@ async function queueStaffNotification({
         visibleToAllStaff: true,
         visibleToManager: false,
         priorityOverride: isPersonalRecipient ? basePriority : 'secondary'
+        ,messageGroupId
       }));
     });
 
@@ -8917,6 +9034,7 @@ async function queueStaffNotification({
       visibleToAllStaff: true,
       visibleToManager: true,
       priorityOverride: basePriority
+      ,messageGroupId
     })));
 
     await Promise.all(writes);
@@ -8935,6 +9053,10 @@ function stopStaffNotificationsListener() {
     staffPinnedUnsubscribe = null;
   }
   staffNotifications = [];
+  staffMessagesOldestSnapshot = null;
+  staffMessagesHasEarlier = false;
+  staffMessagesLoading = true;
+  staffMessagesLoadError = '';
   staffPinnedNotificationIds = [];
   activePinnedNotificationIndex = 0;
   updateStaffNotificationsBadge();
@@ -8949,26 +9071,71 @@ function startStaffNotificationsListener() {
   startStaffPinnedNotificationsListener();
 
   const baseRef = collection(db, 'staffNotifications');
+  staffMessagesLoading = true;
+  staffMessagesLoadError = '';
+  renderStaffNotifications();
   const q = currentUserRole === 'manager'
-    ? query(baseRef, where('visibleToManager', '==', true))
-    : query(baseRef, where('recipientStaffId', '==', currentUserStaffId));
+    ? query(baseRef, where('visibleToManager', '==', true), orderBy('createdAt', 'desc'), limit(STAFF_MESSAGES_PAGE_SIZE))
+    : query(baseRef, where('recipientStaffId', '==', currentUserStaffId), orderBy('createdAt', 'desc'), limit(STAFF_MESSAGES_PAGE_SIZE));
 
   staffNotificationsUnsubscribe = onSnapshot(q, snap => {
-    staffNotifications = snap.docs
-      .map(docSnap => ({ id: docSnap.id, ...docSnap.data() }))
-      .sort((a, b) => {
-        const aMs = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-        const bMs = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-        return aMs - bMs;
-      })
-      .slice(-80);
+    const newestPage = snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data(), _snapshot: docSnap })).reverse();
+    const olderItems = staffNotifications.filter(item => item._olderPage === true);
+    const merged = new Map(olderItems.map(item => [item.id, item]));
+    newestPage.forEach(item => merged.set(item.id, item));
+    staffNotifications = Array.from(merged.values()).sort((a, b) => getStaffNotificationMillis(a) - getStaffNotificationMillis(b));
+    staffMessagesOldestSnapshot = staffNotifications[0]?._snapshot || snap.docs[snap.docs.length - 1] || null;
+    if (!olderItems.length) staffMessagesHasEarlier = snap.size === STAFF_MESSAGES_PAGE_SIZE;
+    staffMessagesLoading = false;
+    staffMessagesLoadError = '';
     updateStaffNotificationsBadge();
     renderStaffNotifications();
-    scrollStaffNotificationsToBottom();
+    if (!staffMessagesUnreadBoundaryMs) scrollStaffNotificationsToBottom();
   }, err => {
     console.warn('Staff notifications could not be loaded:', err);
+    staffMessagesLoading = false;
+    staffMessagesLoadError = 'Messages could not be loaded.';
+    renderStaffNotifications();
   });
 }
+
+function getStaffNotificationMillis(item) {
+  return item?.createdAt?.toMillis ? item.createdAt.toMillis() : 0;
+}
+
+function buildStaffMessagesQuery({ afterSnapshot = null } = {}) {
+  const baseRef = collection(db, 'staffNotifications');
+  const filters = currentUserRole === 'manager'
+    ? [where('visibleToManager', '==', true)]
+    : [where('recipientStaffId', '==', currentUserStaffId)];
+  const clauses = [...filters, orderBy('createdAt', 'desc')];
+  if (afterSnapshot) clauses.push(startAfter(afterSnapshot));
+  clauses.push(limit(STAFF_MESSAGES_PAGE_SIZE));
+  return query(baseRef, ...clauses);
+}
+
+window.loadEarlierStaffNotifications = async () => {
+  if (!staffMessagesOldestSnapshot || staffMessagesLoadingEarlier) return;
+  staffMessagesLoadingEarlier = true;
+  renderStaffNotifications();
+  try {
+    const snap = await getDocs(buildStaffMessagesQuery({ afterSnapshot: staffMessagesOldestSnapshot }));
+    const older = snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data(), _snapshot: docSnap, _olderPage: true })).reverse();
+    const merged = new Map([...older, ...staffNotifications].map(item => [item.id, item]));
+    staffNotifications = Array.from(merged.values()).sort((a, b) => getStaffNotificationMillis(a) - getStaffNotificationMillis(b));
+    if (snap.docs.length) staffMessagesOldestSnapshot = snap.docs[snap.docs.length - 1];
+    staffMessagesHasEarlier = snap.size === STAFF_MESSAGES_PAGE_SIZE;
+    staffMessagesUnreadBoundaryPendingAbove = staffMessagesHasEarlier && staffMessagesUnreadBoundaryMs > 0 && getStaffNotificationMillis(staffNotifications[0]) > staffMessagesUnreadBoundaryMs;
+  } catch (err) {
+    console.warn('Earlier staff messages could not be loaded:', err);
+    showToast('Earlier messages could not be loaded', 'error');
+  } finally {
+    staffMessagesLoadingEarlier = false;
+    renderStaffNotifications();
+  }
+};
+
+window.retryStaffNotifications = () => startStaffNotificationsListener();
 
 function isStaffNotificationUnread(item) {
   const readKey = getNotificationReadKey();
@@ -9051,14 +9218,8 @@ async function saveStaffPinnedNotificationIds() {
 }
 
 function getPinnedStaffNotifications() {
-  const availableIds = new Set(staffNotifications.map(item => item.id));
-  const cleanedIds = staffPinnedNotificationIds.filter(id => availableIds.has(id));
-  if (cleanedIds.length !== staffPinnedNotificationIds.length) {
-    staffPinnedNotificationIds = cleanedIds;
-    saveStaffPinnedNotificationIds().catch(err => console.warn('Pinned staff messages cleanup failed:', err));
-  }
   return staffPinnedNotificationIds
-    .map(id => staffNotifications.find(item => item.id === id))
+    .map(id => staffNotifications.find(item => (item.messageGroupId || item.id) === id || item.id === id))
     .filter(Boolean);
 }
 
@@ -9118,12 +9279,14 @@ function renderPinnedStaffNotificationBar() {
 
 async function toggleStaffNotificationPinned(notificationId) {
   if (!notificationId) return;
-  const existingIndex = staffPinnedNotificationIds.indexOf(notificationId);
+  const item = staffNotifications.find(entry => entry.id === notificationId);
+  const pinKey = item?.messageGroupId || notificationId;
+  const existingIndex = staffPinnedNotificationIds.indexOf(pinKey);
   if (existingIndex >= 0) {
     staffPinnedNotificationIds.splice(existingIndex, 1);
     activePinnedNotificationIndex = Math.max(0, Math.min(activePinnedNotificationIndex, staffPinnedNotificationIds.length - 1));
   } else {
-    staffPinnedNotificationIds.unshift(notificationId);
+    staffPinnedNotificationIds.unshift(pinKey);
     activePinnedNotificationIndex = 0;
   }
   renderStaffNotifications();
@@ -9172,13 +9335,53 @@ function buildStaffReplyIconSvg() {
   return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 14l-5-5 5-5" fill="none" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 20v-4.5A6.5 6.5 0 0 0 13.5 9H4" fill="none" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 }
 
+function isStaffNotificationForCurrentUser(item) {
+  if (currentUserRole === 'manager') return item.priority === 'key' || item.visibleToManager === true;
+  return item.recipientStaffId === currentUserStaffId && item.priority === 'key';
+}
+
+function getFilteredStaffNotifications() {
+  if (staffMessagesFilter === 'for-me') return staffNotifications.filter(isStaffNotificationForCurrentUser);
+  if (staffMessagesFilter === 'unread') return staffNotifications.filter(item => isStaffNotificationUnread(item) || staffMessagesAcknowledgedIds.has(item.id));
+  if (staffMessagesFilter === 'chat') return staffNotifications.filter(item => item.priority === 'message' || item.eventType === 'staff_message');
+  return staffNotifications;
+}
+
+function bindStaffMessageTabs() {
+  document.querySelectorAll('[data-message-filter]').forEach(button => {
+    button.classList.toggle('active', button.dataset.messageFilter === staffMessagesFilter);
+    button.onclick = () => {
+      staffMessagesFilter = button.dataset.messageFilter || 'all';
+      renderStaffNotifications();
+    };
+  });
+}
+
+function getStaffChatCardStyle(item) {
+  if (item.priority !== 'message') return '';
+  if (item.senderRole === 'manager') return 'background:#fff;border-color:rgba(0,0,0,.16);';
+  if (item.senderRole === 'reception') return 'background:#ececec;border-color:#d2d2d2;';
+  const sender = getActiveStaffList({ includeAnyone: false }).find(staff => staff.id === item.senderStaffId);
+  return sender?.color ? `background:${escapeHtml(sender.color)};border-color:rgba(0,0,0,.12);` : '';
+}
+
 function renderStaffNotifications() {
   const list = document.getElementById('staffNotificationsList');
   if (!list) return;
 
   renderStaffNotificationInviteBar();
   renderPinnedStaffNotificationBar();
-  if (!staffNotifications.length) {
+  bindStaffMessageTabs();
+  if (staffMessagesLoading) {
+    list.innerHTML = '<div class="staff-notification-state"><span class="staff-notification-loading-dot"></span>Loading messages…</div>';
+    return;
+  }
+  if (staffMessagesLoadError) {
+    list.innerHTML = `<div class="staff-notification-state">${escapeHtml(staffMessagesLoadError)}<button type="button" onclick="retryStaffNotifications()">Retry</button></div>`;
+    return;
+  }
+  const visibleNotifications = getFilteredStaffNotifications();
+  if (!visibleNotifications.length) {
     list.innerHTML = '<div class="staff-notification-empty">No messages yet.</div>';
     return;
   }
@@ -9186,7 +9389,18 @@ function renderStaffNotifications() {
   let lastDateLabel = '';
   const htmlParts = [];
 
-  for (const item of staffNotifications) {
+  if (staffMessagesHasEarlier) {
+    htmlParts.push(`<button type="button" class="staff-load-earlier" onclick="loadEarlierStaffNotifications()" ${staffMessagesLoadingEarlier ? 'disabled' : ''}>${staffMessagesLoadingEarlier ? 'Loading…' : 'Load earlier'}</button>`);
+  }
+  if (staffMessagesUnreadBoundaryPendingAbove) {
+    htmlParts.push('<div class="staff-notification-unread-divider">Unread continues above</div>');
+  }
+  let unreadDividerShown = false;
+  for (const item of visibleNotifications) {
+    if (!unreadDividerShown && staffMessagesUnreadBoundaryMs && getStaffNotificationMillis(item) >= staffMessagesUnreadBoundaryMs) {
+      htmlParts.push('<div class="staff-notification-unread-divider">Unread</div>');
+      unreadDividerShown = true;
+    }
     const dateLabel = formatNotificationDateDivider(item);
     if (dateLabel && dateLabel !== lastDateLabel) {
       htmlParts.push(`<div class="staff-notification-date-divider">${escapeHtml(dateLabel)}</div>`);
@@ -9201,12 +9415,16 @@ function renderStaffNotifications() {
     const kindLabel = priority === 'key'
       ? '<div class="staff-notification-meta"><span class="staff-notification-kind key">Important</span></div>'
       : '';
-    const isPinned = staffPinnedNotificationIds.includes(item.id);
+    const isPinned = staffPinnedNotificationIds.includes(item.messageGroupId || item.id) || staffPinnedNotificationIds.includes(item.id);
+    const replyQuote = item.replyTo?.preview
+      ? `<div class="staff-notification-reply-quote"><span class="staff-notification-reply-arrow">↩</span>${item.replyTo.senderLabel ? '<strong>' + escapeHtml(item.replyTo.senderLabel) + '</strong> · ' : ''}${escapeHtml(item.replyTo.preview)}</div>`
+      : '';
     htmlParts.push(`
-      <div class="staff-notification-card ${priority} ${unread ? 'unread' : ''} ${isPinned ? 'pinned' : ''}" data-notification-id="${escapeHtml(item.id)}">
+      <div class="staff-notification-card ${priority} ${unread ? 'unread' : ''} ${isPinned ? 'pinned' : ''}" style="${getStaffChatCardStyle(item)}" data-notification-id="${escapeHtml(item.id)}">
         <button type="button" class="staff-notification-pin-action" data-pin-notification-id="${escapeHtml(item.id)}" aria-label="${isPinned ? 'Unpin message' : 'Pin message'}">${buildStaffPinIconSvg()}</button>
         <button type="button" class="staff-notification-reply-action" data-reply-notification-id="${escapeHtml(item.id)}" aria-label="Reply to message">${buildStaffReplyIconSvg()}</button>
         ${kindLabel}
+        ${replyQuote}
         <div class="staff-notification-body">${item.senderLabel ? '<strong>' + escapeHtml(item.senderLabel) + '</strong>\n' : ''}${escapeHtml(getStaffNotificationDisplayBody(item))}</div>
         ${photo}
         <div class="staff-notification-footer">${escapeHtml(formatNotificationCreatedAt(item))}</div>
@@ -9259,7 +9477,20 @@ async function markStaffNotificationRead(item) {
 
 async function markVisibleKeyNotificationsRead() {
   const unreadKey = staffNotifications.filter(item => (item.priority === 'key' || item.priority === 'message') && isStaffNotificationUnread(item));
+  unreadKey.forEach(item => staffMessagesAcknowledgedIds.add(item.id));
   await Promise.all(unreadKey.map(markStaffNotificationRead));
+}
+
+async function clearCalendarPhoneNotifications() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const notifications = await registration.getNotifications?.({ includeTriggered: true });
+    (notifications || []).forEach(notification => notification.close());
+    registration.active?.postMessage({ type: 'CLEAR_CALENDAR_NOTIFICATIONS' });
+  } catch (err) {
+    console.warn('Phone notifications could not be cleared:', err);
+  }
 }
 
 function normalizeStaffNotificationSenderLabel(value) {
@@ -9393,24 +9624,30 @@ function setStaffMessageSendBusy(isBusy) {
 
 window.sendStaffChatMessage = async () => {
   const input = document.getElementById('staffMessageInput');
-  const text = buildStaffReplyText((input?.value || '').trim());
+  const text = (input?.value || '').trim();
   if (!text) return;
 
   setStaffMessageSendBusy(true);
   try {
     const senderLabel = getCurrentActorLabel();
+    const messageGroupId = crypto?.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(16).slice(2);
+    const replyTo = staffMessageReplyTarget;
     const recipients = getActiveStaffList({ includeAnyone: false }).filter(s => s.id && s.id !== ANYONE_ID);
     const writes = recipients.map(recipient => addDoc(collection(db, 'staffNotifications'), buildStaffChatMessageDoc({
       text,
       senderLabel,
       recipientStaffId: recipient.id,
       recipientStaffName: recipient.name,
-      visibleToManager: false
+      visibleToManager: false,
+      messageGroupId,
+      replyTo
     })));
     writes.push(addDoc(collection(db, 'staffNotifications'), buildStaffChatMessageDoc({
       text,
       senderLabel,
-      visibleToManager: true
+      visibleToManager: true,
+      messageGroupId,
+      replyTo
     })));
     await Promise.all(writes);
     if (input) input.value = '';
@@ -9426,10 +9663,34 @@ window.sendStaffChatMessage = async () => {
 window.openStaffNotifications = async () => {
   const modal = document.getElementById('staffNotificationsModal');
   if (!modal) return;
+  const unreadBeforeOpen = staffNotifications.filter(item => (item.priority === 'key' || item.priority === 'message') && isStaffNotificationUnread(item));
+  if (unreadBeforeOpen.length) {
+    staffMessagesUnreadBoundaryMs = Math.min(...unreadBeforeOpen.map(getStaffNotificationMillis).filter(Boolean));
+    staffMessagesUnreadBoundaryPendingAbove = staffMessagesHasEarlier && getStaffNotificationMillis(staffNotifications[0]) >= staffMessagesUnreadBoundaryMs;
+  }
   renderStaffNotifications();
   modal.classList.remove('hidden');
-  scrollStaffNotificationsToBottom();
-  await markVisibleKeyNotificationsRead();
+  const list = document.getElementById('staffNotificationsList');
+  requestAnimationFrame(() => {
+    const divider = list?.querySelector('.staff-notification-unread-divider');
+    if (divider) divider.scrollIntoView({ block: 'start' });
+    else scrollStaffNotificationsToBottom();
+  });
+  staffMessagesMayClearUnread = false;
+  setTimeout(() => { staffMessagesMayClearUnread = true; }, 500);
+  if (list && !list.dataset.unreadScrollBound) {
+    list.dataset.unreadScrollBound = 'true';
+    list.addEventListener('scroll', () => {
+      if (!staffMessagesMayClearUnread || !staffMessagesUnreadBoundaryMs) return;
+      if (list.scrollTop + list.clientHeight >= list.scrollHeight - 18) {
+        staffMessagesUnreadBoundaryMs = 0;
+        staffMessagesUnreadBoundaryPendingAbove = false;
+        staffMessagesAcknowledgedIds.clear();
+        renderStaffNotifications();
+      }
+    }, { passive: true });
+  }
+  await Promise.all([markVisibleKeyNotificationsRead(), clearCalendarPhoneNotifications()]);
 };
 
 window.closeStaffNotifications = () => {
@@ -10954,6 +11215,7 @@ window.openStaff = () => {
 
   renderStaff();
   staffModal.classList.remove('hidden');
+  if (currentUserRole === 'manager') refreshStaffPushStatuses();
 };
 
 
@@ -11000,6 +11262,7 @@ function renderStaff() {
           ${buildStaffPersonalDurationRows(s, getStaffBookingDurations(s))}
         </div>
         <span id="staff-status-${s.id}" class="staff-saved">Saved</span>
+        ${buildStaffPushStatus(s.id)}
       </div>
     `;
     return;
@@ -11030,9 +11293,9 @@ function renderStaff() {
           <option value="manager" ${s.role === 'manager' ? 'selected' : ''}>Manager</option>
         </select>
         <label class="staff-anyone" title="Count this technician as available for Anyone bookings">
-          <span>Anyone</span>
           <input type="checkbox" data-staff-anyone="${s.id}" ${isStaffAvailableForAnyone(s) ? 'checked' : ''}>
         </label>
+        ${buildStaffPushStatus(s.id)}
         <button class="staff-btn staff-save-btn primary" data-staff-save="${s.id}" onclick="saveStaffMeta('${s.id}')">Save</button>
         <button class="staff-btn staff-move-btn" onclick="moveStaff(${originalIndex}, -1)">^</button>
         <button class="staff-btn staff-move-btn" onclick="moveStaff(${originalIndex}, 1)">v</button>
@@ -11043,6 +11306,52 @@ function renderStaff() {
   });
 
   setupStaffServiceDropdownBehavior();
+  bindStaffPushStatusPopovers();
+}
+
+function buildStaffPushStatus(staffId) {
+  if (currentUserRole !== 'manager') return '';
+  if (staffPushStatusesState !== 'ready') {
+    const unavailable = staffPushStatusesState === 'unavailable';
+    const label = unavailable ? 'Status unavailable' : 'Checking…';
+    const details = unavailable
+      ? 'The status service is prepared in this test branch, but the production Cloud Function has not been deployed without your approval.'
+      : 'Checking active notification devices.';
+    return `<span class="staff-push-status" data-push-status="${escapeHtml(staffId)}"><span class="staff-push-status-dot"></span>${escapeHtml(label)}<span class="staff-push-popover hidden">${escapeHtml(details)}</span></span>`;
+  }
+  const status = staffPushStatuses[staffId];
+  const connected = Number(status?.enabledDevices || 0) > 0;
+  const label = connected ? 'Connected' : 'Not connected';
+  const last = status?.lastConnectedAt ? new Date(status.lastConnectedAt).toLocaleString('en-US') : 'No active device registration';
+  const details = connected
+    ? `${status.enabledDevices} active device${status.enabledDevices === 1 ? '' : 's'}. Last connected: ${last}.${status.userAgent ? ' Device: ' + status.userAgent : ''}`
+    : 'No active notification device is registered. The manager cannot enable notifications remotely; please check this employee’s phone and browser settings.';
+  return `<span class="staff-push-status ${connected ? 'connected' : ''}" data-push-status="${escapeHtml(staffId)}"><span class="staff-push-status-dot"></span>${escapeHtml(label)}<span class="staff-push-popover hidden">${escapeHtml(details)}</span></span>`;
+}
+
+function bindStaffPushStatusPopovers() {
+  document.querySelectorAll('[data-push-status]').forEach(status => {
+    status.onclick = event => {
+      event.stopPropagation();
+      const popover = status.querySelector('.staff-push-popover');
+      document.querySelectorAll('.staff-push-popover').forEach(item => { if (item !== popover) item.classList.add('hidden'); });
+      popover?.classList.toggle('hidden');
+    };
+  });
+}
+
+async function refreshStaffPushStatuses() {
+  staffPushStatusesState = 'loading';
+  try {
+    const result = await getStaffPushStatuses();
+    staffPushStatuses = result.data?.statuses || {};
+    staffPushStatusesState = 'ready';
+    if (!staffModal.classList.contains('hidden')) renderStaff();
+  } catch (err) {
+    staffPushStatusesState = 'unavailable';
+    console.warn('Notification connection statuses are not available yet:', err);
+    if (!staffModal.classList.contains('hidden')) renderStaff();
+  }
 }
 
 
