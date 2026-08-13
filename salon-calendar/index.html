@@ -9373,7 +9373,10 @@ function syncStaffPinnedCardState() {
     );
     card.classList.toggle('pinned', isPinned);
     const button = card.querySelector('[data-pin-notification-id]');
-    if (button) button.setAttribute('aria-label', isPinned ? 'Unpin message' : 'Pin message');
+    if (button) {
+      button.dataset.pinIntent = isPinned ? 'unpin' : 'pin';
+      button.setAttribute('aria-label', isPinned ? 'Unpin message' : 'Pin message');
+    }
   });
 }
 
@@ -9641,10 +9644,11 @@ function renderStaffNotifications() {
       if (card) card.style.transform = '';
       button.dataset.pinBusy = 'true';
       button.disabled = true;
+      const desiredPinned = !card?.classList.contains('pinned');
       try {
         await toggleStaffNotificationPinned(
           button.dataset.pinNotificationId,
-          button.dataset.pinIntent !== 'unpin'
+          desiredPinned
         );
       } finally {
         button.dataset.pinBusy = 'false';
