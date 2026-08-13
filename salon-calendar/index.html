@@ -4859,8 +4859,10 @@ let currentUserEmail = '';
 let staffNotifications = [];
 let staffNotificationsUnsubscribe = null;
 let staffPinnedUnsubscribe = null;
+let staffPinnedChatUnsubscribe = null;
 let staffPinnedNotificationIds = [];
 let staffPinnedMediaPaths = {};
+let staffPinnedChatMessages = [];
 let activePinnedNotificationIndex = 0;
 let staffMessageReplyTarget = null;
 const STAFF_MESSAGES_PAGE_SIZE = 50;
@@ -9043,6 +9045,7 @@ function buildStaffChatMessageDoc({ text, senderLabel, recipientStaffId = '', re
     expiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
     source: 'calendar_chat',
     messageGroupId: messageGroupId || (crypto?.randomUUID ? crypto.randomUUID() : String(Date.now())),
+    sourceMessageId: messageGroupId || '',
     replyTo: replyTo ? {
       messageGroupId: String(replyTo.messageGroupId || replyTo.id || ''),
       senderLabel: stripNotificationHtml(replyTo.senderLabel || ''),
@@ -9125,6 +9128,10 @@ function stopStaffNotificationsListener() {
     staffPinnedUnsubscribe();
     staffPinnedUnsubscribe = null;
   }
+  if (staffPinnedChatUnsubscribe) {
+    staffPinnedChatUnsubscribe();
+    staffPinnedChatUnsubscribe = null;
+  }
   staffNotifications = [];
   staffMessagesOldestSnapshot = null;
   staffMessagesHasEarlier = false;
@@ -9132,6 +9139,7 @@ function stopStaffNotificationsListener() {
   staffMessagesLoadError = '';
   staffPinnedNotificationIds = [];
   staffPinnedMediaPaths = {};
+  staffPinnedChatMessages = [];
   activePinnedNotificationIndex = 0;
   updateStaffNotificationsBadge();
   renderStaffNotifications();
@@ -9284,6 +9292,22 @@ function startStaffPinnedNotificationsListener() {
   }, err => {
     console.warn('Pinned staff messages could not be loaded:', err);
   });
+
+  if (staffPinnedChatUnsubscribe) staffPinnedChatUnsubscribe();
+  staffPinnedChatUnsubscribe = onSnapshot(
+    query(collection(db, 'staffChatMessages'), where('pinned', '==', true), limit(20)),
+    snap => {
+      staffPinnedChatMessages = snap.docs.map(docSnap => ({
+        id: docSnap.id,
+        messageGroupId: docSnap.id,
+        sourceMessageId: docSnap.id,
+        ...docSnap.data(),
+        _chatMaster: true
+      })).sort((a, b) => getStaffNotificationMillis(b) - getStaffNotificationMillis(a));
+      renderStaffNotifications();
+    },
+    err => console.warn('Pinned chat messages could not be loaded:', err)
+  );
 }
 
 async function saveStaffPinnedNotificationIds() {
@@ -9295,9 +9319,10 @@ async function saveStaffPinnedNotificationIds() {
 }
 
 function getPinnedStaffNotifications() {
-  return staffPinnedNotificationIds
+  const systemPinned = staffPinnedNotificationIds
     .map(id => staffNotifications.find(item => (item.messageGroupId || item.id) === id || item.id === id))
     .filter(Boolean);
+  return [...staffPinnedChatMessages, ...systemPinned].slice(0, 20);
 }
 
 function buildPinnedStaffNotifications() {
@@ -9312,7 +9337,7 @@ function buildPinnedStaffNotifications() {
     : `<div class="staff-notification-pinned-body">${attachment?.type === 'audio' ? '🎙 ' : ''}${escapeHtml(body)}</div>`;
   return `
     <div class="staff-notification-pinned ${pinned.length > 1 ? 'has-many' : ''}">
-      <div class="staff-notification-pinned-card" data-pinned-notification-id="${escapeHtml(item.id)}">
+      <div class="staff-notification-pinned-card" data-pinned-notification-id="${escapeHtml(item.messageGroupId || item.id)}">
         ${mediaPreview}
       </div>
       <div class="staff-notification-pinned-nav">
@@ -9378,12 +9403,54 @@ async function preservePinnedStaffMessageAttachment(item) {
     updatedAt: serverTimestamp(),
     updatedBy: getCurrentActorLabel()
   }, { merge: true });
+  if (item.eventType === 'staff_message' && pinKey) {
+    await setDoc(doc(db, 'staffChatMessages', pinKey), {
+      attachment: { ...attachment, storagePath: pinnedPath }
+    }, { merge: true });
+  }
+}
+
+function buildStaffChatMasterFromNotification(item, pinKey) {
+  return {
+    body: String(item?.body || item?.title || 'Message'),
+    title: String(item?.title || 'Message'),
+    senderLabel: String(item?.senderLabel || 'Calendar'),
+    senderUid: String(item?.senderUid || auth.currentUser?.uid || ''),
+    senderStaffId: String(item?.senderStaffId || ''),
+    senderRole: String(item?.senderRole || ''),
+    eventType: 'staff_message',
+    entityType: 'message',
+    priority: 'message',
+    messageGroupId: pinKey,
+    sourceMessageId: pinKey,
+    replyTo: item?.replyTo || null,
+    attachment: item?.attachment || null,
+    createdAt: item?.createdAt || serverTimestamp()
+  };
 }
 
 async function toggleStaffNotificationPinned(notificationId) {
   if (!notificationId) return;
   const item = staffNotifications.find(entry => entry.id === notificationId);
+  if (!item) return;
   const pinKey = item?.messageGroupId || notificationId;
+  if (item.eventType === 'staff_message' || item.priority === 'message') {
+    const isPinned = staffPinnedChatMessages.some(message => message.id === pinKey);
+    renderStaffNotifications();
+    try {
+      await setDoc(doc(db, 'staffChatMessages', pinKey), {
+        ...buildStaffChatMasterFromNotification(item, pinKey),
+        pinned: !isPinned,
+        pinnedAt: !isPinned ? serverTimestamp() : null,
+        pinnedBy: !isPinned ? getCurrentActorLabel() : ''
+      }, { merge: true });
+      if (!isPinned && item.attachment?.storagePath) await preservePinnedStaffMessageAttachment(item);
+    } catch (err) {
+      console.warn('Chat message pin was not saved:', err);
+      showToast('Pinned message was not saved', 'error');
+    }
+    return;
+  }
   const existingIndex = staffPinnedNotificationIds.indexOf(pinKey);
   const isPinning = existingIndex < 0;
   if (existingIndex >= 0) {
@@ -9422,7 +9489,10 @@ function movePinnedStaffNotification(delta) {
 function scrollToStaffNotification(notificationId) {
   const list = document.getElementById('staffNotificationsList');
   const card = Array.from(list?.querySelectorAll('.staff-notification-card') || [])
-    .find(el => el.dataset.notificationId === notificationId);
+    .find(el => {
+      const item = staffNotifications.find(entry => entry.id === el.dataset.notificationId);
+      return el.dataset.notificationId === notificationId || item?.messageGroupId === notificationId;
+    });
   if (!card) return;
   card.scrollIntoView({ block: 'center', behavior: 'smooth' });
   card.classList.add('unread');
@@ -9575,7 +9645,10 @@ function renderStaffNotifications() {
     const kindLabel = priority === 'key'
       ? '<div class="staff-notification-meta"><span class="staff-notification-kind key">Important</span></div>'
       : '';
-    const isPinned = staffPinnedNotificationIds.includes(item.messageGroupId || item.id) || staffPinnedNotificationIds.includes(item.id);
+    const isChatMessage = item.eventType === 'staff_message' || item.priority === 'message';
+    const isPinned = isChatMessage
+      ? staffPinnedChatMessages.some(message => message.id === (item.sourceMessageId || item.messageGroupId || item.id))
+      : staffPinnedNotificationIds.includes(item.messageGroupId || item.id) || staffPinnedNotificationIds.includes(item.id);
     const replyQuote = item.replyTo?.preview
       ? `<div class="staff-notification-reply-quote"><span class="staff-notification-reply-arrow">↩</span>${item.replyTo.senderLabel ? '<strong>' + escapeHtml(item.replyTo.senderLabel) + '</strong> · ' : ''}${escapeHtml(item.replyTo.preview)}</div>`
       : '';
@@ -9974,6 +10047,20 @@ window.sendStaffChatMessage = async () => {
     uploadedAttachment = await uploadStaffMessageAttachment(messageGroupId);
     sendStage = 'message-save';
     const replyTo = staffMessageReplyTarget;
+    const masterNotification = buildStaffChatMessageDoc({
+      text,
+      senderLabel,
+      visibleToManager: true,
+      messageGroupId,
+      replyTo,
+      attachment: uploadedAttachment
+    });
+    await setDoc(doc(db, 'staffChatMessages', messageGroupId), {
+      ...buildStaffChatMasterFromNotification(masterNotification, messageGroupId),
+      pinned: false,
+      pinnedAt: null,
+      pinnedBy: ''
+    });
     const recipients = getActiveStaffList({ includeAnyone: false }).filter(s => s.id && s.id !== ANYONE_ID);
     const writes = recipients.map(recipient => addDoc(collection(db, 'staffNotifications'), buildStaffChatMessageDoc({
       text,
