@@ -4805,6 +4805,8 @@ import {
   startAfter,
   getDocs,
   serverTimestamp,
+  arrayUnion,
+  arrayRemove,
   getDoc, 
   setDoc
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
@@ -4862,6 +4864,7 @@ let staffPinnedUnsubscribe = null;
 let staffPinnedNotificationIds = [];
 let staffPinnedMediaPaths = {};
 const staffPinToggleLocks = new Set();
+const staffPinToggleCooldownUntil = new Map();
 let activePinnedNotificationIndex = 0;
 let staffMessageReplyTarget = null;
 const STAFF_MESSAGES_PAGE_SIZE = 50;
@@ -9288,9 +9291,9 @@ function startStaffPinnedNotificationsListener() {
   });
 }
 
-async function saveStaffPinnedNotificationIds() {
+async function saveStaffPinnedNotificationId(pinKey, isPinned) {
   await setDoc(getStaffPinnedDocRef(), {
-    ids: staffPinnedNotificationIds.slice(0, 20),
+    ids: isPinned ? arrayUnion(pinKey) : arrayRemove(pinKey),
     updatedAt: serverTimestamp(),
     updatedBy: getCurrentActorLabel()
   }, { merge: true });
@@ -9399,8 +9402,9 @@ async function toggleStaffNotificationPinned(notificationId) {
   if (!notificationId) return;
   const item = staffNotifications.find(entry => entry.id === notificationId);
   const pinKey = item?.messageGroupId || notificationId;
-  if (staffPinToggleLocks.has(pinKey)) return;
+  if (staffPinToggleLocks.has(pinKey) || Date.now() < (staffPinToggleCooldownUntil.get(pinKey) || 0)) return;
   staffPinToggleLocks.add(pinKey);
+  staffPinToggleCooldownUntil.set(pinKey, Date.now() + 1800);
   try {
   const existingIndex = staffPinnedNotificationIds.indexOf(pinKey);
   const isPinning = existingIndex < 0;
@@ -9414,7 +9418,7 @@ async function toggleStaffNotificationPinned(notificationId) {
   renderPinnedStaffNotificationBar();
   syncStaffPinnedCardState();
   try {
-    await saveStaffPinnedNotificationIds();
+    await saveStaffPinnedNotificationId(pinKey, isPinning);
   } catch (err) {
     console.warn('Pinned staff message was not saved:', err);
     showToast('Pinned message was not saved', 'error');
@@ -9632,6 +9636,9 @@ function renderStaffNotifications() {
       event.preventDefault();
       event.stopPropagation();
       if (button.dataset.pinBusy === 'true') return;
+      const card = button.closest('.staff-notification-card');
+      card?.classList.remove('swipe-action-open', 'swipe-reply-hint', 'swipe-dragging');
+      if (card) card.style.transform = '';
       button.dataset.pinBusy = 'true';
       button.disabled = true;
       try {
