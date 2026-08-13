@@ -1463,7 +1463,7 @@ padding:10px 14px;
   margin-left: 0;
   overflow: visible;
   touch-action: pan-y;
-  transition: transform 0.16s ease;
+  transition: transform 0.10s ease-out;
   will-change: transform;
 }
 
@@ -1472,11 +1472,11 @@ padding:10px 14px;
 }
 
 .staff-notification-card.swipe-action-open {
-  transform: translateX(52px);
+  transform: translateX(44px);
 }
 
 .staff-notification-card.swipe-reply-hint {
-  transform: translateX(-52px);
+  transform: translateX(-44px);
 }
 
 .staff-notification-pin-action,
@@ -1497,13 +1497,13 @@ padding:10px 14px;
 }
 
 .staff-notification-pin-action {
-  left: -46px;
+  left: -42px;
   background: #fff1ee;
   color: #c5443f;
 }
 
 .staff-notification-reply-action {
-  right: -46px;
+  right: -42px;
   background: #eef8ff;
   color: #3d6f86;
 }
@@ -1533,6 +1533,26 @@ padding:10px 14px;
 
 .staff-notification-card.pinned .staff-notification-pin-action svg {
   fill: currentColor;
+}
+
+.staff-notification-pinned-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.staff-notification-pinned-preview .staff-message-media-loading {
+  padding: 0;
+}
+
+.staff-notification-pinned-preview img {
+  display: block;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 8px;
+  object-fit: cover;
 }
 
 .staff-notification-card.key {
@@ -4840,6 +4860,7 @@ let staffNotifications = [];
 let staffNotificationsUnsubscribe = null;
 let staffPinnedUnsubscribe = null;
 let staffPinnedNotificationIds = [];
+let staffPinnedMediaPaths = {};
 let activePinnedNotificationIndex = 0;
 let staffMessageReplyTarget = null;
 const STAFF_MESSAGES_PAGE_SIZE = 50;
@@ -9110,6 +9131,7 @@ function stopStaffNotificationsListener() {
   staffMessagesLoading = true;
   staffMessagesLoadError = '';
   staffPinnedNotificationIds = [];
+  staffPinnedMediaPaths = {};
   activePinnedNotificationIndex = 0;
   updateStaffNotificationsBadge();
   renderStaffNotifications();
@@ -9254,8 +9276,12 @@ function startStaffPinnedNotificationsListener() {
   }
   staffPinnedUnsubscribe = onSnapshot(getStaffPinnedDocRef(), snap => {
     staffPinnedNotificationIds = normalizeStaffPinnedNotificationIds(snap.data()?.ids);
+    staffPinnedMediaPaths = snap.data()?.mediaPaths && typeof snap.data().mediaPaths === 'object'
+      ? snap.data().mediaPaths
+      : {};
     if (activePinnedNotificationIndex >= staffPinnedNotificationIds.length) activePinnedNotificationIndex = 0;
-    renderStaffNotifications();
+    renderPinnedStaffNotificationBar();
+    syncStaffPinnedCardState();
   }, err => {
     console.warn('Pinned staff messages could not be loaded:', err);
   });
@@ -9281,10 +9307,14 @@ function buildPinnedStaffNotifications() {
   if (activePinnedNotificationIndex >= pinned.length) activePinnedNotificationIndex = 0;
   const item = pinned[activePinnedNotificationIndex] || pinned[0];
   const body = stripNotificationHtml(item.body || item.title || 'Pinned message').replace(/\s+/g, ' ');
+  const attachment = getStaffMessageAttachment(item);
+  const mediaPreview = attachment?.type === 'photo' && attachment?.storagePath
+    ? `<div class="staff-notification-pinned-preview"><div data-message-media-path="${escapeHtml(attachment.storagePath)}" data-message-media-type="photo"><div class="staff-message-media-loading">Loading photo…</div></div><div class="staff-notification-pinned-body">${escapeHtml(body)}</div></div>`
+    : `<div class="staff-notification-pinned-body">${attachment?.type === 'audio' ? '🎙 ' : ''}${escapeHtml(body)}</div>`;
   return `
     <div class="staff-notification-pinned ${pinned.length > 1 ? 'has-many' : ''}">
       <div class="staff-notification-pinned-card" data-pinned-notification-id="${escapeHtml(item.id)}">
-        <div class="staff-notification-pinned-body">${escapeHtml(body)}</div>
+        ${mediaPreview}
       </div>
       <div class="staff-notification-pinned-nav">
         <button type="button" data-pinned-nav="up">▲</button>
@@ -9327,6 +9357,40 @@ function renderPinnedStaffNotificationBar() {
   if (!bar) return;
   bar.innerHTML = buildPinnedStaffNotifications();
   bindPinnedStaffNotificationBar();
+  hydrateStaffMessageMedia(bar);
+}
+
+function syncStaffPinnedCardState() {
+  document.querySelectorAll('.staff-notification-card[data-notification-id]').forEach(card => {
+    const item = staffNotifications.find(entry => entry.id === card.dataset.notificationId);
+    const isPinned = !!item && (
+      staffPinnedNotificationIds.includes(item.messageGroupId || item.id)
+      || staffPinnedNotificationIds.includes(item.id)
+    );
+    card.classList.toggle('pinned', isPinned);
+    const button = card.querySelector('[data-pin-notification-id]');
+    if (button) button.setAttribute('aria-label', isPinned ? 'Unpin message' : 'Pin message');
+  });
+}
+
+async function preservePinnedStaffMessageAttachment(item) {
+  const attachment = item?.attachment;
+  if (!attachment?.storagePath || attachment.storagePath.startsWith('messenger-pinned-media/')) return;
+  const fileName = attachment.storagePath.split('/').pop();
+  if (!fileName) return;
+  const pinnedPath = `messenger-pinned-media/${new Date().toISOString().slice(0, 10)}/${fileName}`;
+  const blob = await getBlob(storageRef(storage, attachment.storagePath));
+  await uploadBytes(storageRef(storage, pinnedPath), blob, {
+    contentType: attachment.contentType || blob.type,
+    customMetadata: { senderUid: auth.currentUser?.uid || '', preservedByPin: 'true' }
+  });
+  const pinKey = item.messageGroupId || item.id;
+  staffPinnedMediaPaths = { ...staffPinnedMediaPaths, [pinKey]: pinnedPath };
+  await setDoc(getStaffPinnedDocRef(), {
+    mediaPaths: staffPinnedMediaPaths,
+    updatedAt: serverTimestamp(),
+    updatedBy: getCurrentActorLabel()
+  }, { merge: true });
 }
 
 async function toggleStaffNotificationPinned(notificationId) {
@@ -9334,6 +9398,7 @@ async function toggleStaffNotificationPinned(notificationId) {
   const item = staffNotifications.find(entry => entry.id === notificationId);
   const pinKey = item?.messageGroupId || notificationId;
   const existingIndex = staffPinnedNotificationIds.indexOf(pinKey);
+  const isPinning = existingIndex < 0;
   if (existingIndex >= 0) {
     staffPinnedNotificationIds.splice(existingIndex, 1);
     activePinnedNotificationIndex = Math.max(0, Math.min(activePinnedNotificationIndex, staffPinnedNotificationIds.length - 1));
@@ -9341,12 +9406,23 @@ async function toggleStaffNotificationPinned(notificationId) {
     staffPinnedNotificationIds.unshift(pinKey);
     activePinnedNotificationIndex = 0;
   }
-  renderStaffNotifications();
+  renderPinnedStaffNotificationBar();
+  syncStaffPinnedCardState();
   try {
     await saveStaffPinnedNotificationIds();
   } catch (err) {
     console.warn('Pinned staff message was not saved:', err);
     showToast('Pinned message was not saved', 'error');
+    return;
+  }
+  if (isPinning && item?.attachment?.storagePath) {
+    try {
+      await preservePinnedStaffMessageAttachment(item);
+      renderPinnedStaffNotificationBar();
+    } catch (err) {
+      console.warn('Pinned attachment was not preserved:', err);
+      showToast('Message pinned, but its attachment could not be preserved', 'error', 5500);
+    }
   }
 }
 
@@ -9421,8 +9497,16 @@ function getStaffChatCardStyle(item) {
   return mutedStaffColor ? `background:${escapeHtml(mutedStaffColor)};border-color:rgba(0,0,0,.12);` : '';
 }
 
-function buildStaffMessageMedia(item) {
+function getStaffMessageAttachment(item) {
   const attachment = item?.attachment;
+  if (!attachment?.storagePath) return attachment;
+  const pinKey = item.messageGroupId || item.id;
+  const preservedPath = staffPinnedMediaPaths[pinKey];
+  return preservedPath ? { ...attachment, storagePath: preservedPath } : attachment;
+}
+
+function buildStaffMessageMedia(item) {
+  const attachment = getStaffMessageAttachment(item);
   if (!attachment?.storagePath || !['photo', 'audio'].includes(attachment.type)) return '';
   return `<div class="staff-message-media" data-message-media-path="${escapeHtml(attachment.storagePath)}" data-message-media-type="${escapeHtml(attachment.type)}"><div class="staff-message-media-loading"><span class="staff-notification-loading-dot"></span>Loading ${attachment.type === 'photo' ? 'photo' : 'voice message'}…</div></div>`;
 }
@@ -9432,14 +9516,15 @@ function releaseStaffMessageMediaUrls() {
   staffMessageMediaObjectUrls = [];
 }
 
-async function hydrateStaffMessageMedia() {
-  const containers = Array.from(document.querySelectorAll('[data-message-media-path]'));
+async function hydrateStaffMessageMedia(root = document) {
+  const containers = Array.from(root.querySelectorAll('[data-message-media-path]:not([data-message-media-loaded="true"])'));
   await Promise.all(containers.map(async container => {
     try {
       const blob = await getBlob(storageRef(storage, container.dataset.messageMediaPath));
       const url = URL.createObjectURL(blob);
       staffMessageMediaObjectUrls.push(url);
       if (!container.isConnected) return;
+      container.dataset.messageMediaLoaded = 'true';
       if (container.dataset.messageMediaType === 'photo') {
         container.innerHTML = `<img class="staff-message-media-image" src="${escapeHtml(url)}" alt="Message photo">`;
         container.querySelector('img')?.addEventListener('click', () => window.open(url, '_blank', 'noopener'));
@@ -9643,7 +9728,7 @@ function attachStaffNotificationSwipe(card) {
   };
 
   const setSwipeOffset = dx => {
-    const limited = Math.max(-58, Math.min(58, dx));
+    const limited = Math.max(-48, Math.min(48, dx));
     card.style.transform = `translateX(${limited}px)`;
   };
 
@@ -9687,7 +9772,7 @@ function attachStaffNotificationSwipe(card) {
     const dx = event.clientX - startX;
     const dy = event.clientY - startY;
     card.releasePointerCapture?.(event.pointerId);
-    if (!dragging || Math.abs(dx) < 46 || Math.abs(dx) < Math.abs(dy) * 1.25) {
+    if (!dragging || Math.abs(dx) < 30 || Math.abs(dx) < Math.abs(dy) * 1.15) {
       settleSwipe('');
       return;
     }
