@@ -9398,7 +9398,7 @@ async function preservePinnedStaffMessageAttachment(item) {
   }, { merge: true });
 }
 
-async function toggleStaffNotificationPinned(notificationId) {
+async function toggleStaffNotificationPinned(notificationId, desiredPinned) {
   if (!notificationId) return;
   const item = staffNotifications.find(entry => entry.id === notificationId);
   const pinKey = item?.messageGroupId || notificationId;
@@ -9407,11 +9407,11 @@ async function toggleStaffNotificationPinned(notificationId) {
   staffPinToggleCooldownUntil.set(pinKey, Date.now() + 1800);
   try {
   const existingIndex = staffPinnedNotificationIds.indexOf(pinKey);
-  const isPinning = existingIndex < 0;
-  if (existingIndex >= 0) {
+  const isPinning = desiredPinned !== false;
+  if (!isPinning && existingIndex >= 0) {
     staffPinnedNotificationIds.splice(existingIndex, 1);
     activePinnedNotificationIndex = Math.max(0, Math.min(activePinnedNotificationIndex, staffPinnedNotificationIds.length - 1));
-  } else {
+  } else if (isPinning && existingIndex < 0) {
     staffPinnedNotificationIds.unshift(pinKey);
     activePinnedNotificationIndex = 0;
   }
@@ -9607,7 +9607,7 @@ function renderStaffNotifications() {
       : '';
     htmlParts.push(`
       <div class="staff-notification-card ${priority} ${unread ? 'unread' : ''} ${isPinned ? 'pinned' : ''}" style="${getStaffChatCardStyle(item)}" data-notification-id="${escapeHtml(item.id)}">
-        <button type="button" class="staff-notification-pin-action" data-pin-notification-id="${escapeHtml(item.id)}" aria-label="${isPinned ? 'Unpin message' : 'Pin message'}">${buildStaffPinIconSvg()}</button>
+        <button type="button" class="staff-notification-pin-action" data-pin-notification-id="${escapeHtml(item.id)}" data-pin-intent="${isPinned ? 'unpin' : 'pin'}" aria-label="${isPinned ? 'Unpin message' : 'Pin message'}">${buildStaffPinIconSvg()}</button>
         <button type="button" class="staff-notification-reply-action" data-reply-notification-id="${escapeHtml(item.id)}" aria-label="Reply to message">${buildStaffReplyIconSvg()}</button>
         ${kindLabel}
         ${replyQuote}
@@ -9642,7 +9642,10 @@ function renderStaffNotifications() {
       button.dataset.pinBusy = 'true';
       button.disabled = true;
       try {
-        await toggleStaffNotificationPinned(button.dataset.pinNotificationId);
+        await toggleStaffNotificationPinned(
+          button.dataset.pinNotificationId,
+          button.dataset.pinIntent !== 'unpin'
+        );
       } finally {
         button.dataset.pinBusy = 'false';
         button.disabled = false;
