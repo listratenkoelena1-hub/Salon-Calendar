@@ -9712,6 +9712,8 @@ function setStaffMessageSendBusy(isBusy) {
     button.disabled = isBusy;
     button.classList.toggle('action-busy', isBusy);
   }
+  if (photoButton) photoButton.disabled = isBusy;
+  if (voiceButton) voiceButton.disabled = isBusy;
 }
 
 function formatVoiceCountdown(seconds) {
@@ -9727,8 +9729,6 @@ function renderStaffMessageAttachmentPreview() {
     content.innerHTML = '';
     return;
   }
-  if (photoButton) photoButton.disabled = isBusy;
-  if (voiceButton) voiceButton.disabled = isBusy;
   preview.classList.add('active');
   if (staffVoiceRecorder?.state === 'recording') {
     const elapsed = Math.min(30, Math.floor((Date.now() - staffVoiceStartedAt) / 1000));
@@ -9851,7 +9851,14 @@ window.toggleStaffVoiceRecording = async () => {
     stopStaffVoiceTracks();
     staffVoiceRecorder = null;
     console.warn('Voice recording could not start:', err);
-    showToast('Microphone permission is required for voice messages.', 'error');
+    const permissionBlocked = err?.name === 'NotAllowedError' || err?.name === 'SecurityError';
+    showToast(
+      permissionBlocked
+        ? 'Microphone is blocked here. Open this test link in Safari and allow Microphone.'
+        : 'Voice recording could not start on this device.',
+      'error',
+      5500
+    );
   }
 };
 
