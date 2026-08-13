@@ -17,6 +17,14 @@ service firebase.storage {
       allow update: if false;
     }
 
+    match /messenger-pinned-media/{date}/{fileName} {
+      allow read: if isCalendarTeam();
+      allow create: if isCalendarTeam()
+        && request.resource.size <= 3 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|webp)|audio/(mp4|webm)');
+      allow update, delete: if false;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }
