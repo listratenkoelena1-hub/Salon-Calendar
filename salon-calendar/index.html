@@ -1246,7 +1246,7 @@ padding:10px 14px;
 .staff-push-status { position: relative; display: inline-flex; align-items: center; gap: 5px; width: 124px; margin: 0; color: #666; font-size: 10px; line-height: 1.15; white-space: nowrap; cursor: pointer; }
 .staff-push-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #aaa; }
 .staff-push-status.connected .staff-push-status-dot { background: #2f9b67; }
-.staff-push-popover { position: absolute; z-index: 30; left: 0; top: calc(100% + 5px); width: min(260px, 70vw); padding: 9px 10px; border: 1px solid rgba(0,0,0,.14); border-radius: 9px; background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.16); color: #444; line-height: 1.4; }
+.staff-push-popover { position: fixed; z-index: 13010; left: 12px; right: 12px; top: auto; width: auto; max-width: 320px; padding: 9px 10px; border: 1px solid rgba(0,0,0,.14); border-radius: 9px; background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.16); color: #444; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; word-break: normal; }
 
 .staff-notification-date-divider {
   display: flex;
@@ -11315,7 +11315,7 @@ function buildStaffPushStatus(staffId) {
     const unavailable = staffPushStatusesState === 'unavailable';
     const label = unavailable ? 'Status unavailable' : 'Checking…';
     const details = unavailable
-      ? 'The status service is prepared in this test branch, but the production Cloud Function has not been deployed without your approval.'
+      ? 'Notification status could not be loaded. Close Staff and try again.'
       : 'Checking active notification devices.';
     return `<span class="staff-push-status" data-push-status="${escapeHtml(staffId)}"><span class="staff-push-status-dot"></span>${escapeHtml(label)}<span class="staff-push-popover hidden">${escapeHtml(details)}</span></span>`;
   }
@@ -11335,6 +11335,10 @@ function bindStaffPushStatusPopovers() {
       event.stopPropagation();
       const popover = status.querySelector('.staff-push-popover');
       document.querySelectorAll('.staff-push-popover').forEach(item => { if (item !== popover) item.classList.add('hidden'); });
+      if (popover) {
+        const rect = status.getBoundingClientRect();
+        popover.style.top = `${Math.min(window.innerHeight - 130, rect.bottom + 6)}px`;
+      }
       popover?.classList.toggle('hidden');
     };
   });

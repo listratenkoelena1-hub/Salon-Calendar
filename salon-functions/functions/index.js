@@ -2083,7 +2083,7 @@ exports.registerPushDevice = onCall(
 );
 
 exports.getStaffPushStatuses = onCall(
-  { region: "us-central1", maxInstances: 10 },
+  { region: "us-central1", maxInstances: 10, invoker: "public" },
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "You must be signed in.");
     const callerSnap = await db.collection("users").doc(request.auth.uid).get();
