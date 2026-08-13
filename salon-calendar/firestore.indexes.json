@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "staffNotifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "visibleToManager", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "staffNotifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recipientStaffId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
