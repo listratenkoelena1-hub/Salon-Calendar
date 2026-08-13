@@ -9895,10 +9895,12 @@ window.sendStaffChatMessage = async () => {
 
   setStaffMessageSendBusy(true);
   let uploadedAttachment = null;
+  let sendStage = staffMessageAttachment ? 'attachment-upload' : 'message-save';
   try {
     const senderLabel = getCurrentActorLabel();
     const messageGroupId = crypto?.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(16).slice(2);
     uploadedAttachment = await uploadStaffMessageAttachment(messageGroupId);
+    sendStage = 'message-save';
     const replyTo = staffMessageReplyTarget;
     const recipients = getActiveStaffList({ includeAnyone: false }).filter(s => s.id && s.id !== ANYONE_ID);
     const writes = recipients.map(recipient => addDoc(collection(db, 'staffNotifications'), buildStaffChatMessageDoc({
@@ -9925,7 +9927,9 @@ window.sendStaffChatMessage = async () => {
     clearStaffMessageAttachment();
   } catch (err) {
     console.warn('Staff message was not sent:', err);
-    showToast('Message was not sent', 'error');
+    const errorCode = String(err?.code || err?.name || 'unknown-error');
+    const stageLabel = sendStage === 'attachment-upload' ? 'Attachment upload failed' : 'Message save failed';
+    showToast(`${stageLabel}: ${errorCode}`, 'error', 8000);
     if (uploadedAttachment?.storagePath) deleteObject(storageRef(storage, uploadedAttachment.storagePath)).catch(() => {});
   } finally {
     setStaffMessageSendBusy(false);
