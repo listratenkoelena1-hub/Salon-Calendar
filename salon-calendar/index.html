@@ -9417,7 +9417,8 @@ function getStaffChatCardStyle(item) {
   if (item.senderRole === 'manager') return 'background:#fff;border-color:rgba(0,0,0,.16);';
   if (item.senderRole === 'reception') return 'background:#ececec;border-color:#d2d2d2;';
   const sender = getActiveStaffList({ includeAnyone: false }).find(staff => staff.id === item.senderStaffId);
-  return sender?.color ? `background:${escapeHtml(sender.color)};border-color:rgba(0,0,0,.12);` : '';
+  const mutedStaffColor = sender?.color ? blendWithWhite(sender.color, TINT_STRENGTH) : '';
+  return mutedStaffColor ? `background:${escapeHtml(mutedStaffColor)};border-color:rgba(0,0,0,.12);` : '';
 }
 
 function buildStaffMessageMedia(item) {
