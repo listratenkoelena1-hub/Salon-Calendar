@@ -1243,7 +1243,7 @@ padding:10px 14px;
   line-height: 1.3;
 }
 .staff-notification-reply-arrow { margin-right: 5px; font-weight: 900; }
-.staff-push-status { position: relative; display: inline-flex; align-items: center; gap: 5px; margin-top: 7px; color: #666; font-size: 11px; cursor: pointer; }
+.staff-push-status { position: relative; display: inline-flex; align-items: center; gap: 5px; width: 124px; margin: 0; color: #666; font-size: 10px; line-height: 1.15; white-space: nowrap; cursor: pointer; }
 .staff-push-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #aaa; }
 .staff-push-status.connected .staff-push-status-dot { background: #2f9b67; }
 .staff-push-popover { position: absolute; z-index: 30; left: 0; top: calc(100% + 5px); width: min(260px, 70vw); padding: 9px 10px; border: 1px solid rgba(0,0,0,.14); border-radius: 9px; background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.16); color: #444; line-height: 1.4; }
@@ -2548,6 +2548,7 @@ body.modal-open{
     132px   /* services */
     110px   /* role */
     78px    /* anyone */
+    124px   /* notifications */
     64px    /* save */
     32px    /* up */
     32px    /* down */
@@ -5311,7 +5312,7 @@ function buildStaffHeaderRow() {
   const durationCells = isStaffDurationView
     ? STAFF_BOOKING_DURATION_SERVICES.map(service => `<span>${escapeHtml(service.label)}</span>`).join('')
     : '';
-  const managerTail = isStaffDurationView ? '' : '<span>Role</span><span>Anyone</span>';
+  const managerTail = isStaffDurationView ? '' : '<span>Role</span><span>Anyone</span><span>Notifications</span>';
   const actionTail = isStaffDurationView
     ? '<span>Save</span><span></span>'
     : '<span>Save</span><span></span><span></span><span></span><span></span>';
@@ -11305,7 +11306,7 @@ function buildStaffPushStatus(staffId) {
   if (currentUserRole !== 'manager') return '';
   if (staffPushStatusesState !== 'ready') {
     const unavailable = staffPushStatusesState === 'unavailable';
-    const label = unavailable ? 'Status available after server approval' : 'Checking notifications…';
+    const label = unavailable ? 'Status unavailable' : 'Checking…';
     const details = unavailable
       ? 'The status service is prepared in this test branch, but the production Cloud Function has not been deployed without your approval.'
       : 'Checking active notification devices.';
@@ -11313,7 +11314,7 @@ function buildStaffPushStatus(staffId) {
   }
   const status = staffPushStatuses[staffId];
   const connected = Number(status?.enabledDevices || 0) > 0;
-  const label = connected ? 'Notifications connected' : 'Notifications not connected';
+  const label = connected ? 'Connected' : 'Not connected';
   const last = status?.lastConnectedAt ? new Date(status.lastConnectedAt).toLocaleString('en-US') : 'No active device registration';
   const details = connected
     ? `${status.enabledDevices} active device${status.enabledDevices === 1 ? '' : 's'}. Last connected: ${last}.${status.userAgent ? ' Device: ' + status.userAgent : ''}`
