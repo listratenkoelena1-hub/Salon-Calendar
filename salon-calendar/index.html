@@ -4805,8 +4805,6 @@ import {
   startAfter,
   getDocs,
   serverTimestamp,
-  arrayUnion,
-  arrayRemove,
   getDoc, 
   setDoc
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
@@ -4863,8 +4861,6 @@ let staffNotificationsUnsubscribe = null;
 let staffPinnedUnsubscribe = null;
 let staffPinnedNotificationIds = [];
 let staffPinnedMediaPaths = {};
-const staffPinToggleLocks = new Set();
-const staffPinToggleCooldownUntil = new Map();
 let activePinnedNotificationIndex = 0;
 let staffMessageReplyTarget = null;
 const STAFF_MESSAGES_PAGE_SIZE = 50;
@@ -9284,16 +9280,15 @@ function startStaffPinnedNotificationsListener() {
       ? snap.data().mediaPaths
       : {};
     if (activePinnedNotificationIndex >= staffPinnedNotificationIds.length) activePinnedNotificationIndex = 0;
-    renderPinnedStaffNotificationBar();
-    syncStaffPinnedCardState();
+    renderStaffNotifications();
   }, err => {
     console.warn('Pinned staff messages could not be loaded:', err);
   });
 }
 
-async function saveStaffPinnedNotificationId(pinKey, isPinned) {
+async function saveStaffPinnedNotificationIds() {
   await setDoc(getStaffPinnedDocRef(), {
-    ids: isPinned ? arrayUnion(pinKey) : arrayRemove(pinKey),
+    ids: staffPinnedNotificationIds.slice(0, 20),
     updatedAt: serverTimestamp(),
     updatedBy: getCurrentActorLabel()
   }, { merge: true });
@@ -9364,22 +9359,6 @@ function renderPinnedStaffNotificationBar() {
   hydrateStaffMessageMedia(bar);
 }
 
-function syncStaffPinnedCardState() {
-  document.querySelectorAll('.staff-notification-card[data-notification-id]').forEach(card => {
-    const item = staffNotifications.find(entry => entry.id === card.dataset.notificationId);
-    const isPinned = !!item && (
-      staffPinnedNotificationIds.includes(item.messageGroupId || item.id)
-      || staffPinnedNotificationIds.includes(item.id)
-    );
-    card.classList.toggle('pinned', isPinned);
-    const button = card.querySelector('[data-pin-notification-id]');
-    if (button) {
-      button.dataset.pinIntent = isPinned ? 'unpin' : 'pin';
-      button.setAttribute('aria-label', isPinned ? 'Unpin message' : 'Pin message');
-    }
-  });
-}
-
 async function preservePinnedStaffMessageAttachment(item) {
   const attachment = item?.attachment;
   if (!attachment?.storagePath || attachment.storagePath.startsWith('messenger-pinned-media/')) return;
@@ -9401,27 +9380,22 @@ async function preservePinnedStaffMessageAttachment(item) {
   }, { merge: true });
 }
 
-async function toggleStaffNotificationPinned(notificationId, desiredPinned) {
+async function toggleStaffNotificationPinned(notificationId) {
   if (!notificationId) return;
   const item = staffNotifications.find(entry => entry.id === notificationId);
   const pinKey = item?.messageGroupId || notificationId;
-  if (staffPinToggleLocks.has(pinKey) || Date.now() < (staffPinToggleCooldownUntil.get(pinKey) || 0)) return;
-  staffPinToggleLocks.add(pinKey);
-  staffPinToggleCooldownUntil.set(pinKey, Date.now() + 1800);
-  try {
   const existingIndex = staffPinnedNotificationIds.indexOf(pinKey);
-  const isPinning = desiredPinned !== false;
-  if (!isPinning && existingIndex >= 0) {
+  const isPinning = existingIndex < 0;
+  if (existingIndex >= 0) {
     staffPinnedNotificationIds.splice(existingIndex, 1);
     activePinnedNotificationIndex = Math.max(0, Math.min(activePinnedNotificationIndex, staffPinnedNotificationIds.length - 1));
-  } else if (isPinning && existingIndex < 0) {
+  } else {
     staffPinnedNotificationIds.unshift(pinKey);
     activePinnedNotificationIndex = 0;
   }
-  renderPinnedStaffNotificationBar();
-  syncStaffPinnedCardState();
+  renderStaffNotifications();
   try {
-    await saveStaffPinnedNotificationId(pinKey, isPinning);
+    await saveStaffPinnedNotificationIds();
   } catch (err) {
     console.warn('Pinned staff message was not saved:', err);
     showToast('Pinned message was not saved', 'error');
@@ -9435,9 +9409,6 @@ async function toggleStaffNotificationPinned(notificationId, desiredPinned) {
       console.warn('Pinned attachment was not preserved:', err);
       showToast('Message pinned, but its attachment could not be preserved', 'error', 5500);
     }
-  }
-  } finally {
-    staffPinToggleLocks.delete(pinKey);
   }
 }
 
@@ -9610,7 +9581,7 @@ function renderStaffNotifications() {
       : '';
     htmlParts.push(`
       <div class="staff-notification-card ${priority} ${unread ? 'unread' : ''} ${isPinned ? 'pinned' : ''}" style="${getStaffChatCardStyle(item)}" data-notification-id="${escapeHtml(item.id)}">
-        <button type="button" class="staff-notification-pin-action" data-pin-notification-id="${escapeHtml(item.id)}" data-pin-intent="${isPinned ? 'unpin' : 'pin'}" aria-label="${isPinned ? 'Unpin message' : 'Pin message'}">${buildStaffPinIconSvg()}</button>
+        <button type="button" class="staff-notification-pin-action" data-pin-notification-id="${escapeHtml(item.id)}" aria-label="${isPinned ? 'Unpin message' : 'Pin message'}">${buildStaffPinIconSvg()}</button>
         <button type="button" class="staff-notification-reply-action" data-reply-notification-id="${escapeHtml(item.id)}" aria-label="Reply to message">${buildStaffReplyIconSvg()}</button>
         ${kindLabel}
         ${replyQuote}
@@ -9635,25 +9606,10 @@ function renderStaffNotifications() {
     });
   });
   list.querySelectorAll('[data-pin-notification-id]').forEach(button => {
-    button.addEventListener('click', async event => {
+    button.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
-      if (button.dataset.pinBusy === 'true') return;
-      const card = button.closest('.staff-notification-card');
-      card?.classList.remove('swipe-action-open', 'swipe-reply-hint', 'swipe-dragging');
-      if (card) card.style.transform = '';
-      button.dataset.pinBusy = 'true';
-      button.disabled = true;
-      const desiredPinned = !card?.classList.contains('pinned');
-      try {
-        await toggleStaffNotificationPinned(
-          button.dataset.pinNotificationId,
-          desiredPinned
-        );
-      } finally {
-        button.dataset.pinBusy = 'false';
-        button.disabled = false;
-      }
+      toggleStaffNotificationPinned(button.dataset.pinNotificationId);
     });
   });
   list.querySelectorAll('[data-reply-notification-id]').forEach(button => {
