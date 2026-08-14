@@ -1688,7 +1688,9 @@ padding:10px 14px;
 .staff-message-recording-time { font-weight: 850; color: #b42d2d; }
 .staff-message-attachment-remove { min-width: 32px !important; width: 32px; height: 32px; padding: 0; border: 0; background: transparent; font-size: 20px; color: #777; }
 .staff-message-media { margin-top: 8px; }
-.staff-message-media-image { display: block; width: min(220px, 100%); max-height: 240px; border-radius: 11px; object-fit: cover; background: #eee; cursor: pointer; }
+.staff-message-media[data-message-media-type="photo"] { width: min(220px, 100%); max-height: 240px; overflow: hidden; border-radius: 11px; background: #eee; }
+.staff-message-media[data-message-media-type="photo"] .staff-message-media-loading { display: flex; height: 100%; align-items: center; justify-content: center; }
+.staff-message-media-image { display: block; width: 100%; height: 100%; border-radius: 11px; object-fit: cover; background: #eee; cursor: pointer; }
 .staff-message-media-audio { display: block; width: min(260px, 100%); height: 40px; }
 .staff-message-media-loading { padding: 8px 0; color: #777; font-size: 12px; }
 
@@ -4877,6 +4879,7 @@ let staffMessagesUnreadBoundaryPendingAbove = false;
 let staffMessagesAcknowledgedIds = new Set();
 let staffMessagesMayClearUnread = false;
 let staffMessagesScrollToLatestPending = false;
+let staffMessagesLatestAnchorFrame = 0;
 let staffPushStatuses = {};
 let staffPushStatusesState = 'idle';
 let staffMessageAttachment = null;
@@ -9514,8 +9517,29 @@ function scrollStaffNotificationsToBottom() {
   });
 }
 
-function requestStaffMessagesLatest() {
+function stopStaffMessagesLatestAnchor() {
+  staffMessagesScrollToLatestPending = false;
+  if (staffMessagesLatestAnchorFrame) cancelAnimationFrame(staffMessagesLatestAnchorFrame);
+  staffMessagesLatestAnchorFrame = 0;
+}
+
+function startStaffMessagesLatestAnchor() {
+  if (staffMessagesLatestAnchorFrame) cancelAnimationFrame(staffMessagesLatestAnchorFrame);
   staffMessagesScrollToLatestPending = true;
+  const keepBottomVisible = () => {
+    if (!staffMessagesScrollToLatestPending) {
+      staffMessagesLatestAnchorFrame = 0;
+      return;
+    }
+    const list = document.getElementById('staffNotificationsList');
+    if (list) list.scrollTop = list.scrollHeight;
+    staffMessagesLatestAnchorFrame = requestAnimationFrame(keepBottomVisible);
+  };
+  staffMessagesLatestAnchorFrame = requestAnimationFrame(keepBottomVisible);
+}
+
+function requestStaffMessagesLatest() {
+  startStaffMessagesLatestAnchor();
   scrollStaffNotificationsToBottom();
 }
 
@@ -9554,7 +9578,7 @@ function bindStaffMessageTabs() {
     button.classList.toggle('active', button.dataset.messageFilter === staffMessagesFilter);
     button.onclick = () => {
       staffMessagesFilter = button.dataset.messageFilter || 'all';
-      staffMessagesScrollToLatestPending = true;
+      startStaffMessagesLatestAnchor();
       renderStaffNotifications();
     };
   });
@@ -9580,7 +9604,12 @@ function getStaffMessageAttachment(item) {
 function buildStaffMessageMedia(item) {
   const attachment = getStaffMessageAttachment(item);
   if (!attachment?.storagePath || !['photo', 'audio'].includes(attachment.type)) return '';
-  return `<div class="staff-message-media" data-message-media-path="${escapeHtml(attachment.storagePath)}" data-message-media-type="${escapeHtml(attachment.type)}"><div class="staff-message-media-loading"><span class="staff-notification-loading-dot"></span>Loading ${attachment.type === 'photo' ? 'photo' : 'voice message'}…</div></div>`;
+  const width = Number(attachment.width);
+  const height = Number(attachment.height);
+  const photoStyle = attachment.type === 'photo' && width > 0 && height > 0
+    ? ` style="aspect-ratio:${width}/${height}"`
+    : '';
+  return `<div class="staff-message-media" data-message-media-path="${escapeHtml(attachment.storagePath)}" data-message-media-type="${escapeHtml(attachment.type)}"${photoStyle}><div class="staff-message-media-loading"><span class="staff-notification-loading-dot"></span>Loading ${attachment.type === 'photo' ? 'photo' : 'voice message'}…</div></div>`;
 }
 
 function releaseStaffMessageMediaUrls() {
@@ -9599,7 +9628,19 @@ async function hydrateStaffMessageMedia(root = document) {
       container.dataset.messageMediaLoaded = 'true';
       if (container.dataset.messageMediaType === 'photo') {
         container.innerHTML = `<img class="staff-message-media-image" src="${escapeHtml(url)}" alt="Message photo">`;
-        container.querySelector('img')?.addEventListener('click', () => window.open(url, '_blank', 'noopener'));
+        const image = container.querySelector('img');
+        image?.addEventListener('click', () => window.open(url, '_blank', 'noopener'));
+        if (image) {
+          try {
+            if (image.decode) await image.decode();
+            else if (!image.complete) await new Promise(resolve => {
+              image.addEventListener('load', resolve, { once: true });
+              image.addEventListener('error', resolve, { once: true });
+            });
+          } catch (err) {
+            // The browser can still display the photo when decode() is interrupted.
+          }
+        }
       } else {
         container.innerHTML = `<audio class="staff-message-media-audio" src="${escapeHtml(url)}" controls preload="metadata"></audio>`;
       }
@@ -9719,7 +9760,7 @@ function renderStaffNotifications() {
       if (staffMessagesScrollToLatestPending || isStaffMessagesAtLatest(list)) {
         scrollStaffNotificationsToBottom();
       }
-      staffMessagesScrollToLatestPending = false;
+      requestAnimationFrame(() => requestAnimationFrame(stopStaffMessagesLatestAnchor));
     });
   }
 }
@@ -10130,7 +10171,7 @@ window.openStaffNotifications = async () => {
     staffMessagesUnreadBoundaryMs = Math.min(...unreadBeforeOpen.map(getStaffNotificationMillis).filter(Boolean));
     staffMessagesUnreadBoundaryPendingAbove = staffMessagesHasEarlier && getStaffNotificationMillis(staffNotifications[0]) >= staffMessagesUnreadBoundaryMs;
   }
-  staffMessagesScrollToLatestPending = true;
+  startStaffMessagesLatestAnchor();
   renderStaffNotifications();
   modal.classList.remove('hidden');
   const list = document.getElementById('staffNotificationsList');
@@ -10139,8 +10180,10 @@ window.openStaffNotifications = async () => {
   setTimeout(() => { staffMessagesMayClearUnread = true; }, 500);
   if (list && !list.dataset.unreadScrollBound) {
     list.dataset.unreadScrollBound = 'true';
+    ['pointerdown', 'touchstart', 'wheel'].forEach(eventName => {
+      list.addEventListener(eventName, stopStaffMessagesLatestAnchor, { passive: true });
+    });
     list.addEventListener('scroll', () => {
-      if (!isStaffMessagesAtLatest(list)) staffMessagesScrollToLatestPending = false;
       if (!staffMessagesMayClearUnread || !staffMessagesUnreadBoundaryMs) return;
       if (list.scrollTop + list.clientHeight >= list.scrollHeight - 18) {
         staffMessagesUnreadBoundaryMs = 0;
