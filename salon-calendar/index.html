@@ -4858,6 +4858,12 @@ const FCM_VAPID_KEY = "";
   let currentUserRole = null;
 let currentUserStaffId = null;
 let currentUserEmail = '';
+let managerAssistant = null;
+let managerAssistantLoadPromise = null;
+let managerAssistantDraftTimer = 0;
+let managerAssistantWelcomeTimer = 0;
+let managerAssistantWelcomePlayed = false;
+let managerAssistantHiddenAt = 0;
 let staffNotifications = [];
 let staffNotificationsUnsubscribe = null;
 let staffPinnedUnsubscribe = null;
@@ -5058,6 +5064,7 @@ const aDate = document.getElementById('aDate');
       aDate.addEventListener('change', () => {
   aDate.setAttribute('readonly', true);
   checkTimeAvailability();
+  scheduleManagerAssistantForAppointment();
 });
 const aStaff = document.getElementById('aStaff');
 const aTime = document.getElementById('aTime');
@@ -5587,6 +5594,212 @@ function buildStaffOptions(list, { markInactive = false } = {}) {
   }).join('');
 }
 let appointmentAction = 'create';
+
+async function ensureManagerAssistant() {
+  if (currentUserRole !== 'manager') return null;
+  if (managerAssistant) return managerAssistant;
+  if (managerAssistantLoadPromise) return managerAssistantLoadPromise;
+
+  managerAssistantLoadPromise = import('./manager-assistant.js')
+    .then(module => {
+      if (currentUserRole !== 'manager') return null;
+      managerAssistant = module.createManagerAssistant();
+      return managerAssistant;
+    })
+    .catch(error => {
+      console.warn('Manager assistant could not be loaded:', error);
+      return null;
+    })
+    .finally(() => {
+      managerAssistantLoadPromise = null;
+    });
+
+  return managerAssistantLoadPromise;
+}
+
+function clearManagerAssistantWelcomeTimer() {
+  if (!managerAssistantWelcomeTimer) return;
+  clearTimeout(managerAssistantWelcomeTimer);
+  managerAssistantWelcomeTimer = 0;
+}
+
+function scheduleManagerAssistantWelcome(delay = 1400, { force = false } = {}) {
+  clearManagerAssistantWelcomeTimer();
+  if (currentUserRole !== 'manager' || document.hidden) return;
+  if (managerAssistantWelcomePlayed && !force) return;
+
+  managerAssistantWelcomeTimer = setTimeout(async () => {
+    managerAssistantWelcomeTimer = 0;
+    if (currentUserRole !== 'manager' || document.hidden) return;
+
+    const assistant = await ensureManagerAssistant();
+    if (!assistant) return;
+
+    managerAssistantWelcomePlayed = true;
+    assistant.playWelcome();
+  }, Math.max(0, Number(delay) || 0));
+}
+
+function destroyManagerAssistant() {
+  if (managerAssistantDraftTimer) {
+    clearTimeout(managerAssistantDraftTimer);
+    managerAssistantDraftTimer = 0;
+  }
+  clearManagerAssistantWelcomeTimer();
+  managerAssistant?.destroy();
+  managerAssistant = null;
+  managerAssistantWelcomePlayed = false;
+  managerAssistantHiddenAt = 0;
+}
+
+function formatManagerAssistantDuration(slots) {
+  const minutes = Math.max(0, Number(slots) || 0) * 15;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (!hours) return `${remainingMinutes} min`;
+  if (!remainingMinutes) return `${hours} hr`;
+  return `${hours} hr ${remainingMinutes} min`;
+}
+
+function getManagerAssistantFreeWindow({ staffId, date, fromSlot, desiredSlots, lookaheadSlots = 16 }) {
+  const startSlot = Number(fromSlot);
+  const requiredSlots = Math.max(1, Number(desiredSlots) || 4);
+  if (!staffId || !date || !Number.isFinite(startSlot) || startSlot < 0) return null;
+
+  const lastCandidate = Math.min(SLOTS - requiredSlots, startSlot + lookaheadSlots);
+
+  for (let candidate = startSlot; candidate <= lastCandidate; candidate += 1) {
+    const desiredEnd = candidate + requiredSlots;
+    const conflict = getAppointmentPlacementConflict({
+      staffId,
+      date,
+      start: candidate,
+      end: desiredEnd,
+      excludeId: editId
+    });
+
+    if (conflict) continue;
+
+    let windowEnd = desiredEnd;
+    while (windowEnd < SLOTS) {
+      const nextConflict = getAppointmentPlacementConflict({
+        staffId,
+        date,
+        start: windowEnd,
+        end: windowEnd + 1,
+        excludeId: editId
+      });
+      if (nextConflict) break;
+      windowEnd += 1;
+    }
+
+    return {
+      start: candidate,
+      end: windowEnd,
+      slots: windowEnd - candidate
+    };
+  }
+
+  return null;
+}
+
+function getManagerAssistantAvailabilityPayload() {
+  if (appointmentAction !== 'create' || appointmentModal.classList.contains('hidden')) return null;
+
+  const selectedStaffId = aStaff.value;
+  const selectedStaff = getStaffById(selectedStaffId);
+  const selectedName = selectedStaff?.name || (selectedStaffId === ANYONE_ID ? 'Anyone' : 'Staff');
+  const isPrototypeTarget = selectedStaffId === ANYONE_ID || /newman/i.test(selectedName);
+  if (!isPrototypeTarget) return null;
+
+  const date = aDate.value;
+  const start = Number(aTime.value);
+  const desiredSlots = Math.max(1, Number(aDuration.value) || 4);
+  if (!date || !Number.isFinite(start) || start < 0) return null;
+
+  const otherStaff = getActiveStaffList({ includeAnyone: false })
+    .filter(member => member.id !== selectedStaffId)
+    .filter(member => selectedStaffId !== ANYONE_ID || isStaffAvailableForAnyone(member));
+
+  const openings = otherStaff
+    .map(member => ({
+      member,
+      window: getManagerAssistantFreeWindow({
+        staffId: member.id,
+        date,
+        fromSlot: start,
+        desiredSlots
+      })
+    }))
+    .filter(item => item.window)
+    .sort((a, b) => a.window.start - b.window.start || b.window.slots - a.window.slots);
+
+  const availableNowOpenings = openings.filter(item => item.window.start === start);
+  const availableSoonOpenings = openings.filter(item => item.window.start > start);
+
+  const availableNow = availableNowOpenings.length >= 3
+    ? [{ text: `${availableNowOpenings.length} technicians available now` }]
+    : availableNowOpenings.slice(0, 2).map(item => ({
+        text: `${item.member.name} — until ${timeLabel(item.window.end)}`
+      }));
+
+  const availableSoon = availableSoonOpenings.length >= 3
+    ? [{ text: `${availableSoonOpenings.length} technicians free soon` }]
+    : availableSoonOpenings.slice(0, 2).map(item => ({
+        text: `${item.member.name} — from ${timeLabel(item.window.start)}`
+      }));
+
+  return {
+    title: `${selectedName} at ${timeLabel(start)}`,
+    intro: `For a ${formatManagerAssistantDuration(desiredSlots)} appointment:`,
+    availableNow,
+    availableSoon,
+    emptyText: 'No nearby opening is long enough.'
+  };
+}
+
+function scheduleManagerAssistantForAppointment(delay = 260) {
+  if (managerAssistantDraftTimer) clearTimeout(managerAssistantDraftTimer);
+
+  if (currentUserRole !== 'manager') {
+    managerAssistant?.hide({ immediate: true });
+    return;
+  }
+
+  managerAssistantDraftTimer = setTimeout(async () => {
+    managerAssistantDraftTimer = 0;
+    const payload = getManagerAssistantAvailabilityPayload();
+
+    if (!payload) {
+      managerAssistant?.dismissTip({ celebrate: false });
+      return;
+    }
+
+    const assistant = await ensureManagerAssistant();
+    assistant?.showAvailability(payload);
+  }, delay);
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    managerAssistantHiddenAt = Date.now();
+    clearManagerAssistantWelcomeTimer();
+    return;
+  }
+
+  if (currentUserRole !== 'manager') return;
+  const hiddenFor = managerAssistantHiddenAt
+    ? Date.now() - managerAssistantHiddenAt
+    : 0;
+  managerAssistantHiddenAt = 0;
+
+  if (!managerAssistantWelcomePlayed) {
+    scheduleManagerAssistantWelcome(900);
+  } else if (hiddenFor >= 30 * 60 * 1000) {
+    scheduleManagerAssistantWelcome(900, { force: true });
+  }
+});
+
 if (appointmentGroupToggle) {
   appointmentGroupToggle.addEventListener('change', updateAppointmentGroupControls);
 }
@@ -5747,15 +5960,20 @@ const ANYONE_REQUIRED_DURATION = 4;
 aStaff.onchange = () => {
   handleAnyone();
   checkTimeAvailability();
+  scheduleManagerAssistantForAppointment();
   if (!isWalkInDraftOpenNow()) {
   applyAppointmentTintNow();   
 }    
 };
 
-aTime.onchange = checkTimeAvailability;
+aTime.onchange = () => {
+  checkTimeAvailability();
+  scheduleManagerAssistantForAppointment();
+};
 aDuration.onchange = () => {
   checkTimeAvailability();
   document.getElementById('durationError').style.display = 'none';
+  scheduleManagerAssistantForAppointment();
    
 };
 
@@ -7583,6 +7801,7 @@ setAppointmentGroupValue(null);
 handleAnyone();
 clearAppointmentEditorMeta();
 applyAppointmentTintNow();
+scheduleManagerAssistantForAppointment(180);
 }
 
 function formatAppointmentActionDate(value) {
@@ -12065,6 +12284,7 @@ window.closeAppointment = () => {
   aStaff.style.opacity = '1';
 
   setAppointmentChangeDateVisible(true);
+  managerAssistant?.dismissTip();
 };
 
 
@@ -13863,6 +14083,7 @@ setTimeout(showLoadingRetry, 10000);
 onAuthStateChanged(auth, async (user) => {
 try {
   if (!user) {
+    destroyManagerAssistant();
     stopStaffNotificationsListener();
     document.getElementById('loginScreen').classList.remove('hidden');
     document.getElementById('calendar-container').style.display = 'none';
@@ -13891,6 +14112,12 @@ if (!currentUserRole) {
   await signOut(auth);
   hideLoadingScreen();
   return;
+}
+
+if (currentUserRole === 'manager') {
+  ensureManagerAssistant();
+} else {
+  destroyManagerAssistant();
 }
 
   const staffMenuItem = document.getElementById('staffMenuItem');
@@ -13969,6 +14196,9 @@ if (bottomOffWorkBtn) {
   updateDeclinedOnlineButton();
   updateCalendarZoomButtonVisibility();
   hideLoadingScreen();
+  if (currentUserRole === 'manager') {
+    scheduleManagerAssistantWelcome();
+  }
 } catch (err) {
   console.warn('App did not finish loading:', err);
   showLoadingRetry();

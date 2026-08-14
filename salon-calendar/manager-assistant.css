@@ -1,0 +1,332 @@
+.manager-assistant {
+  --ma-ink: #4d4039;
+  --ma-muted: #7f7169;
+  --ma-rose: #c76f89;
+  --ma-gold: #e5a547;
+  position: fixed;
+  left: 0;
+  bottom: 76px;
+  z-index: 2147480000;
+  display: flex;
+  width: min(390px, 100vw);
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 0;
+  padding-right: 6px;
+  pointer-events: none;
+  box-sizing: border-box;
+  contain: layout style;
+  isolation: isolate;
+}
+
+.manager-assistant.manager-assistant--contained {
+  position: absolute;
+}
+
+.manager-assistant[hidden] {
+  display: none;
+}
+
+.manager-assistant__character-button {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 124px;
+  width: 124px;
+  height: 151px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translateX(-22%);
+  transform-origin: 34% 91%;
+  transition: transform 640ms cubic-bezier(.2,.9,.25,1.08), opacity 240ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.manager-assistant__character-button:focus-visible {
+  outline: 2px solid rgba(199, 111, 137, 0.58);
+  outline-offset: -8px;
+  border-radius: 42%;
+}
+
+.manager-assistant__character-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: left bottom;
+  user-select: none;
+  -webkit-user-drag: none;
+  transform-origin: 48% 89%;
+  filter: drop-shadow(0 7px 6px rgba(72, 47, 36, 0.2));
+}
+
+.manager-assistant__bubble {
+  position: relative;
+  z-index: 1;
+  width: min(238px, calc(100vw - 128px));
+  margin: 0 0 39px -2px;
+  padding: 13px 14px 12px;
+  border: 1px solid rgba(91, 68, 59, 0.16);
+  border-radius: 18px 18px 18px 6px;
+  background: rgba(255, 253, 251, 0.985);
+  box-shadow: 0 14px 34px rgba(66, 43, 35, 0.2);
+  color: var(--ma-ink);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(9px) scale(0.96);
+  transform-origin: left bottom;
+  transition: opacity 180ms ease, transform 240ms cubic-bezier(.2,.8,.2,1), visibility 0s linear 240ms;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.manager-assistant__bubble::after {
+  content: "";
+  position: absolute;
+  left: -10px;
+  bottom: 18px;
+  width: 20px;
+  height: 20px;
+  border-left: 1px solid rgba(91, 68, 59, 0.14);
+  border-bottom: 1px solid rgba(91, 68, 59, 0.14);
+  border-radius: 0 0 0 5px;
+  background: #fffdfb;
+  transform: rotate(45deg);
+}
+
+.manager-assistant.is-bubble-visible .manager-assistant__bubble {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  transition-delay: 0s;
+  pointer-events: auto;
+}
+
+.manager-assistant.is-greeting-bubble .manager-assistant__bubble {
+  width: 172px;
+  padding-bottom: 11px;
+}
+
+.manager-assistant__close {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #95857d;
+  font: 700 20px/28px system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.manager-assistant__close:hover,
+.manager-assistant__close:focus-visible {
+  background: #f6ecef;
+  color: #594941;
+  outline: none;
+}
+
+.manager-assistant__eyebrow {
+  margin: 0 27px 4px 0;
+  color: var(--ma-rose);
+  font: 800 9px/1.2 system-ui, -apple-system, sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.manager-assistant__title {
+  margin: 0 21px 5px 0;
+  font: 800 14px/1.28 system-ui, -apple-system, sans-serif;
+}
+
+.manager-assistant__intro,
+.manager-assistant__empty {
+  margin: 0;
+  color: #64564f;
+  font: 650 11px/1.4 system-ui, -apple-system, sans-serif;
+}
+
+.manager-assistant.is-greeting-bubble .manager-assistant__title {
+  margin-bottom: 2px;
+  font-size: 15px;
+}
+
+.manager-assistant.is-greeting-bubble .manager-assistant__intro {
+  color: #7a665a;
+  font-size: 12px;
+}
+
+.manager-assistant__availability {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.manager-assistant__availability[hidden] {
+  display: none;
+}
+
+.manager-assistant__availability-group {
+  display: grid;
+  grid-template-columns: 53px minmax(0, 1fr);
+  gap: 6px;
+  align-items: start;
+}
+
+.manager-assistant__availability-label {
+  padding-top: 2px;
+  color: var(--ma-muted);
+  font: 800 8.5px/1.25 system-ui, -apple-system, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
+}
+
+.manager-assistant__availability-list {
+  display: grid;
+  gap: 3px;
+}
+
+.manager-assistant__availability-item {
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr);
+  gap: 6px;
+  color: #544841;
+  font: 700 10px/1.35 system-ui, -apple-system, sans-serif;
+}
+
+.manager-assistant__availability-dot {
+  width: 6px;
+  height: 6px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #61a477;
+  box-shadow: 0 0 0 3px rgba(97, 164, 119, 0.12);
+}
+
+.manager-assistant__availability-group--soon .manager-assistant__availability-dot {
+  background: var(--ma-gold);
+  box-shadow: 0 0 0 3px rgba(229, 165, 71, 0.14);
+}
+
+.manager-assistant.is-walking .manager-assistant__character-button,
+.manager-assistant.is-greeting .manager-assistant__character-button,
+.manager-assistant.is-sitting .manager-assistant__character-button,
+.manager-assistant.is-speaking .manager-assistant__character-button,
+.manager-assistant.is-laughing .manager-assistant__character-button,
+.manager-assistant.is-meditating .manager-assistant__character-button {
+  transform: translateX(4px);
+}
+
+.manager-assistant.is-walking .manager-assistant__character-button {
+  transition-duration: 1420ms;
+}
+
+.manager-assistant.is-peeking .manager-assistant__character-button {
+  transform: translateX(-22%);
+}
+
+.manager-assistant.is-peeking .manager-assistant__character-image {
+  animation: maPeekBreath 1250ms ease-in-out infinite;
+}
+
+.manager-assistant.is-walking .manager-assistant__character-image {
+  animation: maWalkWaddle 340ms steps(2, jump-none) infinite;
+}
+
+.manager-assistant.is-greeting .manager-assistant__character-image,
+.manager-assistant.is-speaking .manager-assistant__character-image {
+  animation: maFriendlyWave 720ms ease-in-out 3;
+}
+
+.manager-assistant.is-sitting .manager-assistant__character-image {
+  animation: maIdleBreath 2800ms ease-in-out infinite;
+}
+
+.manager-assistant.is-laughing .manager-assistant__character-image {
+  animation: maBellyLaugh 430ms ease-in-out infinite;
+}
+
+.manager-assistant.is-meditating .manager-assistant__character-image {
+  animation: maMeditateBreath 2200ms ease-in-out infinite;
+}
+
+.manager-assistant.is-leaving .manager-assistant__character-button {
+  transform: translateX(-112%) rotate(-5deg);
+  opacity: 0.28;
+}
+
+.manager-assistant.is-leaving .manager-assistant__character-image {
+  animation: maWalkWaddle 340ms steps(2, jump-none) infinite;
+}
+
+@keyframes maPeekBreath {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  48% { transform: translate(2px, 1px) rotate(1deg); }
+}
+
+@keyframes maWalkWaddle {
+  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+  50% { transform: translateY(-3px) rotate(1.5deg); }
+}
+
+@keyframes maFriendlyWave {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  35% { transform: translateY(-2px) rotate(-1.4deg); }
+  68% { transform: translateY(0) rotate(1deg); }
+}
+
+@keyframes maIdleBreath {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-1px) scale(1.008, 1.012); }
+}
+
+@keyframes maBellyLaugh {
+  0%, 100% { transform: translateY(0) scale(1) rotate(0); }
+  25% { transform: translateY(-3px) scale(1.018, 0.988) rotate(-1deg); }
+  55% { transform: translateY(1px) scale(0.995, 1.012) rotate(1deg); }
+}
+
+@keyframes maMeditateBreath {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    filter: drop-shadow(0 7px 6px rgba(72, 47, 36, 0.18));
+  }
+  50% {
+    transform: translateY(-2px) scale(1.01);
+    filter: drop-shadow(0 9px 8px rgba(165, 108, 44, 0.22));
+  }
+}
+
+@media (max-width: 370px) {
+  .manager-assistant__character-button {
+    flex-basis: 114px;
+    width: 114px;
+    height: 142px;
+  }
+
+  .manager-assistant__bubble {
+    width: min(232px, calc(100vw - 116px));
+    padding: 11px 11px 10px;
+  }
+
+  .manager-assistant.is-greeting-bubble .manager-assistant__bubble {
+    width: 166px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .manager-assistant *,
+  .manager-assistant *::before,
+  .manager-assistant *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+}
