@@ -4876,6 +4876,7 @@ let staffMessagesUnreadBoundaryMs = 0;
 let staffMessagesUnreadBoundaryPendingAbove = false;
 let staffMessagesAcknowledgedIds = new Set();
 let staffMessagesMayClearUnread = false;
+let staffMessagesScrollToLatestPending = false;
 let staffPushStatuses = {};
 let staffPushStatusesState = 'idle';
 let staffMessageAttachment = null;
@@ -9507,8 +9508,22 @@ function scrollStaffNotificationsToBottom() {
   const list = document.getElementById('staffNotificationsList');
   if (!list) return;
   requestAnimationFrame(() => {
-    list.scrollTop = list.scrollHeight;
+    requestAnimationFrame(() => {
+      list.scrollTop = list.scrollHeight;
+    });
   });
+}
+
+function requestStaffMessagesLatest() {
+  staffMessagesScrollToLatestPending = true;
+  scrollStaffNotificationsToBottom();
+}
+
+function isStaffMessagesAtLatest(list = document.getElementById('staffNotificationsList')) {
+  return !!list && (
+    list.scrollHeight <= list.clientHeight
+    || list.scrollTop + list.clientHeight >= list.scrollHeight - 24
+  );
 }
 
 function buildStaffPinIconSvg() {
@@ -9539,6 +9554,7 @@ function bindStaffMessageTabs() {
     button.classList.toggle('active', button.dataset.messageFilter === staffMessagesFilter);
     button.onclick = () => {
       staffMessagesFilter = button.dataset.messageFilter || 'all';
+      staffMessagesScrollToLatestPending = true;
       renderStaffNotifications();
     };
   });
@@ -9597,6 +9613,8 @@ async function hydrateStaffMessageMedia(root = document) {
 function renderStaffNotifications() {
   const list = document.getElementById('staffNotificationsList');
   if (!list) return;
+  const wasAtLatest = isStaffMessagesAtLatest(list);
+  const keepLatest = staffMessagesScrollToLatestPending || wasAtLatest;
 
   renderStaffNotificationInviteBar();
   renderPinnedStaffNotificationBar();
@@ -9694,7 +9712,16 @@ function renderStaffNotifications() {
       button.closest('.staff-notification-card')?.classList.remove('swipe-reply-hint');
     });
   });
-  hydrateStaffMessageMedia();
+  const mediaHydration = hydrateStaffMessageMedia();
+  if (keepLatest) {
+    scrollStaffNotificationsToBottom();
+    Promise.resolve(mediaHydration).finally(() => {
+      if (staffMessagesScrollToLatestPending || isStaffMessagesAtLatest(list)) {
+        scrollStaffNotificationsToBottom();
+      }
+      staffMessagesScrollToLatestPending = false;
+    });
+  }
 }
 
 async function markStaffNotificationRead(item) {
@@ -10103,19 +10130,17 @@ window.openStaffNotifications = async () => {
     staffMessagesUnreadBoundaryMs = Math.min(...unreadBeforeOpen.map(getStaffNotificationMillis).filter(Boolean));
     staffMessagesUnreadBoundaryPendingAbove = staffMessagesHasEarlier && getStaffNotificationMillis(staffNotifications[0]) >= staffMessagesUnreadBoundaryMs;
   }
+  staffMessagesScrollToLatestPending = true;
   renderStaffNotifications();
   modal.classList.remove('hidden');
   const list = document.getElementById('staffNotificationsList');
-  requestAnimationFrame(() => {
-    const divider = list?.querySelector('.staff-notification-unread-divider');
-    if (divider) divider.scrollIntoView({ block: 'start' });
-    else scrollStaffNotificationsToBottom();
-  });
+  requestStaffMessagesLatest();
   staffMessagesMayClearUnread = false;
   setTimeout(() => { staffMessagesMayClearUnread = true; }, 500);
   if (list && !list.dataset.unreadScrollBound) {
     list.dataset.unreadScrollBound = 'true';
     list.addEventListener('scroll', () => {
+      if (!isStaffMessagesAtLatest(list)) staffMessagesScrollToLatestPending = false;
       if (!staffMessagesMayClearUnread || !staffMessagesUnreadBoundaryMs) return;
       if (list.scrollTop + list.clientHeight >= list.scrollHeight - 18) {
         staffMessagesUnreadBoundaryMs = 0;
