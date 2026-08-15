@@ -5,7 +5,7 @@ const POSE_URLS = Object.freeze({
   smile: new URL('./assets/manager-assistant/buddha-smile.png', import.meta.url).href,
   peek: new URL('./assets/manager-assistant/buddha-peek.png', import.meta.url).href,
   walkA: new URL('./assets/manager-assistant/buddha-walk-a.png', import.meta.url).href,
-  walkB: new URL('./assets/manager-assistant/buddha-walk-b.png?v=right-facing-step', import.meta.url).href,
+  walkB: new URL('./assets/manager-assistant/buddha-walk-b.png?v=user-second-step', import.meta.url).href,
   wave: new URL('./assets/manager-assistant/buddha-wave.png', import.meta.url).href,
   laugh: new URL('./assets/manager-assistant/buddha-laugh.png', import.meta.url).href,
   meditate: new URL('./assets/manager-assistant/buddha-meditate.png', import.meta.url).href
