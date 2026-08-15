@@ -5,7 +5,7 @@ const POSE_URLS = Object.freeze({
   smile: new URL('./assets/manager-assistant/buddha-smile.png', import.meta.url).href,
   peek: new URL('./assets/manager-assistant/buddha-peek.png', import.meta.url).href,
   walkA: new URL('./assets/manager-assistant/buddha-walk-a.png', import.meta.url).href,
-  walkB: new URL('./assets/manager-assistant/buddha-walk-b.png?v=user-second-step', import.meta.url).href,
+  walkB: new URL('./assets/manager-assistant/buddha-walk-b.png?v=matched-color-slow-steps', import.meta.url).href,
   wave: new URL('./assets/manager-assistant/buddha-wave.png', import.meta.url).href,
   laugh: new URL('./assets/manager-assistant/buddha-laugh.png', import.meta.url).href,
   meditate: new URL('./assets/manager-assistant/buddha-meditate.png', import.meta.url).href
@@ -230,8 +230,8 @@ export function createManagerAssistant({ host = document.body, contained = false
     setState('peeking');
 
     later(() => setState('walking'), 680);
-    for (let step = 0; step < 8; step += 1) {
-      later(() => setPose(step % 2 === 0 ? 'walkA' : 'walkB'), 680 + step * 170);
+    for (let step = 0; step < 4; step += 1) {
+      later(() => setPose(step % 2 === 0 ? 'walkA' : 'walkB'), 680 + step * 320);
     }
 
     later(() => setState('greeting'), 2100);

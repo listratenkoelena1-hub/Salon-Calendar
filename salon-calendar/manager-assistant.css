@@ -236,7 +236,7 @@
 }
 
 .manager-assistant.is-walking .manager-assistant__character-image {
-  animation: maWalkWaddle 340ms steps(2, jump-none) infinite;
+  animation: maWalkWaddle 640ms steps(2, jump-none) infinite;
 }
 
 .manager-assistant.is-greeting .manager-assistant__character-image,
