@@ -228,7 +228,7 @@
 }
 
 .manager-assistant.is-peeking .manager-assistant__character-button {
-  transform: translateX(-22%);
+  transform: translateX(-28%);
 }
 
 .manager-assistant.is-peeking .manager-assistant__character-image {
@@ -266,8 +266,8 @@
 }
 
 @keyframes maPeekBreath {
-  0%, 100% { transform: translate(0, 0) rotate(0); }
-  48% { transform: translate(2px, 1px) rotate(1deg); }
+  0%, 100% { transform: translate(0, 0) scale(0.81) rotate(0); }
+  48% { transform: translate(2px, 1px) scale(0.81) rotate(1deg); }
 }
 
 @keyframes maWalkWaddle {

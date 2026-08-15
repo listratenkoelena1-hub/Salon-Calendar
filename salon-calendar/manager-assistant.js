@@ -29,7 +29,7 @@ function ensureStylesheet() {
   const link = document.createElement('link');
   link.id = STYLE_ID;
   link.rel = 'stylesheet';
-  link.href = new URL('./manager-assistant.css', import.meta.url).href;
+  link.href = new URL('./manager-assistant.css?v=peek-pause-size', import.meta.url).href;
   document.head.appendChild(link);
 }
 
@@ -229,12 +229,12 @@ export function createManagerAssistant({ host = document.body, contained = false
     preloadPoses(['walkA', 'walkB', 'wave', 'smile']);
     setState('peeking');
 
-    later(() => setState('walking'), 680);
+    later(() => setState('walking'), 1180);
     for (let step = 0; step < 3; step += 1) {
-      later(() => setPose(step % 2 === 0 ? 'walkA' : 'walkB'), 680 + step * 320);
+      later(() => setPose(step % 2 === 0 ? 'walkA' : 'walkB'), 1180 + step * 320);
     }
 
-    later(() => setState('greeting'), 2100);
+    later(() => setState('greeting'), 2600);
     later(() => {
       showBubble({
         title: 'Hi there!',
@@ -243,7 +243,7 @@ export function createManagerAssistant({ host = document.body, contained = false
         context: 'welcome',
         autoHideMs
       });
-    }, 2300);
+    }, 2800);
   }
 
   function playLaugh() {
