@@ -1,9 +1,14 @@
 const STYLE_ID = 'managerAssistantStylesheet';
 const ROOT_ID = 'managerAssistant';
+const MODAL_POOF_DURATION_MS = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  ? 80
+  : 680;
 
 const POSE_URLS = Object.freeze({
   smile: new URL('./assets/manager-assistant/buddha-smile.png', import.meta.url).href,
   peek: new URL('./assets/manager-assistant/buddha-peek.png', import.meta.url).href,
+  peekWave: new URL('./assets/manager-assistant/buddha-peek-wave.png?v=modal-poof-variant', import.meta.url).href,
+  poof: new URL('./assets/manager-assistant/buddha-poof.png?v=modal-poof-variant', import.meta.url).href,
   walkA: new URL('./assets/manager-assistant/buddha-walk-a.png', import.meta.url).href,
   walkB: new URL('./assets/manager-assistant/buddha-walk-b.png?v=matched-color-slow-steps', import.meta.url).href,
   wave: new URL('./assets/manager-assistant/buddha-wave.png', import.meta.url).href,
@@ -19,6 +24,9 @@ const STATE_POSES = Object.freeze({
   speaking: 'wave',
   laughing: 'laugh',
   meditating: 'meditate',
+  poofing: 'poof',
+  'modal-peeking': 'peek',
+  'modal-speaking': 'peekWave',
   leaving: 'walkA'
 });
 
@@ -29,7 +37,7 @@ function ensureStylesheet() {
   const link = document.createElement('link');
   link.id = STYLE_ID;
   link.rel = 'stylesheet';
-  link.href = new URL('./manager-assistant.css?v=modal-click-through', import.meta.url).href;
+  link.href = new URL('./manager-assistant.css?v=modal-poof-variant', import.meta.url).href;
   document.head.appendChild(link);
 }
 
@@ -113,6 +121,11 @@ export function createManagerAssistant({ host = document.body, contained = false
   const posePreloads = new Map();
   let activeContext = null;
   let visible = false;
+  let modalMode = false;
+  let modalTransitionTimer = 0;
+  let modalReturnState = 'meditating';
+  let pendingModalTip = null;
+  let modalObserver = null;
 
   function later(callback, delay) {
     const timer = window.setTimeout(() => {
@@ -126,6 +139,20 @@ export function createManagerAssistant({ host = document.body, contained = false
   function clearTimers() {
     timers.forEach(timer => window.clearTimeout(timer));
     timers.clear();
+  }
+
+  function clearModalTransitionTimer() {
+    if (!modalTransitionTimer) return;
+    window.clearTimeout(modalTransitionTimer);
+    modalTransitionTimer = 0;
+  }
+
+  function afterModalPoof(callback) {
+    clearModalTransitionTimer();
+    modalTransitionTimer = window.setTimeout(() => {
+      modalTransitionTimer = 0;
+      callback();
+    }, MODAL_POOF_DURATION_MS);
   }
 
   function preloadPose(pose) {
@@ -151,6 +178,10 @@ export function createManagerAssistant({ host = document.body, contained = false
     root.classList.remove(...STATE_CLASSES);
     root.classList.add(`is-${state}`);
     setPose(STATE_POSES[state] || 'smile');
+  }
+
+  function getState() {
+    return Object.keys(STATE_POSES).find(state => root.classList.contains(`is-${state}`)) || 'peeking';
   }
 
   function ensureVisible() {
@@ -204,11 +235,74 @@ export function createManagerAssistant({ host = document.body, contained = false
     }
   }
 
+  function showPendingModalTip() {
+    if (!modalMode || !pendingModalTip) return;
+
+    const tip = pendingModalTip;
+    pendingModalTip = null;
+    setState('modal-speaking');
+    showBubble(tip.payload, {
+      context: 'availability',
+      autoHideMs: tip.autoHideMs
+    });
+  }
+
+  function enterModalMode() {
+    const previousState = getState();
+    modalMode = true;
+    modalReturnState = previousState === 'sitting' ? 'sitting' : 'meditating';
+    pendingModalTip = null;
+    clearTimers();
+    clearModalTransitionTimer();
+    ensureVisible();
+    hideBubble();
+    activeContext = null;
+    preloadPoses(['poof', 'peek', 'peekWave']);
+    setState('poofing');
+
+    afterModalPoof(() => {
+      if (!modalMode) return;
+      setState('modal-peeking');
+      showPendingModalTip();
+    });
+  }
+
+  function exitModalMode() {
+    modalMode = false;
+    pendingModalTip = null;
+    clearTimers();
+    clearModalTransitionTimer();
+    ensureVisible();
+    hideBubble();
+    activeContext = null;
+    setState('poofing');
+
+    afterModalPoof(() => {
+      if (modalMode) return;
+      setState(modalReturnState);
+    });
+  }
+
+  function syncModalMode() {
+    const nextModalMode = document.body.classList.contains('modal-open');
+    if (nextModalMode === modalMode) return;
+    if (nextModalMode) {
+      enterModalMode();
+    } else {
+      exitModalMode();
+    }
+  }
+
   function smile() {
     clearTimers();
     ensureVisible();
     hideBubble();
     activeContext = null;
+    pendingModalTip = null;
+    if (modalMode) {
+      if (!modalTransitionTimer) setState('modal-peeking');
+      return;
+    }
     setState('sitting');
   }
 
@@ -217,11 +311,24 @@ export function createManagerAssistant({ host = document.body, contained = false
     ensureVisible();
     hideBubble();
     activeContext = null;
+    pendingModalTip = null;
+    if (modalMode) {
+      if (!modalTransitionTimer) setState('modal-peeking');
+      return;
+    }
     setState('peeking');
     later(() => setState('sitting'), 1900);
   }
 
   function playWelcome({ autoHideMs = 5000 } = {}) {
+    if (modalMode) {
+      ensureVisible();
+      if (!modalTransitionTimer && !root.classList.contains('is-bubble-visible')) {
+        setState('modal-peeking');
+      }
+      return;
+    }
+
     clearTimers();
     ensureVisible();
     hideBubble();
@@ -251,6 +358,11 @@ export function createManagerAssistant({ host = document.body, contained = false
     ensureVisible();
     hideBubble();
     activeContext = null;
+    pendingModalTip = null;
+    if (modalMode) {
+      if (!modalTransitionTimer) setState('modal-peeking');
+      return;
+    }
     setState('laughing');
     later(() => setState('meditating'), 2200);
   }
@@ -260,6 +372,11 @@ export function createManagerAssistant({ host = document.body, contained = false
     ensureVisible();
     hideBubble();
     activeContext = null;
+    pendingModalTip = null;
+    if (modalMode) {
+      if (!modalTransitionTimer) setState('modal-peeking');
+      return;
+    }
     setState('meditating');
   }
 
@@ -272,6 +389,12 @@ export function createManagerAssistant({ host = document.body, contained = false
     hideBubble();
     activeContext = null;
     ensureVisible();
+    pendingModalTip = null;
+
+    if (modalMode) {
+      if (!modalTransitionTimer) setState('modal-peeking');
+      return;
+    }
 
     if (!shouldCelebrate) {
       setState('sitting');
@@ -286,7 +409,14 @@ export function createManagerAssistant({ host = document.body, contained = false
   function showAvailability(payload = {}, { autoHideMs = 9000 } = {}) {
     clearTimers();
     ensureVisible();
-    preloadPoses(['wave', 'laugh', 'meditate']);
+    preloadPoses(['wave', 'laugh', 'meditate', 'peekWave']);
+
+    if (modalMode) {
+      pendingModalTip = { payload, autoHideMs };
+      if (!modalTransitionTimer) showPendingModalTip();
+      return;
+    }
+
     setState('speaking');
     showBubble(payload, {
       context: 'availability',
@@ -296,8 +426,10 @@ export function createManagerAssistant({ host = document.body, contained = false
 
   function hide({ immediate = false } = {}) {
     clearTimers();
+    clearModalTransitionTimer();
     hideBubble();
     activeContext = null;
+    pendingModalTip = null;
 
     if (immediate) {
       root.hidden = true;
@@ -319,9 +451,19 @@ export function createManagerAssistant({ host = document.body, contained = false
 
   function destroy() {
     clearTimers();
+    clearModalTransitionTimer();
+    modalObserver?.disconnect();
+    modalObserver = null;
     root.remove();
     visible = false;
   }
+
+  modalObserver = new MutationObserver(syncModalMode);
+  modalObserver.observe(document.body, {
+    attributes: true,
+    attributeFilter: ['class']
+  });
+  syncModalMode();
 
   characterButton.addEventListener('click', () => {
     if (root.classList.contains('is-bubble-visible')) {

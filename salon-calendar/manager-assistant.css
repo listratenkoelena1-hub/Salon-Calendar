@@ -223,6 +223,19 @@
   transform: translateX(4px);
 }
 
+.manager-assistant.is-poofing .manager-assistant__character-button {
+  transform: translateX(0);
+  opacity: 1;
+  transition: none;
+  pointer-events: none;
+}
+
+.manager-assistant.is-modal-peeking .manager-assistant__character-button,
+.manager-assistant.is-modal-speaking .manager-assistant__character-button {
+  transform: translateX(-28%);
+  transition: none;
+}
+
 .manager-assistant.is-walking .manager-assistant__character-button {
   transition-duration: 1420ms;
 }
@@ -233,6 +246,21 @@
 
 .manager-assistant.is-peeking .manager-assistant__character-image {
   animation: maPeekBreath 1250ms ease-in-out infinite;
+}
+
+.manager-assistant.is-modal-peeking .manager-assistant__character-image {
+  animation: maPeekBreath 1250ms ease-in-out infinite;
+}
+
+.manager-assistant.is-modal-speaking .manager-assistant__character-image {
+  animation: maModalPeekWave 820ms ease-in-out infinite;
+}
+
+.manager-assistant.is-poofing .manager-assistant__character-image {
+  object-position: center center;
+  transform-origin: 50% 50%;
+  filter: none;
+  animation: maPoofTwirl 680ms cubic-bezier(.2,.72,.22,1) both;
 }
 
 .manager-assistant.is-walking .manager-assistant__character-image {
@@ -273,6 +301,35 @@
 @keyframes maWalkWaddle {
   0%, 100% { transform: translateY(0) rotate(-1.5deg); }
   50% { transform: translateY(-3px) rotate(1.5deg); }
+}
+
+@keyframes maModalPeekWave {
+  0%, 100% { transform: translate(0, 0) scale(0.81) rotate(0); }
+  36% { transform: translate(2px, -1px) scale(0.81) rotate(-1.2deg); }
+  70% { transform: translate(1px, 1px) scale(0.81) rotate(0.8deg); }
+}
+
+@keyframes maPoofTwirl {
+  0% {
+    opacity: 0;
+    transform: translate(0, 7px) scale(1.25) rotate(-22deg);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-1px, 1px) scale(1.66) rotate(-2deg);
+  }
+  52% {
+    opacity: 1;
+    transform: translate(2px, -2px) scale(1.84) rotate(24deg);
+  }
+  78% {
+    opacity: 1;
+    transform: translate(-1px, -1px) scale(1.7) rotate(47deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-2px, -4px) scale(1.36) rotate(74deg);
+  }
 }
 
 @keyframes maFriendlyWave {
