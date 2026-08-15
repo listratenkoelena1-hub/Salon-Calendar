@@ -230,7 +230,7 @@ export function createManagerAssistant({ host = document.body, contained = false
     setState('peeking');
 
     later(() => setState('walking'), 680);
-    for (let step = 0; step < 4; step += 1) {
+    for (let step = 0; step < 3; step += 1) {
       later(() => setPose(step % 2 === 0 ? 'walkA' : 'walkB'), 680 + step * 320);
     }
 
