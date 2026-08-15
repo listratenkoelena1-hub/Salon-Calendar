@@ -5600,7 +5600,7 @@ async function ensureManagerAssistant() {
   if (managerAssistant) return managerAssistant;
   if (managerAssistantLoadPromise) return managerAssistantLoadPromise;
 
-  managerAssistantLoadPromise = import('./manager-assistant.js?v=peek-pause-size')
+  managerAssistantLoadPromise = import('./manager-assistant.js?v=modal-click-through')
     .then(module => {
       if (currentUserRole !== 'manager') return null;
       managerAssistant = module.createManagerAssistant();

@@ -29,7 +29,7 @@ function ensureStylesheet() {
   const link = document.createElement('link');
   link.id = STYLE_ID;
   link.rel = 'stylesheet';
-  link.href = new URL('./manager-assistant.css?v=peek-pause-size', import.meta.url).href;
+  link.href = new URL('./manager-assistant.css?v=modal-click-through', import.meta.url).href;
   document.head.appendChild(link);
 }
 

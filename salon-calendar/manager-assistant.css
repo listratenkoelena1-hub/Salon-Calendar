@@ -303,6 +303,15 @@
   }
 }
 
+body.modal-open .manager-assistant .manager-assistant__character-button,
+body.modal-open .manager-assistant.is-bubble-visible .manager-assistant__bubble {
+  pointer-events: none;
+}
+
+body.modal-open .manager-assistant.is-bubble-visible .manager-assistant__close {
+  pointer-events: auto;
+}
+
 @media (max-width: 370px) {
   .manager-assistant__character-button {
     flex-basis: 114px;
