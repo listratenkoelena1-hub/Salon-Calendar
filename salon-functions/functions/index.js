@@ -1009,7 +1009,8 @@ function buildStaffNotificationDoc({
   staffId,
   staffName,
   photoReviewUrl = "",
-  source = "calendar"
+  source = "calendar",
+  messageGroupId = ""
 }) {
   const body = stripNotificationHtml(message);
   const priority = eventType === "online_request_created" ||
@@ -1049,7 +1050,49 @@ function buildStaffNotificationDoc({
     readBy: {},
     createdAt: FieldValue.serverTimestamp(),
     expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + STAFF_NOTIFICATION_TTL_MS)),
-    source
+    source,
+    messageGroupId
+  };
+}
+
+function buildCanonicalStaffMessageDoc({
+  message,
+  eventType,
+  entityType,
+  entityId,
+  staffId,
+  staffName,
+  staffRecords,
+  photoReviewUrl = "",
+  source = "calendar",
+  messageGroupId = ""
+}) {
+  const legacy = buildStaffNotificationDoc({
+    message,
+    eventType,
+    entityType,
+    entityId,
+    staffId,
+    staffName,
+    photoReviewUrl,
+    source,
+    messageGroupId
+  });
+  const audienceStaffIds = staffRecords
+    .map(staff => staff.id)
+    .filter(id => id && id !== ANYONE_ID);
+  return {
+    ...legacy,
+    recipientStaffId: "",
+    recipientStaffName: "",
+    visibleToAllStaff: true,
+    audienceVersion: 2,
+    audienceStaffIds,
+    importantStaffIds: staffId && staffId !== ANYONE_ID ? [staffId] : [],
+    managerPriority: "key",
+    staffDefaultPriority: "secondary",
+    pushEligible: true,
+    notificationLink: "https://rosesnails-calendar.web.app"
   };
 }
 
@@ -1362,6 +1405,7 @@ exports.createOnlineBookingRequest = onCall(
     const logRef = db.collection("activityLog").doc();
     const telegramRef = db.collection("TelegramQueue").doc();
     const staffNotificationRef = db.collection("staffNotifications").doc();
+    const staffMessageRef = db.collection("staffMessages").doc();
     const emailRef = email ? db.collection(EMAIL_QUEUE_COLLECTION).doc() : null;
     const emailContactRef = email ? db.collection(BOOKING_EMAIL_CONTACT_COLLECTION).doc(appointmentRef.id) : null;
     let photoReview = null;
@@ -1553,6 +1597,7 @@ exports.createOnlineBookingRequest = onCall(
       }
 
       const onlineBookingTelegramMessage = buildOnlineBookingTelegramMessage(appointmentData, staffRecords);
+      const messageGroupId = `online-booking-${appointmentRef.id}`;
       tx.set(telegramRef, {
         status: "pending",
         message: onlineBookingTelegramMessage,
@@ -1575,8 +1620,27 @@ exports.createOnlineBookingRequest = onCall(
         staffId,
         staffName: getStaffName(staffRecords, staffId),
         photoReviewUrl: appointmentData.photoReviewUrl || "",
-        source: "online_booking"
+        source: "online_booking",
+        messageGroupId
       }));
+
+      // During the test rollout, keep the legacy document for the production
+      // calendar and add one canonical document for the new test client.
+      tx.set(staffMessageRef, {
+        ...buildCanonicalStaffMessageDoc({
+          message: onlineBookingTelegramMessage,
+          eventType: "online_request_created",
+          entityType: "appointment",
+          entityId: appointmentRef.id,
+          staffId,
+          staffName: getStaffName(staffRecords, staffId),
+          staffRecords,
+          photoReviewUrl: appointmentData.photoReviewUrl || "",
+          source: "online_booking",
+          messageGroupId
+        }),
+        pushEligible: false
+      });
 
       return {
         ok: true,
@@ -2109,31 +2173,40 @@ exports.getStaffPushStatuses = onCall(
   }
 );
 
-exports.staffNotificationCreated = onDocumentCreated(
-  {
-    document: "staffNotifications/{id}",
-    region: "us-central1",
-    maxInstances: 10
-  },
-  async (event) => {
+async function handleStaffMessageCreated(event) {
     const snap = event.data;
     if (!snap) return;
 
     const data = snap.data() || {};
-    if (data.pushEligible !== true || !["key", "message"].includes(data.priority)) {
+    if (data.pushEligible !== true) {
       return;
     }
 
     const deviceSnaps = [];
-    if (data.visibleToManager !== false) {
+    if (data.audienceVersion === 2) {
+      const allDevicesSnap = await db.collection("staffPushDevices")
+        .where("enabled", "==", true)
+        .get();
+      const importantStaffIds = new Set(Array.isArray(data.importantStaffIds) ? data.importantStaffIds : []);
+      const managerShouldReceive = data.visibleToManager !== false && ["key", "message"].includes(data.managerPriority);
+      allDevicesSnap.docs.forEach(docSnap => {
+        const device = docSnap.data() || {};
+        if (device.role === "manager" && managerShouldReceive) deviceSnaps.push(docSnap);
+        if (device.role === "staff" && (data.pushToAllStaff === true || importantStaffIds.has(device.staffId))) {
+          deviceSnaps.push(docSnap);
+        }
+      });
+    } else if (["key", "message"].includes(data.priority) && data.visibleToManager !== false) {
       const managerSnap = await db.collection("staffPushDevices")
         .where("enabled", "==", true)
         .where("role", "==", "manager")
         .get();
       deviceSnaps.push(...managerSnap.docs);
+    } else if (!["key", "message"].includes(data.priority)) {
+      return;
     }
 
-    if (data.recipientStaffId) {
+    if (data.audienceVersion !== 2 && data.recipientStaffId) {
       const staffSnap = await db.collection("staffPushDevices")
         .where("enabled", "==", true)
         .where("staffId", "==", data.recipientStaffId)
@@ -2174,12 +2247,16 @@ exports.staffNotificationCreated = onDocumentCreated(
     const title = data.title || "Calendar message";
     const senderPrefix = data.senderLabel ? String(data.senderLabel).slice(0, 60) + ": " : "";
     const body = (senderPrefix + String(data.body || "")).slice(0, 180);
+    const requestedLink = String(data.notificationLink || "");
+    const notificationLink = /^https:\/\/[a-z0-9-]+\.web\.app$/i.test(requestedLink)
+      ? requestedLink
+      : "https://rosesnails-calendar.web.app";
 
     const result = await admin.messaging().sendEachForMulticast({
       tokens,
       webpush: {
         fcmOptions: {
-          link: "https://rosesnails-calendar.web.app"
+          link: notificationLink
         }
       },
       data: {
@@ -2216,7 +2293,24 @@ exports.staffNotificationCreated = onDocumentCreated(
       pushFailureCount: result.failureCount,
       pushSentAt: FieldValue.serverTimestamp()
     }, { merge: true });
-  }
+}
+
+exports.staffNotificationCreated = onDocumentCreated(
+  {
+    document: "staffNotifications/{id}",
+    region: "us-central1",
+    maxInstances: 10
+  },
+  handleStaffMessageCreated
+);
+
+exports.staffMessageCreated = onDocumentCreated(
+  {
+    document: "staffMessages/{id}",
+    region: "us-central1",
+    maxInstances: 10
+  },
+  handleStaffMessageCreated
 );
 
 exports.cleanupExpiredStaffNotifications = onSchedule(
@@ -2230,6 +2324,10 @@ exports.cleanupExpiredStaffNotifications = onSchedule(
       .where("expiresAt", "<=", admin.firestore.Timestamp.now())
       .limit(200)
       .get();
+    const canonicalSnap = await db.collection("staffMessages")
+      .where("expiresAt", "<=", admin.firestore.Timestamp.now())
+      .limit(200)
+      .get();
 
     const expiredDevices = await db.collection("staffPushDevices")
       .where("expiresAt", "<=", admin.firestore.Timestamp.now())
@@ -2238,6 +2336,7 @@ exports.cleanupExpiredStaffNotifications = onSchedule(
 
     await Promise.all([
       ...snap.docs.map(docSnap => docSnap.ref.delete()),
+      ...canonicalSnap.docs.map(docSnap => docSnap.ref.delete()),
       ...expiredDevices.docs.map(docSnap => docSnap.ref.delete())
     ]);
   }
