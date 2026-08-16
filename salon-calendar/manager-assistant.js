@@ -1,8 +1,19 @@
 const STYLE_ID = 'managerAssistantStylesheet';
 const ROOT_ID = 'managerAssistant';
-const MODAL_POOF_DURATION_MS = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-  ? 80
-  : 680;
+const REDUCED_MOTION = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+const MOTION = Object.freeze({
+  poseTransitionMs: REDUCED_MOTION ? 1 : 400,
+  peekHoldMs: REDUCED_MOTION ? 1 : 1600,
+  frameMs: REDUCED_MOTION ? 1 : 400,
+  walkDurationMs: REDUCED_MOTION ? 3 : 1200,
+  greetingLeadMs: REDUCED_MOTION ? 1 : 200,
+  waveCycleMs: REDUCED_MOTION ? 1 : 800,
+  idleCycleMs: REDUCED_MOTION ? 1 : 3200,
+  laughCycleMs: REDUCED_MOTION ? 1 : 400,
+  laughDurationMs: REDUCED_MOTION ? 1 : 2000,
+  meditateCycleMs: REDUCED_MOTION ? 1 : 2400,
+  poofDurationMs: REDUCED_MOTION ? 1 : 1000
+});
 
 const POSE_URLS = Object.freeze({
   smile: new URL('./assets/manager-assistant/buddha-smile.png', import.meta.url).href,
@@ -37,7 +48,7 @@ function ensureStylesheet() {
   const link = document.createElement('link');
   link.id = STYLE_ID;
   link.rel = 'stylesheet';
-  link.href = new URL('./manager-assistant.css?v=modal-poof-variant', import.meta.url).href;
+  link.href = new URL('./manager-assistant.css?v=final-motion-sequence', import.meta.url).href;
   document.head.appendChild(link);
 }
 
@@ -82,6 +93,14 @@ export function createManagerAssistant({ host = document.body, contained = false
   root.className = `manager-assistant is-peeking${contained ? ' manager-assistant--contained' : ''}`;
   root.hidden = true;
   root.setAttribute('aria-label', 'Manager assistant');
+  root.style.setProperty('--ma-pose-transition-ms', `${MOTION.poseTransitionMs}ms`);
+  root.style.setProperty('--ma-frame-ms', `${MOTION.frameMs}ms`);
+  root.style.setProperty('--ma-walk-ms', `${MOTION.walkDurationMs}ms`);
+  root.style.setProperty('--ma-wave-cycle-ms', `${MOTION.waveCycleMs}ms`);
+  root.style.setProperty('--ma-idle-cycle-ms', `${MOTION.idleCycleMs}ms`);
+  root.style.setProperty('--ma-laugh-cycle-ms', `${MOTION.laughCycleMs}ms`);
+  root.style.setProperty('--ma-meditate-cycle-ms', `${MOTION.meditateCycleMs}ms`);
+  root.style.setProperty('--ma-poof-ms', `${MOTION.poofDurationMs}ms`);
 
   const characterButton = document.createElement('button');
   characterButton.className = 'manager-assistant__character-button';
@@ -123,9 +142,11 @@ export function createManagerAssistant({ host = document.body, contained = false
   let visible = false;
   let modalMode = false;
   let modalTransitionTimer = 0;
-  let modalReturnState = 'meditating';
   let pendingModalTip = null;
   let modalObserver = null;
+  let welcomeRequested = false;
+  let welcomeShown = false;
+  let welcomePending = false;
 
   function later(callback, delay) {
     const timer = window.setTimeout(() => {
@@ -152,7 +173,7 @@ export function createManagerAssistant({ host = document.body, contained = false
     modalTransitionTimer = window.setTimeout(() => {
       modalTransitionTimer = 0;
       callback();
-    }, MODAL_POOF_DURATION_MS);
+    }, MOTION.poofDurationMs);
   }
 
   function preloadPose(pose) {
@@ -178,10 +199,6 @@ export function createManagerAssistant({ host = document.body, contained = false
     root.classList.remove(...STATE_CLASSES);
     root.classList.add(`is-${state}`);
     setPose(STATE_POSES[state] || 'smile');
-  }
-
-  function getState() {
-    return Object.keys(STATE_POSES).find(state => root.classList.contains(`is-${state}`)) || 'peeking';
   }
 
   function ensureVisible() {
@@ -247,10 +264,46 @@ export function createManagerAssistant({ host = document.body, contained = false
     });
   }
 
+  function playEntrance({ showGreeting = false, autoHideMs = 5000 } = {}) {
+    clearTimers();
+    clearModalTransitionTimer();
+    ensureVisible();
+    hideBubble();
+    activeContext = null;
+    pendingModalTip = null;
+    if (showGreeting) welcomePending = false;
+    preloadPoses(['peek', 'walkA', 'walkB', 'wave', 'smile']);
+    setState('peeking');
+
+    const walkingAt = MOTION.peekHoldMs;
+    const arrivalAt = walkingAt + MOTION.walkDurationMs;
+
+    later(() => setState('walking'), walkingAt);
+    later(() => setPose('walkB'), walkingAt + MOTION.frameMs);
+    later(() => setPose('walkA'), walkingAt + MOTION.frameMs * 2);
+    later(() => {
+      if (modalMode) return;
+      setState(showGreeting ? 'greeting' : 'sitting');
+
+      if (!showGreeting) return;
+      later(() => {
+        if (modalMode) return;
+        welcomeShown = true;
+        welcomePending = false;
+        showBubble({
+          title: 'Hi there!',
+          intro: 'Bình an 🌿'
+        }, {
+          context: 'welcome',
+          autoHideMs
+        });
+      }, MOTION.greetingLeadMs);
+    }, arrivalAt);
+  }
+
   function enterModalMode() {
-    const previousState = getState();
     modalMode = true;
-    modalReturnState = previousState === 'sitting' ? 'sitting' : 'meditating';
+    if (welcomeRequested && !welcomeShown) welcomePending = true;
     pendingModalTip = null;
     clearTimers();
     clearModalTransitionTimer();
@@ -269,18 +322,9 @@ export function createManagerAssistant({ host = document.body, contained = false
 
   function exitModalMode() {
     modalMode = false;
-    pendingModalTip = null;
-    clearTimers();
-    clearModalTransitionTimer();
-    ensureVisible();
-    hideBubble();
-    activeContext = null;
-    setState('poofing');
-
-    afterModalPoof(() => {
-      if (modalMode) return;
-      setState(modalReturnState);
-    });
+    const showDeferredGreeting = welcomePending && welcomeRequested && !welcomeShown;
+    welcomePending = false;
+    playEntrance({ showGreeting: showDeferredGreeting });
   }
 
   function syncModalMode() {
@@ -317,11 +361,16 @@ export function createManagerAssistant({ host = document.body, contained = false
       return;
     }
     setState('peeking');
-    later(() => setState('sitting'), 1900);
+    later(() => setState('sitting'), MOTION.peekHoldMs);
   }
 
   function playWelcome({ autoHideMs = 5000 } = {}) {
+    welcomeRequested = true;
+    welcomeShown = false;
+    welcomePending = false;
+
     if (modalMode) {
+      welcomePending = true;
       ensureVisible();
       if (!modalTransitionTimer && !root.classList.contains('is-bubble-visible')) {
         setState('modal-peeking');
@@ -329,28 +378,7 @@ export function createManagerAssistant({ host = document.body, contained = false
       return;
     }
 
-    clearTimers();
-    ensureVisible();
-    hideBubble();
-    activeContext = null;
-    preloadPoses(['walkA', 'walkB', 'wave', 'smile']);
-    setState('peeking');
-
-    later(() => setState('walking'), 1180);
-    for (let step = 0; step < 3; step += 1) {
-      later(() => setPose(step % 2 === 0 ? 'walkA' : 'walkB'), 1180 + step * 320);
-    }
-
-    later(() => setState('greeting'), 2600);
-    later(() => {
-      showBubble({
-        title: 'Hi there!',
-        intro: 'Bình an 🌿'
-      }, {
-        context: 'welcome',
-        autoHideMs
-      });
-    }, 2800);
+    playEntrance({ showGreeting: true, autoHideMs });
   }
 
   function playLaugh() {
@@ -364,7 +392,7 @@ export function createManagerAssistant({ host = document.body, contained = false
       return;
     }
     setState('laughing');
-    later(() => setState('meditating'), 2200);
+    later(() => setState('meditating'), MOTION.laughDurationMs);
   }
 
   function playMeditate() {
@@ -402,8 +430,8 @@ export function createManagerAssistant({ host = document.body, contained = false
     }
 
     setState('sitting');
-    later(() => setState('laughing'), 350);
-    later(() => setState('meditating'), 2550);
+    later(() => setState('laughing'), MOTION.frameMs);
+    later(() => setState('meditating'), MOTION.frameMs + MOTION.laughDurationMs);
   }
 
   function showAvailability(payload = {}, { autoHideMs = 9000 } = {}) {
@@ -440,13 +468,13 @@ export function createManagerAssistant({ host = document.body, contained = false
 
     ensureVisible();
     setState('leaving');
-    later(() => setPose('walkB'), 170);
-    later(() => setPose('walkA'), 340);
+    later(() => setPose('walkB'), MOTION.frameMs);
+    later(() => setPose('walkA'), MOTION.frameMs * 2);
     later(() => {
       root.hidden = true;
       visible = false;
       setState('peeking');
-    }, 680);
+    }, MOTION.walkDurationMs);
   }
 
   function destroy() {

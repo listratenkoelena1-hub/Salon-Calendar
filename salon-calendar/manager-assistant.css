@@ -3,6 +3,14 @@
   --ma-muted: #7f7169;
   --ma-rose: #c76f89;
   --ma-gold: #e5a547;
+  --ma-pose-transition-ms: 400ms;
+  --ma-frame-ms: 400ms;
+  --ma-walk-ms: 1200ms;
+  --ma-wave-cycle-ms: 800ms;
+  --ma-idle-cycle-ms: 3200ms;
+  --ma-laugh-cycle-ms: 400ms;
+  --ma-meditate-cycle-ms: 2400ms;
+  --ma-poof-ms: 1000ms;
   position: fixed;
   left: 0;
   bottom: 76px;
@@ -40,7 +48,9 @@
   pointer-events: auto;
   transform: translateX(-22%);
   transform-origin: 34% 91%;
-  transition: transform 640ms cubic-bezier(.2,.9,.25,1.08), opacity 240ms ease;
+  transition:
+    transform var(--ma-pose-transition-ms) cubic-bezier(.22,.61,.36,1),
+    opacity var(--ma-pose-transition-ms) ease;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -60,6 +70,8 @@
   -webkit-user-drag: none;
   transform-origin: 48% 89%;
   filter: drop-shadow(0 7px 6px rgba(72, 47, 36, 0.2));
+  backface-visibility: hidden;
+  will-change: transform;
 }
 
 .manager-assistant__bubble {
@@ -224,7 +236,7 @@
 }
 
 .manager-assistant.is-poofing .manager-assistant__character-button {
-  transform: translateX(0);
+  transform: translateX(4px);
   opacity: 1;
   transition: none;
   pointer-events: none;
@@ -237,7 +249,7 @@
 }
 
 .manager-assistant.is-walking .manager-assistant__character-button {
-  transition-duration: 1420ms;
+  transition-duration: var(--ma-walk-ms);
 }
 
 .manager-assistant.is-peeking .manager-assistant__character-button {
@@ -245,52 +257,53 @@
 }
 
 .manager-assistant.is-peeking .manager-assistant__character-image {
-  animation: maPeekBreath 1250ms ease-in-out infinite;
+  animation: maPeekBreath var(--ma-meditate-cycle-ms) ease-in-out infinite;
 }
 
 .manager-assistant.is-modal-peeking .manager-assistant__character-image {
-  animation: maPeekBreath 1250ms ease-in-out infinite;
+  animation: maPeekBreath var(--ma-meditate-cycle-ms) ease-in-out infinite;
 }
 
 .manager-assistant.is-modal-speaking .manager-assistant__character-image {
-  animation: maModalPeekWave 820ms ease-in-out infinite;
+  animation: maModalPeekWave var(--ma-wave-cycle-ms) ease-in-out infinite;
 }
 
 .manager-assistant.is-poofing .manager-assistant__character-image {
   object-position: center center;
   transform-origin: 50% 50%;
   filter: none;
-  animation: maPoofTwirl 680ms cubic-bezier(.2,.72,.22,1) both;
+  animation: maPoofTwirl var(--ma-poof-ms) cubic-bezier(.42,0,.58,1) both;
 }
 
 .manager-assistant.is-walking .manager-assistant__character-image {
-  animation: maWalkWaddle 640ms steps(2, jump-none) infinite;
+  animation: maWalkWaddle var(--ma-wave-cycle-ms) ease-in-out infinite;
 }
 
 .manager-assistant.is-greeting .manager-assistant__character-image,
 .manager-assistant.is-speaking .manager-assistant__character-image {
-  animation: maFriendlyWave 720ms ease-in-out 3;
+  animation: maFriendlyWave var(--ma-wave-cycle-ms) ease-in-out 3;
 }
 
 .manager-assistant.is-sitting .manager-assistant__character-image {
-  animation: maIdleBreath 2800ms ease-in-out infinite;
+  animation: maIdleBreath var(--ma-idle-cycle-ms) ease-in-out infinite;
 }
 
 .manager-assistant.is-laughing .manager-assistant__character-image {
-  animation: maBellyLaugh 430ms ease-in-out infinite;
+  animation: maBellyLaugh var(--ma-laugh-cycle-ms) ease-in-out infinite;
 }
 
 .manager-assistant.is-meditating .manager-assistant__character-image {
-  animation: maMeditateBreath 2200ms ease-in-out infinite;
+  animation: maMeditateBreath var(--ma-meditate-cycle-ms) ease-in-out infinite;
 }
 
 .manager-assistant.is-leaving .manager-assistant__character-button {
   transform: translateX(-112%) rotate(-5deg);
   opacity: 0.28;
+  transition-duration: var(--ma-walk-ms);
 }
 
 .manager-assistant.is-leaving .manager-assistant__character-image {
-  animation: maWalkWaddle 340ms steps(2, jump-none) infinite;
+  animation: maWalkWaddle var(--ma-wave-cycle-ms) ease-in-out infinite;
 }
 
 @keyframes maPeekBreath {
@@ -299,8 +312,8 @@
 }
 
 @keyframes maWalkWaddle {
-  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
-  50% { transform: translateY(-3px) rotate(1.5deg); }
+  0%, 100% { transform: translateY(0) rotate(-0.8deg); }
+  50% { transform: translateY(-1.5px) rotate(0.8deg); }
 }
 
 @keyframes maModalPeekWave {
@@ -312,23 +325,23 @@
 @keyframes maPoofTwirl {
   0% {
     opacity: 0;
-    transform: translate(0, 7px) scale(1.25) rotate(-22deg);
+    transform: translate(0, 3px) scale(1.44) rotate(-10deg);
   }
-  18% {
+  16% {
     opacity: 1;
-    transform: translate(-1px, 1px) scale(1.66) rotate(-2deg);
+    transform: translate(-0.5px, 1px) scale(1.47) rotate(4deg);
   }
   52% {
     opacity: 1;
-    transform: translate(2px, -2px) scale(1.84) rotate(24deg);
+    transform: translate(0.5px, -1px) scale(1.52) rotate(34deg);
   }
-  78% {
+  84% {
     opacity: 1;
-    transform: translate(-1px, -1px) scale(1.7) rotate(47deg);
+    transform: translate(-0.5px, -1px) scale(1.49) rotate(62deg);
   }
   100% {
     opacity: 0;
-    transform: translate(-2px, -4px) scale(1.36) rotate(74deg);
+    transform: translate(-1px, -2px) scale(1.46) rotate(78deg);
   }
 }
 
