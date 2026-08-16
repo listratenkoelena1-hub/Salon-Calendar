@@ -4880,6 +4880,10 @@ let staffMessagesAcknowledgedIds = new Set();
 let staffMessagesMayClearUnread = false;
 let staffMessagesScrollToLatestPending = false;
 let staffMessagesLatestAnchorFrame = 0;
+let staffMessageLatestPages = { legacy: [], canonical: [] };
+let staffMessageOldestSnapshots = { legacy: null, canonical: null };
+let staffMessageHasEarlierBySource = { legacy: false, canonical: false };
+let staffMessageLoadedSources = new Set();
 let staffPushStatuses = {};
 let staffPushStatusesState = 'idle';
 let staffMessageAttachment = null;
@@ -7985,17 +7989,11 @@ const conflictType = getAppointmentPlacementConflict({
       eventType: appointmentEventType,
       entityType: 'appointment',
       entityId: editId,
-      staffId: normalizedData.staffId
+      staffId: normalizedData.staffId,
+      additionalImportantStaffIds: original?.staffId && original.staffId !== normalizedData.staffId
+        ? [original.staffId]
+        : []
     });
-    if (original?.staffId && original.staffId !== normalizedData.staffId) {
-      await queueStaffNotification({
-        message: appointmentMessage,
-        eventType: appointmentEventType,
-        entityType: 'appointment',
-        entityId: editId,
-        staffId: original.staffId
-      });
-    }
 
     if (data.lastAction === 'move') {
       showToast("Appointment moved to other date", "success");
@@ -8941,6 +8939,15 @@ function getStaffNotificationPriority(eventType, message = '') {
   return 'secondary';
 }
 
+function getEffectiveStaffNotificationPriority(item) {
+  if (item?.audienceVersion !== 2) return item?.priority || 'secondary';
+  if (item.priority === 'message' || item.eventType === 'staff_message') return 'message';
+  if (currentUserRole === 'manager') return item.managerPriority === 'key' ? 'key' : 'secondary';
+  return Array.isArray(item.importantStaffIds) && item.importantStaffIds.includes(currentUserStaffId)
+    ? 'key'
+    : 'secondary';
+}
+
 function hasImportantAppointmentChange(message = '') {
   const plainText = stripNotificationHtml(message);
   const changedMatch = plainText.match(/Changed:\s*([^\n.]*)/i);
@@ -9074,7 +9081,8 @@ async function queueStaffNotification({
   entityId = '',
   staffId = '',
   staffName = '',
-  photoReviewUrl = ''
+  photoReviewUrl = '',
+  additionalImportantStaffIds = []
 }) {
   if (!message) return;
 
@@ -9082,26 +9090,10 @@ async function queueStaffNotification({
     const basePriority = getStaffNotificationPriority(eventType, message);
     const messageGroupId = crypto?.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(16).slice(2);
     const recipients = getActiveStaffList({ includeAnyone: false }).filter(s => s.id && s.id !== ANYONE_ID);
-    const writes = recipients.map(recipient => {
-      const isPersonalRecipient = staffId && recipient.id === staffId;
-      return addDoc(collection(db, 'staffNotifications'), buildStaffNotificationDoc({
-        message,
-        eventType,
-        entityType,
-        entityId,
-        staffId,
-        staffName,
-        photoReviewUrl,
-        recipientStaffId: recipient.id,
-        recipientStaffName: recipient.name,
-        visibleToAllStaff: true,
-        visibleToManager: false,
-        priorityOverride: isPersonalRecipient ? basePriority : 'secondary'
-        ,messageGroupId
-      }));
-    });
-
-    writes.push(addDoc(collection(db, 'staffNotifications'), buildStaffNotificationDoc({
+    const importantStaffIds = basePriority === 'key'
+      ? Array.from(new Set([staffId, ...additionalImportantStaffIds].filter(Boolean)))
+      : [];
+    const canonicalDoc = buildStaffNotificationDoc({
       message,
       eventType,
       entityType,
@@ -9113,11 +9105,24 @@ async function queueStaffNotification({
       recipientStaffName: '',
       visibleToAllStaff: true,
       visibleToManager: true,
-      priorityOverride: basePriority
-      ,messageGroupId
-    })));
+      priorityOverride: basePriority,
+      messageGroupId
+    });
+    const readBy = { ...(canonicalDoc.readBy || {}) };
+    if (currentUserRole === 'staff' && importantStaffIds.includes(currentUserStaffId)) {
+      readBy[getNotificationReadKey()] = true;
+    }
 
-    await Promise.all(writes);
+    await addDoc(collection(db, 'staffMessages'), {
+      ...canonicalDoc,
+      readBy,
+      audienceVersion: 2,
+      audienceStaffIds: recipients.map(recipient => recipient.id),
+      importantStaffIds,
+      managerPriority: basePriority,
+      staffDefaultPriority: 'secondary',
+      notificationLink: window.location.origin
+    });
   } catch (err) {
     console.warn('Staff notification was not saved:', err);
   }
@@ -9139,6 +9144,10 @@ function stopStaffNotificationsListener() {
   staffNotifications = [];
   staffMessagesOldestSnapshot = null;
   staffMessagesHasEarlier = false;
+  staffMessageLatestPages = { legacy: [], canonical: [] };
+  staffMessageOldestSnapshots = { legacy: null, canonical: null };
+  staffMessageHasEarlierBySource = { legacy: false, canonical: false };
+  staffMessageLoadedSources = new Set();
   staffMessagesLoading = true;
   staffMessagesLoadError = '';
   staffPinnedNotificationIds = [];
@@ -9149,6 +9158,34 @@ function stopStaffNotificationsListener() {
   renderStaffNotifications();
 }
 
+function mergeStaffMessageSources(extraItems = []) {
+  const candidates = [
+    ...staffNotifications.filter(item => item._olderPage === true),
+    ...staffMessageLatestPages.legacy,
+    ...staffMessageLatestPages.canonical,
+    ...extraItems
+  ];
+  const merged = new Map();
+  candidates.forEach(item => {
+    const identity = item.messageGroupId || `${item._collection || 'staffNotifications'}:${item.id}`;
+    const existing = merged.get(identity);
+    if (!existing || item._collection === 'staffMessages') merged.set(identity, item);
+  });
+  staffNotifications = Array.from(merged.values()).sort((a, b) => getStaffNotificationMillis(a) - getStaffNotificationMillis(b));
+}
+
+function buildStaffMessagesQueryForSource(sourceKey, { afterSnapshot = null } = {}) {
+  const isCanonical = sourceKey === 'canonical';
+  const baseRef = collection(db, isCanonical ? 'staffMessages' : 'staffNotifications');
+  const filters = currentUserRole === 'manager'
+    ? [where('visibleToManager', '==', true)]
+    : [where(isCanonical ? 'audienceStaffIds' : 'recipientStaffId', isCanonical ? 'array-contains' : '==', currentUserStaffId)];
+  const clauses = [...filters, orderBy('createdAt', 'desc')];
+  if (afterSnapshot) clauses.push(startAfter(afterSnapshot));
+  clauses.push(limit(STAFF_MESSAGES_PAGE_SIZE));
+  return query(baseRef, ...clauses);
+}
+
 function startStaffNotificationsListener() {
   stopStaffNotificationsListener();
   if (currentUserRole !== 'manager' && currentUserRole !== 'staff') return;
@@ -9156,61 +9193,70 @@ function startStaffNotificationsListener() {
 
   startStaffPinnedNotificationsListener();
 
-  const baseRef = collection(db, 'staffNotifications');
   staffMessagesLoading = true;
   staffMessagesLoadError = '';
   renderStaffNotifications();
-  const q = currentUserRole === 'manager'
-    ? query(baseRef, where('visibleToManager', '==', true), orderBy('createdAt', 'desc'), limit(STAFF_MESSAGES_PAGE_SIZE))
-    : query(baseRef, where('recipientStaffId', '==', currentUserStaffId), orderBy('createdAt', 'desc'), limit(STAFF_MESSAGES_PAGE_SIZE));
-
-  staffNotificationsUnsubscribe = onSnapshot(q, snap => {
-    const newestPage = snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data(), _snapshot: docSnap })).reverse();
-    const olderItems = staffNotifications.filter(item => item._olderPage === true);
-    const merged = new Map(olderItems.map(item => [item.id, item]));
-    newestPage.forEach(item => merged.set(item.id, item));
-    staffNotifications = Array.from(merged.values()).sort((a, b) => getStaffNotificationMillis(a) - getStaffNotificationMillis(b));
-    staffMessagesOldestSnapshot = staffNotifications[0]?._snapshot || snap.docs[snap.docs.length - 1] || null;
-    if (!olderItems.length) staffMessagesHasEarlier = snap.size === STAFF_MESSAGES_PAGE_SIZE;
-    staffMessagesLoading = false;
-    staffMessagesLoadError = '';
-    updateStaffNotificationsBadge();
-    renderStaffNotifications();
-    if (!staffMessagesUnreadBoundaryMs) scrollStaffNotificationsToBottom();
-  }, err => {
-    console.warn('Staff notifications could not be loaded:', err);
-    staffMessagesLoading = false;
-    staffMessagesLoadError = 'Messages could not be loaded.';
-    renderStaffNotifications();
-  });
+  const unsubscribers = ['legacy', 'canonical'].map(sourceKey => onSnapshot(
+    buildStaffMessagesQueryForSource(sourceKey),
+    snap => {
+      const collectionName = sourceKey === 'canonical' ? 'staffMessages' : 'staffNotifications';
+      staffMessageLatestPages[sourceKey] = snap.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+        _snapshot: docSnap,
+        _sourceKey: sourceKey,
+        _collection: collectionName
+      })).reverse();
+      staffMessageOldestSnapshots[sourceKey] = snap.docs[snap.docs.length - 1] || null;
+      staffMessageHasEarlierBySource[sourceKey] = snap.size === STAFF_MESSAGES_PAGE_SIZE;
+      staffMessageLoadedSources.add(sourceKey);
+      mergeStaffMessageSources();
+      staffMessagesOldestSnapshot = staffMessageOldestSnapshots;
+      staffMessagesHasEarlier = Object.values(staffMessageHasEarlierBySource).some(Boolean);
+      staffMessagesLoading = staffMessageLoadedSources.size < 2;
+      staffMessagesLoadError = '';
+      updateStaffNotificationsBadge();
+      renderStaffNotifications();
+      if (!staffMessagesUnreadBoundaryMs) scrollStaffNotificationsToBottom();
+    },
+    err => {
+      console.warn(`${sourceKey} staff messages could not be loaded:`, err);
+      staffMessageLoadedSources.add(sourceKey);
+      staffMessagesLoading = staffMessageLoadedSources.size < 2;
+      staffMessagesLoadError = sourceKey === 'canonical' ? 'New messages could not be loaded.' : 'Messages could not be loaded.';
+      renderStaffNotifications();
+    }
+  ));
+  staffNotificationsUnsubscribe = () => unsubscribers.forEach(unsubscribe => unsubscribe());
 }
 
 function getStaffNotificationMillis(item) {
   return item?.createdAt?.toMillis ? item.createdAt.toMillis() : 0;
 }
 
-function buildStaffMessagesQuery({ afterSnapshot = null } = {}) {
-  const baseRef = collection(db, 'staffNotifications');
-  const filters = currentUserRole === 'manager'
-    ? [where('visibleToManager', '==', true)]
-    : [where('recipientStaffId', '==', currentUserStaffId)];
-  const clauses = [...filters, orderBy('createdAt', 'desc')];
-  if (afterSnapshot) clauses.push(startAfter(afterSnapshot));
-  clauses.push(limit(STAFF_MESSAGES_PAGE_SIZE));
-  return query(baseRef, ...clauses);
-}
-
 window.loadEarlierStaffNotifications = async () => {
-  if (!staffMessagesOldestSnapshot || staffMessagesLoadingEarlier) return;
+  if (!staffMessagesHasEarlier || staffMessagesLoadingEarlier) return;
   staffMessagesLoadingEarlier = true;
   renderStaffNotifications();
   try {
-    const snap = await getDocs(buildStaffMessagesQuery({ afterSnapshot: staffMessagesOldestSnapshot }));
-    const older = snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data(), _snapshot: docSnap, _olderPage: true })).reverse();
-    const merged = new Map([...older, ...staffNotifications].map(item => [item.id, item]));
-    staffNotifications = Array.from(merged.values()).sort((a, b) => getStaffNotificationMillis(a) - getStaffNotificationMillis(b));
-    if (snap.docs.length) staffMessagesOldestSnapshot = snap.docs[snap.docs.length - 1];
-    staffMessagesHasEarlier = snap.size === STAFF_MESSAGES_PAGE_SIZE;
+    const sourceKeys = ['legacy', 'canonical'].filter(sourceKey => staffMessageHasEarlierBySource[sourceKey]);
+    const pages = await Promise.all(sourceKeys.map(async sourceKey => {
+      const snap = await getDocs(buildStaffMessagesQueryForSource(sourceKey, { afterSnapshot: staffMessageOldestSnapshots[sourceKey] }));
+      if (snap.docs.length) staffMessageOldestSnapshots[sourceKey] = snap.docs[snap.docs.length - 1];
+      staffMessageHasEarlierBySource[sourceKey] = snap.size === STAFF_MESSAGES_PAGE_SIZE;
+      const collectionName = sourceKey === 'canonical' ? 'staffMessages' : 'staffNotifications';
+      return snap.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+        _snapshot: docSnap,
+        _sourceKey: sourceKey,
+        _collection: collectionName,
+        _olderPage: true
+      })).reverse();
+    }));
+    mergeStaffMessageSources(pages.flat());
+    staffMessagesOldestSnapshot = staffMessageOldestSnapshots;
+    staffMessagesHasEarlier = Object.values(staffMessageHasEarlierBySource).some(Boolean);
     staffMessagesUnreadBoundaryPendingAbove = staffMessagesHasEarlier && staffMessagesUnreadBoundaryMs > 0 && getStaffNotificationMillis(staffNotifications[0]) > staffMessagesUnreadBoundaryMs;
   } catch (err) {
     console.warn('Earlier staff messages could not be loaded:', err);
@@ -9231,7 +9277,7 @@ function isStaffNotificationUnread(item) {
 function updateStaffNotificationsBadge() {
   const badge = document.getElementById('staffNotificationsBadge');
   if (!badge) return;
-  const unreadKeyCount = staffNotifications.filter(item => (item.priority === 'key' || item.priority === 'message') && isStaffNotificationUnread(item)).length;
+  const unreadKeyCount = staffNotifications.filter(item => ['key', 'message'].includes(getEffectiveStaffNotificationPriority(item)) && isStaffNotificationUnread(item)).length;
   if (unreadKeyCount > 0) {
     badge.textContent = unreadKeyCount > 99 ? '99+' : String(unreadKeyCount);
     badge.classList.remove('hidden');
@@ -9559,8 +9605,8 @@ function buildStaffReplyIconSvg() {
 }
 
 function isStaffNotificationForCurrentUser(item) {
-  if (currentUserRole === 'manager') return item.priority === 'key' || item.visibleToManager === true;
-  return item.recipientStaffId === currentUserStaffId && item.priority === 'key';
+  if (currentUserRole === 'manager') return getEffectiveStaffNotificationPriority(item) === 'key' || item.visibleToManager === true;
+  return getEffectiveStaffNotificationPriority(item) === 'key';
 }
 
 function getFilteredStaffNotifications() {
@@ -9696,7 +9742,7 @@ function renderStaffNotifications() {
       lastDateLabel = dateLabel;
     }
 
-    const priority = item.priority === 'message' ? 'message' : item.priority === 'key' ? 'key' : 'secondary';
+    const priority = getEffectiveStaffNotificationPriority(item);
     const unread = isStaffNotificationUnread(item);
     const photo = item.photoReviewUrl
       ? '<a class="staff-notification-photo" href="' + escapeHtml(item.photoReviewUrl) + '" target="_blank" rel="noopener">Open photos</a>'
@@ -9769,7 +9815,7 @@ async function markStaffNotificationRead(item) {
   if (!item?.id || !isStaffNotificationUnread(item)) return;
   const readKey = getNotificationReadKey();
   try {
-    await updateDoc(doc(db, 'staffNotifications', item.id), {
+    await updateDoc(doc(db, item._collection || 'staffNotifications', item.id), {
       ['readBy.' + readKey]: true,
       readAt: serverTimestamp()
     });
@@ -9779,7 +9825,7 @@ async function markStaffNotificationRead(item) {
 }
 
 async function markVisibleKeyNotificationsRead() {
-  const unreadKey = staffNotifications.filter(item => (item.priority === 'key' || item.priority === 'message') && isStaffNotificationUnread(item));
+  const unreadKey = staffNotifications.filter(item => ['key', 'message'].includes(getEffectiveStaffNotificationPriority(item)) && isStaffNotificationUnread(item));
   unreadKey.forEach(item => staffMessagesAcknowledgedIds.add(item.id));
   await Promise.all(unreadKey.map(markStaffNotificationRead));
 }
@@ -10130,25 +10176,23 @@ window.sendStaffChatMessage = async () => {
       pinnedBy: ''
     });
     const recipients = getActiveStaffList({ includeAnyone: false }).filter(s => s.id && s.id !== ANYONE_ID);
-    const writes = recipients.map(recipient => addDoc(collection(db, 'staffNotifications'), buildStaffChatMessageDoc({
-      text,
-      senderLabel,
-      recipientStaffId: recipient.id,
-      recipientStaffName: recipient.name,
-      visibleToManager: false,
-      messageGroupId,
-      replyTo,
-      attachment: uploadedAttachment
-    })));
-    writes.push(addDoc(collection(db, 'staffNotifications'), buildStaffChatMessageDoc({
+    await addDoc(collection(db, 'staffMessages'), {
+      ...buildStaffChatMessageDoc({
       text,
       senderLabel,
       visibleToManager: true,
       messageGroupId,
       replyTo,
       attachment: uploadedAttachment
-    })));
-    await Promise.all(writes);
+      }),
+      audienceVersion: 2,
+      audienceStaffIds: recipients.map(recipient => recipient.id),
+      importantStaffIds: [],
+      managerPriority: 'message',
+      staffDefaultPriority: 'message',
+      pushToAllStaff: true,
+      notificationLink: window.location.origin
+    });
     if (input) input.value = '';
     clearStaffMessageReply();
     clearStaffMessageAttachment();
@@ -10166,7 +10210,7 @@ window.sendStaffChatMessage = async () => {
 window.openStaffNotifications = async () => {
   const modal = document.getElementById('staffNotificationsModal');
   if (!modal) return;
-  const unreadBeforeOpen = staffNotifications.filter(item => (item.priority === 'key' || item.priority === 'message') && isStaffNotificationUnread(item));
+  const unreadBeforeOpen = staffNotifications.filter(item => ['key', 'message'].includes(getEffectiveStaffNotificationPriority(item)) && isStaffNotificationUnread(item));
   if (unreadBeforeOpen.length) {
     staffMessagesUnreadBoundaryMs = Math.min(...unreadBeforeOpen.map(getStaffNotificationMillis).filter(Boolean));
     staffMessagesUnreadBoundaryPendingAbove = staffMessagesHasEarlier && getStaffNotificationMillis(staffNotifications[0]) >= staffMessagesUnreadBoundaryMs;
@@ -10225,7 +10269,8 @@ async function queueTelegramMessage({
   entityType,
   entityId = '',
   staffId = '',
-  staffName = ''
+  staffName = '',
+  additionalImportantStaffIds = []
 }) {
   if (!message) return;
 
@@ -10243,7 +10288,7 @@ async function queueTelegramMessage({
       createdAt: serverTimestamp(),
       source: 'calendar'
     });
-    await queueStaffNotification({ message, eventType, entityType, entityId, staffId, staffName });
+    await queueStaffNotification({ message, eventType, entityType, entityId, staffId, staffName, additionalImportantStaffIds });
   } catch (err) {
     console.warn('Telegram message was not queued:', err);
   }

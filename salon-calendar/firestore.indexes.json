@@ -15,6 +15,22 @@
         { "fieldPath": "recipientStaffId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "staffMessages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "visibleToManager", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "staffMessages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "audienceStaffIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
