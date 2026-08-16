@@ -1404,7 +1404,6 @@ exports.createOnlineBookingRequest = onCall(
     const appointmentRef = db.collection("appointments").doc();
     const logRef = db.collection("activityLog").doc();
     const telegramRef = db.collection("TelegramQueue").doc();
-    const staffNotificationRef = db.collection("staffNotifications").doc();
     const staffMessageRef = db.collection("staffMessages").doc();
     const emailRef = email ? db.collection(EMAIL_QUEUE_COLLECTION).doc() : null;
     const emailContactRef = email ? db.collection(BOOKING_EMAIL_CONTACT_COLLECTION).doc(appointmentRef.id) : null;
@@ -1612,35 +1611,18 @@ exports.createOnlineBookingRequest = onCall(
         source: "online_booking"
       });
 
-      tx.set(staffNotificationRef, buildStaffNotificationDoc({
+      tx.set(staffMessageRef, buildCanonicalStaffMessageDoc({
         message: onlineBookingTelegramMessage,
         eventType: "online_request_created",
         entityType: "appointment",
         entityId: appointmentRef.id,
         staffId,
         staffName: getStaffName(staffRecords, staffId),
+        staffRecords,
         photoReviewUrl: appointmentData.photoReviewUrl || "",
         source: "online_booking",
         messageGroupId
       }));
-
-      // During the test rollout, keep the legacy document for the production
-      // calendar and add one canonical document for the new test client.
-      tx.set(staffMessageRef, {
-        ...buildCanonicalStaffMessageDoc({
-          message: onlineBookingTelegramMessage,
-          eventType: "online_request_created",
-          entityType: "appointment",
-          entityId: appointmentRef.id,
-          staffId,
-          staffName: getStaffName(staffRecords, staffId),
-          staffRecords,
-          photoReviewUrl: appointmentData.photoReviewUrl || "",
-          source: "online_booking",
-          messageGroupId
-        }),
-        pushEligible: false
-      });
 
       return {
         ok: true,
