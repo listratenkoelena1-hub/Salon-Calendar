@@ -7983,7 +7983,7 @@ const conflictType = getAppointmentPlacementConflict({
       actorKey: getCurrentActorKey()
     });
     const appointmentEventType = getAppointmentLogEventType(data.lastAction);
-    const appointmentMessage = buildTelegramAppointmentMessage(normalizedData, original);
+    const appointmentMessage = buildTelegramAppointmentMessage(normalizedData, original, data.lastAction);
     await queueTelegramMessage({
       message: appointmentMessage,
       eventType: appointmentEventType,
@@ -8566,7 +8566,8 @@ function getAppointmentLogEventType(lastAction) {
   if (lastAction === 'move') return 'moved';
   if (lastAction === 'cancel') return 'canceled';
   if (lastAction === 'no_show') return 'no_show';
-  if (lastAction === 'cancel_removed' || lastAction === 'no_show_removed') return 'updated_app';
+  if (lastAction === 'cancel_removed') return 'cancel_removed';
+  if (lastAction === 'no_show_removed') return 'no_show_removed';
   return 'updated_app';
 }
 
@@ -8642,8 +8643,10 @@ const STAFF_NOTIFICATION_KEY_EVENTS = new Set([
   'new_app',
   'moved',
   'canceled',
+  'cancel_removed',
   'deleted_app',
-  'no_show'
+  'no_show',
+  'no_show_removed'
 ]);
 const PUSH_PROMPT_SNOOZE_MS = 24 * 60 * 60 * 1000;
 const PUSH_INVITE_VERSION = 'messages-chat-v3';
@@ -8966,8 +8969,10 @@ function buildStaffNotificationTitle(eventType) {
     moved: 'Appointment moved',
     updated_app: 'Appointment updated',
     canceled: 'Appointment canceled',
+    cancel_removed: 'Appointment restored',
     deleted_app: 'Appointment deleted',
     no_show: 'No-show',
+    no_show_removed: 'Appointment restored',
     staff_message: 'Message'
   };
   return map[eventType] || 'Calendar message';
