@@ -5614,7 +5614,7 @@ async function ensureManagerAssistant() {
   if (managerAssistant) return managerAssistant;
   if (managerAssistantLoadPromise) return managerAssistantLoadPromise;
 
-  managerAssistantLoadPromise = import('./manager-assistant.js?v=service-assistant-v2')
+  managerAssistantLoadPromise = import('./manager-assistant.js?v=service-assistant-v3')
     .then(module => {
       if (currentUserRole !== 'manager') return null;
       managerAssistantModule = module;

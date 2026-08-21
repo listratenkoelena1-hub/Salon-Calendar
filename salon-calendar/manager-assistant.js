@@ -2,7 +2,7 @@ export {
   analyzeManagerService,
   applyManagerServiceChoice,
   getManagerServiceQuestion
-} from './manager-assistant-logic.js?v=service-assistant-v2';
+} from './manager-assistant-logic.js?v=service-assistant-v3';
 
 const STYLE_ID = 'managerAssistantStylesheet';
 const ROOT_ID = 'managerAssistant';
@@ -66,7 +66,7 @@ function ensureStylesheet() {
   const link = document.createElement('link');
   link.id = STYLE_ID;
   link.rel = 'stylesheet';
-  link.href = new URL('./manager-assistant.css?v=service-assistant-v2', import.meta.url).href;
+  link.href = new URL('./manager-assistant.css?v=service-assistant-v3', import.meta.url).href;
   document.head.appendChild(link);
 }
 
@@ -244,7 +244,6 @@ export function createManagerAssistant({ host = document.body, contained = false
     root.classList.add('has-dynamic-bubble');
     root.classList.toggle('is-keyboard-visible', keyboardVisible);
 
-    const rootRect = root.getBoundingClientRect();
     const characterRect = characterImage.getBoundingClientRect();
     const bubbleRect = bubble.getBoundingClientRect();
     const preferredLeft = characterRect.left + characterRect.width * 0.82;
@@ -257,8 +256,8 @@ export function createManagerAssistant({ host = document.body, contained = false
     const headY = characterRect.top + characterRect.height * 0.27;
     const tailTop = clamp(headY - top - 10, 12, Math.max(12, bubbleRect.height - 30));
 
-    bubble.style.left = `${Math.round(left - rootRect.left)}px`;
-    bubble.style.top = `${Math.round(top - rootRect.top)}px`;
+    bubble.style.left = `${Math.round(left)}px`;
+    bubble.style.top = `${Math.round(top)}px`;
     bubble.style.setProperty('--ma-tail-top', `${Math.round(tailTop)}px`);
   }
 

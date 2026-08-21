@@ -127,8 +127,12 @@
   padding: 10px 12px 6px;
 }
 
+.manager-assistant.has-dynamic-bubble {
+  contain: none;
+}
+
 .manager-assistant.has-dynamic-bubble .manager-assistant__bubble {
-  position: absolute;
+  position: fixed;
   margin: 0;
 }
 
