@@ -10,6 +10,7 @@
                                          "firebase-debug.log",
                                          "firebase-debug.*.log",
                                          "*.local",
+                                         "*.test.js",
                                          "index.*.js",
                                          "index.before*.js",
                                          "package.before*.json",

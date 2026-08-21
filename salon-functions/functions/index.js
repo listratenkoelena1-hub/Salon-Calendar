@@ -8,12 +8,23 @@ const admin = require("firebase-admin");
 const fetch = require("node-fetch");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
+const {
+  SCHEDULE_SCHEMA_VERSION,
+  appointmentUsesSchedule,
+  buildScheduleSlots,
+  cloneSlots,
+  findScheduleOverlaps,
+  getScheduleId,
+  releaseAppointmentFromSlots,
+  reserveAppointmentSlots
+} = require("./appointment-schedule");
 
 admin.initializeApp();
 const db = admin.firestore();
 const FieldValue = admin.firestore.FieldValue;
 
 const ANYONE_ID = "anyone";
+const APPOINTMENT_SCHEDULE_COLLECTION = "appointmentSchedules";
 const SLOT_COUNT = 49;
 const ANYONE_DISPLAY_DURATION = 1;
 const ANYONE_REQUIRED_DURATION = 4;
@@ -436,6 +447,15 @@ function assertString(value, field, { min = 0, max = 500 } = {}) {
 function assertDate(value) {
   const date = assertString(value, "date", { min: 10, max: 10 });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new HttpsError("invalid-argument", "Invalid date.");
+  }
+  const [year, month, day] = date.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
     throw new HttpsError("invalid-argument", "Invalid date.");
   }
   return date;
@@ -861,6 +881,242 @@ function realStaffAvailable({
   if (appointments.some(a => appointmentBlocksStaff(a, staffId, date, start, end))) return false;
   if (staffHasOffWork(offWorkRecords, weeklyOffRecords, staffId, date, start, end)) return false;
   return true;
+}
+
+function assertAppointmentStart(value) {
+  const slot = Number(value);
+  if (!Number.isInteger(slot) || slot < -1 || slot >= SLOT_COUNT) {
+    throw new HttpsError("invalid-argument", "Invalid appointment time.");
+  }
+  return slot;
+}
+
+function assertAppointmentDuration(value, staffId) {
+  if (staffId === ANYONE_ID) return ANYONE_DISPLAY_DURATION;
+  const duration = Number(value);
+  if (!Number.isInteger(duration) || duration < 1 || duration > 48) {
+    throw new HttpsError("invalid-argument", "Invalid appointment duration.");
+  }
+  return duration;
+}
+
+function assertAppointmentToken(value, field, { min = 12, max = 100 } = {}) {
+  const token = assertString(value, field, { min, max });
+  if (!/^[A-Za-z0-9_-]+$/.test(token)) {
+    throw new HttpsError("invalid-argument", `Invalid ${field}.`);
+  }
+  return token;
+}
+
+function normalizeOptionalText(value, field, max) {
+  if (value === null || value === undefined) return null;
+  const text = assertString(value, field, { max });
+  return text || null;
+}
+
+function sanitizeAppointmentForm(input, actor) {
+  const raw = input && typeof input === "object" ? input : {};
+  const staffId = assertString(raw.staffId, "staffId", { min: 1, max: 100 });
+  const groupTagInput = normalizeOptionalText(raw.groupTag, "groupTag", 40);
+  const groupTag = actor.role === "manager" && groupTagInput && /^[A-Za-z0-9_-]+$/.test(groupTagInput)
+    ? groupTagInput
+    : null;
+
+  return {
+    date: assertDate(raw.date),
+    staffId,
+    phone: normalizeOptionalText(raw.phone, "phone", 40),
+    start: assertAppointmentStart(raw.start),
+    duration: assertAppointmentDuration(raw.duration, staffId),
+    client: assertString(raw.client, "client", { max: 120 }),
+    note: assertString(raw.note, "note", { max: 2500 }),
+    groupTag,
+    noShow: raw.noShow === true,
+    canceled: raw.canceled === true,
+    cancelComment: raw.canceled === true
+      ? normalizeOptionalText(raw.cancelComment, "cancelComment", 500)
+      : null
+  };
+}
+
+function isPendingOnlineRequest(appointment) {
+  return Boolean(
+    appointment &&
+    appointment.type === "online_booking_request" &&
+    appointment.status === "request" &&
+    appointment.canceled !== true
+  );
+}
+
+function isDeclinedOnlineRequest(appointment) {
+  return Boolean(
+    appointment &&
+    appointment.source === "online_booking" &&
+    appointment.status === "declined"
+  );
+}
+
+function getAppointmentSaveAction(before, after) {
+  if (!before) return "create";
+  if (before.canceled !== true && after.canceled === true) return "cancel";
+  if (before.canceled === true && after.canceled !== true) return "cancel_removed";
+  if (before.noShow !== true && after.noShow === true) return "no_show";
+  if (before.noShow === true && after.noShow !== true) return "no_show_removed";
+  if (before.date !== after.date) return "move";
+  return "edit";
+}
+
+function hasSameScheduledPlacement(before, after) {
+  return Boolean(
+    appointmentUsesSchedule(before, ANYONE_ID) &&
+    appointmentUsesSchedule(after, ANYONE_ID) &&
+    before.date === after.date &&
+    before.staffId === after.staffId &&
+    Number(before.start) === Number(after.start) &&
+    Number(before.duration) === Number(after.duration)
+  );
+}
+
+function getAppointmentScheduleDescriptor(appointment) {
+  if (!appointmentUsesSchedule(appointment, ANYONE_ID)) return null;
+  const date = appointment.date;
+  const staffId = appointment.staffId;
+  return {
+    key: getScheduleId(date, staffId),
+    date,
+    staffId
+  };
+}
+
+async function loadAppointmentScheduleStates(tx, appointments) {
+  const descriptors = new Map();
+  appointments.forEach(appointment => {
+    const descriptor = getAppointmentScheduleDescriptor(appointment);
+    if (descriptor) descriptors.set(descriptor.key, descriptor);
+  });
+
+  const states = new Map();
+  for (const descriptor of descriptors.values()) {
+    const ref = db.collection(APPOINTMENT_SCHEDULE_COLLECTION).doc(descriptor.key);
+    const snap = await tx.get(ref);
+    states.set(descriptor.key, {
+      ...descriptor,
+      ref,
+      exists: snap.exists,
+      slots: snap.exists ? cloneSlots(snap.data()?.slots) : null,
+      changed: false
+    });
+  }
+
+  const appointmentsByDate = new Map();
+  for (const state of states.values()) {
+    if (state.exists || appointmentsByDate.has(state.date)) continue;
+    const snap = await tx.get(db.collection("appointments").where("date", "==", state.date));
+    appointmentsByDate.set(state.date, snap.docs.map(docSnap => ({
+      id: docSnap.id,
+      ...docSnap.data()
+    })));
+  }
+
+  for (const state of states.values()) {
+    if (state.exists) continue;
+    state.slots = buildScheduleSlots(appointmentsByDate.get(state.date) || [], {
+      date: state.date,
+      staffId: state.staffId,
+      anyoneId: ANYONE_ID
+    });
+  }
+
+  return states;
+}
+
+function updateAppointmentScheduleStates(states, before, after, appointmentId) {
+  const beforeDescriptor = getAppointmentScheduleDescriptor(before);
+  const afterDescriptor = getAppointmentScheduleDescriptor(after);
+  const samePlacement = hasSameScheduledPlacement(before, after);
+
+  if (beforeDescriptor && !samePlacement) {
+    const state = states.get(beforeDescriptor.key);
+    state.slots = releaseAppointmentFromSlots(state.slots, before, appointmentId);
+    state.changed = true;
+  }
+
+  if (afterDescriptor && !samePlacement) {
+    const state = states.get(afterDescriptor.key);
+    try {
+      state.slots = reserveAppointmentSlots(state.slots, after, appointmentId);
+      state.changed = true;
+    } catch (error) {
+      if (error?.code === "appointment-conflict") {
+        throw new HttpsError(
+          "already-exists",
+          "This time is already occupied by another appointment.",
+          {
+            reason: "appointment-conflict",
+            conflictingAppointmentIds: error.conflictingAppointmentIds || []
+          }
+        );
+      }
+      throw error;
+    }
+  }
+}
+
+function writeAppointmentScheduleStates(tx, states) {
+  for (const state of states.values()) {
+    if (state.exists && !state.changed) continue;
+    tx.set(state.ref, {
+      schemaVersion: SCHEDULE_SCHEMA_VERSION,
+      date: state.date,
+      staffId: state.staffId,
+      slots: state.slots,
+      updatedAt: FieldValue.serverTimestamp()
+    });
+  }
+}
+
+async function getAuthorizedCalendarActor(request) {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+
+  const userSnap = await db.collection("users").doc(request.auth.uid).get();
+  if (!userSnap.exists) {
+    throw new HttpsError("permission-denied", "User profile not found.");
+  }
+
+  const profile = userSnap.data() || {};
+  const role = String(profile.role || "").trim();
+  if (!["manager", "reception", "staff"].includes(role)) {
+    throw new HttpsError("permission-denied", "This user cannot change appointments.");
+  }
+
+  const staffId = profile.staffId ? String(profile.staffId) : null;
+  let staffName = "";
+  if (staffId) {
+    const staffSnap = await db.collection("staff").doc(staffId).get();
+    staffName = staffSnap.exists ? String(staffSnap.data()?.name || "").trim() : "";
+  }
+
+  const label = role === "reception"
+    ? "Reception"
+    : (staffName || (role === "manager" ? "Manager" : "Staff"));
+
+  return { uid: request.auth.uid, role, staffId, label };
+}
+
+function assertActorCanMutateAppointment(actor, before, after) {
+  if (actor.role !== "staff") return;
+  if (!actor.staffId) {
+    throw new HttpsError("permission-denied", "Staff profile is not connected.");
+  }
+
+  const outsideOwnCalendar = [before, after]
+    .filter(Boolean)
+    .some(appointment => appointment.staffId !== actor.staffId);
+  if (outsideOwnCalendar) {
+    throw new HttpsError("permission-denied", "Staff can change only their own appointments.");
+  }
 }
 
 function getAnyoneRemainingCapacity({
@@ -1355,6 +1611,279 @@ async function readPhotoReviewFiles(files) {
   }
   return photos;
 }
+exports.mutateAppointment = onCall(
+  {
+    region: "us-central1",
+    maxInstances: 10
+  },
+  async (request) => {
+    const actor = await getAuthorizedCalendarActor(request);
+    const input = request.data || {};
+    const mode = assertString(input.mode, "mode", { min: 3, max: 20 });
+    if (!["create", "update", "confirm", "decline", "delete"].includes(mode)) {
+      throw new HttpsError("invalid-argument", "Invalid appointment operation.");
+    }
+
+    const appointmentId = assertAppointmentToken(input.appointmentId, "appointmentId", { min: 12, max: 100 });
+    const mutationId = assertAppointmentToken(input.mutationId, "mutationId", { min: 12, max: 100 });
+    const form = mode === "delete" ? null : sanitizeAppointmentForm(input.appointment, actor);
+    const expectedRevision = mode === "create" ? null : Number(input.expectedRevision);
+    if (mode !== "create" && (!Number.isInteger(expectedRevision) || expectedRevision < 0)) {
+      throw new HttpsError("invalid-argument", "Invalid appointment revision.");
+    }
+
+    const appointmentRef = db.collection("appointments").doc(appointmentId);
+
+    return db.runTransaction(async tx => {
+      const appointmentSnap = await tx.get(appointmentRef);
+      const before = appointmentSnap.exists ? appointmentSnap.data() : null;
+
+      if (
+        before &&
+        before.lastMutationId === mutationId &&
+        before.lastMutationMode === mode
+      ) {
+        return {
+          ok: true,
+          duplicate: true,
+          appointmentId,
+          revision: Number(before.revision) || 0,
+          lastAction: before.lastAction || null
+        };
+      }
+
+      if (mode === "create" && before) {
+        throw new HttpsError("already-exists", "This appointment already exists.");
+      }
+      if (mode !== "create" && !before) {
+        throw new HttpsError("not-found", "Appointment no longer exists.");
+      }
+
+      const currentRevision = Number(before?.revision) || 0;
+      if (mode !== "create" && expectedRevision !== currentRevision) {
+        throw new HttpsError(
+          "aborted",
+          "Appointment changed in another calendar. Reopen it and try again.",
+          { reason: "stale-revision", currentRevision }
+        );
+      }
+
+      let after = null;
+      let lastAction = null;
+
+      if (mode === "create") {
+        after = {
+          ...form,
+          type: null,
+          source: null,
+          status: null,
+          confirmedAt: null,
+          confirmedBy: null,
+          declinedAt: null,
+          declinedBy: null,
+          createdAt: FieldValue.serverTimestamp(),
+          createdMutationId: mutationId
+        };
+        lastAction = "create";
+      } else if (mode === "update") {
+        if (isPendingOnlineRequest(before)) {
+          throw new HttpsError("failed-precondition", "Use Confirm or Decline for this online request.");
+        }
+
+        const safeForm = actor.role === "manager"
+          ? form
+          : { ...form, groupTag: before.groupTag || null };
+        after = { ...before, ...safeForm };
+
+        if (isDeclinedOnlineRequest(before)) {
+          after.type = "appointment";
+          after.source = "online_booking";
+          if (after.canceled === true) {
+            after.status = "declined";
+            after.cancelComment = after.cancelComment || "Online booking request declined";
+          } else {
+            after.status = "restored_after_decline";
+            after.cancelComment = null;
+          }
+        }
+        lastAction = getAppointmentSaveAction(before, after);
+      } else if (mode === "confirm") {
+        if (!isPendingOnlineRequest(before)) {
+          throw new HttpsError("failed-precondition", "This online request is no longer pending.");
+        }
+        const safeForm = actor.role === "manager"
+          ? form
+          : { ...form, groupTag: before.groupTag || null };
+        after = {
+          ...before,
+          ...safeForm,
+          noShow: false,
+          canceled: false,
+          cancelComment: null,
+          type: "appointment",
+          source: "online_booking",
+          status: "confirmed",
+          confirmedAt: FieldValue.serverTimestamp(),
+          confirmedBy: actor.label,
+          declinedAt: null,
+          declinedBy: null
+        };
+        lastAction = "online_request_confirmed";
+      } else if (mode === "decline") {
+        if (!isPendingOnlineRequest(before)) {
+          throw new HttpsError("failed-precondition", "This online request is no longer pending.");
+        }
+        const safeForm = actor.role === "manager"
+          ? form
+          : { ...form, groupTag: before.groupTag || null };
+        after = {
+          ...before,
+          ...safeForm,
+          noShow: false,
+          canceled: true,
+          cancelComment: "Online booking request declined",
+          type: "appointment",
+          source: "online_booking",
+          status: "declined",
+          declinedAt: FieldValue.serverTimestamp(),
+          declinedBy: actor.label
+        };
+        lastAction = "online_request_declined";
+      } else {
+        lastAction = "delete";
+      }
+
+      assertActorCanMutateAppointment(actor, before, after);
+
+      const mustValidatePlacement = Boolean(
+        appointmentUsesSchedule(after, ANYONE_ID) &&
+        !hasSameScheduledPlacement(before, after)
+      );
+
+      if (mustValidatePlacement) {
+        const targetStaffSnap = await tx.get(db.collection("staff").doc(after.staffId));
+        if (!targetStaffSnap.exists || targetStaffSnap.data()?.active === false) {
+          throw new HttpsError("failed-precondition", "Selected technician is not active.");
+        }
+
+        const offWorkSnap = await tx.get(db.collection("OffWork").where("date", "==", after.date));
+        const weeklyOffSnap = await tx.get(db.collection("WeeklyOff").where("staffId", "==", after.staffId));
+        const offWorkRecords = offWorkSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+        const weeklyOffRecords = weeklyOffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+        if (staffHasOffWork(
+          offWorkRecords,
+          weeklyOffRecords,
+          after.staffId,
+          after.date,
+          Number(after.start),
+          Number(after.start) + Number(after.duration)
+        )) {
+          throw new HttpsError(
+            "failed-precondition",
+            "This technician is off during the selected time.",
+            { reason: "off-work" }
+          );
+        }
+      }
+
+      const scheduleStates = await loadAppointmentScheduleStates(tx, [before, after].filter(Boolean));
+      updateAppointmentScheduleStates(scheduleStates, before, after, appointmentId);
+      writeAppointmentScheduleStates(tx, scheduleStates);
+
+      if (mode === "delete") {
+        tx.delete(appointmentRef);
+      } else {
+        const nextRevision = currentRevision + 1;
+        after.lastEditedBy = actor.label;
+        after.lastAction = lastAction;
+        after.lastActionAt = FieldValue.serverTimestamp();
+        after.lastMutationId = mutationId;
+        after.lastMutationMode = mode;
+        after.revision = nextRevision;
+        tx.set(appointmentRef, after);
+      }
+
+      return {
+        ok: true,
+        duplicate: false,
+        appointmentId,
+        revision: mode === "delete" ? currentRevision : currentRevision + 1,
+        lastAction
+      };
+    });
+  }
+);
+
+exports.auditAppointmentOverlaps = onCall(
+  {
+    region: "us-central1",
+    maxInstances: 2
+  },
+  async (request) => {
+    const actor = await getAuthorizedCalendarActor(request);
+    if (actor.role !== "manager") {
+      throw new HttpsError("permission-denied", "Only a manager can run the overlap audit.");
+    }
+
+    const input = request.data || {};
+    const startDate = assertDate(input.startDate);
+    const endDate = assertDate(input.endDate || input.startDate);
+    const dayCount = Math.round((getLocalDate(endDate) - getLocalDate(startDate)) / 86400000) + 1;
+    if (dayCount < 1 || dayCount > 31) {
+      throw new HttpsError("invalid-argument", "Audit range must contain 1 to 31 days.");
+    }
+
+    const appointmentsSnap = await db.collection("appointments")
+      .where("date", ">=", startDate)
+      .where("date", "<=", endDate)
+      .get();
+    const appointments = appointmentsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+    const groups = new Map();
+
+    appointments
+      .filter(appointment => appointmentUsesSchedule(appointment, ANYONE_ID))
+      .forEach(appointment => {
+        const key = getScheduleId(appointment.date, appointment.staffId);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(appointment);
+      });
+
+    const conflicts = [];
+    for (const groupAppointments of groups.values()) {
+      const sample = groupAppointments[0];
+      const slots = buildScheduleSlots(groupAppointments, {
+        date: sample.date,
+        staffId: sample.staffId,
+        anyoneId: ANYONE_ID
+      });
+      const collapsed = new Map();
+      findScheduleOverlaps(slots).forEach(overlap => {
+        const signature = overlap.appointmentIds.join("|");
+        if (!collapsed.has(signature)) {
+          collapsed.set(signature, {
+            date: sample.date,
+            staffId: sample.staffId,
+            appointmentIds: overlap.appointmentIds,
+            slots: []
+          });
+        }
+        collapsed.get(signature).slots.push(Number(overlap.slotKey.replace("slot_", "")));
+      });
+      conflicts.push(...collapsed.values());
+    }
+
+    return {
+      ok: true,
+      startDate,
+      endDate,
+      scannedAppointments: appointments.length,
+      conflictCount: conflicts.length,
+      conflicts: conflicts.slice(0, 100),
+      truncated: conflicts.length > 100
+    };
+  }
+);
+
 exports.createOnlineBookingRequest = onCall(
   {
     region: "us-central1",
@@ -1477,6 +2006,7 @@ exports.createOnlineBookingRequest = onCall(
       }));
 
       let duration = BOOKING_DURATION;
+      let onlineScheduleState = null;
       if (staffId === ANYONE_ID) {
         duration = ANYONE_DISPLAY_DURATION;
         if (!isBookableOnlineStart({ date, start, duration: ANYONE_REQUIRED_DURATION })) {
@@ -1516,6 +2046,32 @@ exports.createOnlineBookingRequest = onCall(
         })) {
           throw new HttpsError("failed-precondition", "This time is no longer available.");
         }
+
+        const scheduleRef = db.collection(APPOINTMENT_SCHEDULE_COLLECTION)
+          .doc(getScheduleId(date, staffId));
+        const scheduleSnap = await tx.get(scheduleRef);
+        const scheduleSlots = scheduleSnap.exists
+          ? cloneSlots(scheduleSnap.data()?.slots)
+          : buildScheduleSlots(appointments, { date, staffId, anyoneId: ANYONE_ID });
+        try {
+          onlineScheduleState = {
+            ref: scheduleRef,
+            slots: reserveAppointmentSlots(scheduleSlots, {
+              id: appointmentRef.id,
+              date,
+              staffId,
+              start,
+              duration,
+              canceled: false,
+              noShow: false
+            }, appointmentRef.id)
+          };
+        } catch (error) {
+          if (error?.code === "appointment-conflict") {
+            throw new HttpsError("failed-precondition", "This time is no longer available.");
+          }
+          throw error;
+        }
       }
 
       const appointmentData = {
@@ -1549,10 +2105,24 @@ exports.createOnlineBookingRequest = onCall(
         marketingConsent: false,
         consentAcceptedAt: FieldValue.serverTimestamp(),
         createdAt: FieldValue.serverTimestamp(),
+        createdMutationId: requestId,
+        lastMutationId: requestId,
+        lastMutationMode: "online_create",
+        revision: 1,
         lastEditedBy: "Online Booking",
         lastAction: "online_request_created",
         lastActionAt: FieldValue.serverTimestamp()
       };
+
+      if (onlineScheduleState) {
+        tx.set(onlineScheduleState.ref, {
+          schemaVersion: SCHEDULE_SCHEMA_VERSION,
+          date,
+          staffId,
+          slots: onlineScheduleState.slots,
+          updatedAt: FieldValue.serverTimestamp()
+        });
+      }
 
       tx.set(appointmentRef, appointmentData);
       tx.set(submissionRef, {

@@ -4854,6 +4854,7 @@ const storage = getStorage(app);
 const functions = getFunctions(app, "us-central1");
 const registerPushDevice = httpsCallable(functions, "registerPushDevice");
 const getStaffPushStatuses = httpsCallable(functions, "getStaffPushStatuses");
+const mutateAppointment = httpsCallable(functions, "mutateAppointment");
 const FCM_VAPID_KEY = "";
   let currentUserRole = null;
 let currentUserStaffId = null;
@@ -5477,6 +5478,68 @@ async function runAppointmentActionWithGuard(action) {
   }
 }
 
+function createAppointmentMutationToken() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+  return doc(collection(db, "appointments")).id;
+}
+
+function getAtomicAppointmentForm(data) {
+  return {
+    date: data.date,
+    staffId: data.staffId,
+    phone: data.phone || null,
+    start: Number(data.start),
+    duration: Number(data.duration),
+    client: data.client || '',
+    note: data.note || '',
+    groupTag: data.groupTag || null,
+    noShow: data.noShow === true,
+    canceled: data.canceled === true,
+    cancelComment: data.cancelComment || null
+  };
+}
+
+function getCallableErrorCode(error) {
+  return String(error?.code || '').replace(/^functions\//, '');
+}
+
+async function submitAtomicAppointmentMutation(payload) {
+  try {
+    const response = await mutateAppointment(payload);
+    return response.data || null;
+  } catch (error) {
+    const code = getCallableErrorCode(error);
+    const reason = error?.details?.reason || '';
+
+    if (code === 'already-exists' || reason === 'appointment-conflict') {
+      conflictModal.classList.remove('hidden');
+      showToast('This time was just booked in another calendar. Please choose another time.', 'warning', 5000);
+      return null;
+    }
+
+    if (reason === 'off-work') {
+      document.getElementById('offWorkConflictModal').classList.remove('hidden');
+      return null;
+    }
+
+    if (code === 'aborted') {
+      showToast('This appointment changed in another calendar. Close it, reopen it, and try again.', 'warning', 5000);
+      return null;
+    }
+
+    if (code === 'not-found') {
+      showToast('This appointment was already deleted in another calendar.', 'warning', 5000);
+      closeAppointment();
+      return null;
+    }
+
+    showToast(error?.message || 'Appointment could not be saved. Please try again.', 'error', 5000);
+    return null;
+  }
+}
+
 async function runModalActionWithGuard(scopes, action) {
   if (calendarModalActionInProgress) return;
   calendarModalActionInProgress = true;
@@ -5524,6 +5587,8 @@ const staffDeleteModal = document.getElementById('staffDeleteModal');
 
 
 let staff=[], allStaff=[], appointments=[], editId=null, staffToDelete=null;
+let pendingCreateAppointmentId = null;
+let pendingCreateMutationId = null;
 
 function isActiveStaffRecord(s) {
   return s?.id === ANYONE_ID || s?.active !== false;
@@ -7546,6 +7611,8 @@ function openAddFromCell(cell) {
   setAppointmentReadonly(false);
   appointmentAction = 'create';    
   editId = null;
+  pendingCreateAppointmentId = null;
+  pendingCreateMutationId = null;
   setAppointmentChangeDateVisible(false);
   if (appointmentStatusBlock) appointmentStatusBlock.style.display = 'none';
 document.getElementById('durationError').style.display = 'none';
@@ -7634,6 +7701,8 @@ const a=appointments.find(x=>x.id===id);
 if(!a) return;
 setAppointmentEditorMeta(a.lastEditedBy, a.lastActionAt);
 editId=id;
+pendingCreateAppointmentId = null;
+pendingCreateMutationId = null;
 appointmentAction = 'edit';      
 if (appointmentStatusBlock) appointmentStatusBlock.style.display = 'block';
 document.getElementById('durationError').style.display = 'none';
@@ -7890,8 +7959,6 @@ window.saveAppointment = async () => {
     return;
   }
 
-  data.lastActionAt = serverTimestamp();
-
   const shouldCheckConflict =
     !editId ||
     data.lastAction === 'move' ||
@@ -7968,10 +8035,35 @@ const conflictType = getAppointmentPlacementConflict({
 
   const isEditingAppointment = !!editId;
   const normalizedData = normalizeAppointment(data);
+  const appointmentId = isEditingAppointment
+    ? editId
+    : (pendingCreateAppointmentId || doc(collection(db, "appointments")).id);
+  const mutationId = isEditingAppointment
+    ? createAppointmentMutationToken()
+    : (pendingCreateMutationId || createAppointmentMutationToken());
+
+  if (!isEditingAppointment) {
+    pendingCreateAppointmentId = appointmentId;
+    pendingCreateMutationId = mutationId;
+  }
+
+  const mutationPayload = {
+    mode: isEditingAppointment ? 'update' : 'create',
+    appointmentId,
+    mutationId,
+    appointment: getAtomicAppointmentForm(data)
+  };
+  if (isEditingAppointment) {
+    mutationPayload.expectedRevision = Number(originalRaw?.revision) || 0;
+  }
+
+  const mutationResult = await submitAtomicAppointmentMutation(mutationPayload);
+  if (!mutationResult) return;
+  data.lastAction = mutationResult.lastAction || data.lastAction;
+  data.revision = mutationResult.revision;
 
   if (isEditingAppointment) {
-    await updateDoc(doc(db, "appointments", editId), data);
-    await writeActivityLogEntry({
+    if (!mutationResult.duplicate) await writeActivityLogEntry({
       staffId: normalizedData.staffId,
       eventType: getAppointmentLogEventType(data.lastAction),
       entityType: 'appointment',
@@ -7984,11 +8076,11 @@ const conflictType = getAppointmentPlacementConflict({
     });
     const appointmentEventType = getAppointmentLogEventType(data.lastAction);
     const appointmentMessage = buildTelegramAppointmentMessage(normalizedData, original, data.lastAction);
-    await queueTelegramMessage({
+    if (!mutationResult.duplicate) await queueTelegramMessage({
       message: appointmentMessage,
       eventType: appointmentEventType,
       entityType: 'appointment',
-      entityId: editId,
+      entityId: appointmentId,
       staffId: normalizedData.staffId,
       additionalImportantStaffIds: original?.staffId && original.staffId !== normalizedData.staffId
         ? [original.staffId]
@@ -8010,8 +8102,7 @@ const conflictType = getAppointmentPlacementConflict({
     }
 
   } else {
-    const appointmentDoc = await addDoc(collection(db, "appointments"), data);
-    await writeActivityLogEntry({
+    if (!mutationResult.duplicate) await writeActivityLogEntry({
       staffId: normalizedData.staffId,
       eventType: 'new_app',
       entityType: 'appointment',
@@ -8022,11 +8113,11 @@ const conflictType = getAppointmentPlacementConflict({
       actorLabel: getCurrentActorLabel(),
       actorKey: getCurrentActorKey()
     });
-    await queueTelegramMessage({
+    if (!mutationResult.duplicate) await queueTelegramMessage({
       message: buildTelegramAppointmentMessage(normalizedData, null, 'create'),
       eventType: 'new_app',
       entityType: 'appointment',
-      entityId: appointmentDoc.id,
+      entityId: appointmentId,
       staffId: normalizedData.staffId
     });
     showToast("Appointment saved", "success");
@@ -8090,8 +8181,7 @@ async function updateOnlineBookingRequestStatus(nextStatus) {
     source: 'online_booking',
     status: nextStatus,
     lastEditedBy: editorLabel,
-    lastAction: action,
-    lastActionAt: serverTimestamp()
+    lastAction: action
   };
 
   if (nextStatus === 'confirmed') {
@@ -8161,8 +8251,17 @@ async function updateOnlineBookingRequestStatus(nextStatus) {
   }
 
   const normalizedData = normalizeAppointment(data);
-  await updateDoc(doc(db, 'appointments', editId), data);
-  await writeActivityLogEntry({
+  const mutationResult = await submitAtomicAppointmentMutation({
+    mode: nextStatus === 'confirmed' ? 'confirm' : 'decline',
+    appointmentId: editId,
+    mutationId: createAppointmentMutationToken(),
+    expectedRevision: Number(originalRaw?.revision) || 0,
+    appointment: getAtomicAppointmentForm(data)
+  });
+  if (!mutationResult) return;
+  data.revision = mutationResult.revision;
+
+  if (!mutationResult.duplicate) await writeActivityLogEntry({
     staffId: normalizedData.staffId,
     eventType: action,
     entityType: 'appointment',
@@ -8173,7 +8272,7 @@ async function updateOnlineBookingRequestStatus(nextStatus) {
     actorLabel: getCurrentActorLabel(),
     actorKey: getCurrentActorKey()
   });
-  await queueTelegramMessage({
+  if (!mutationResult.duplicate) await queueTelegramMessage({
     message: buildTelegramAppointmentMessage(normalizedData, original, action),
     eventType: action,
     entityType: 'appointment',
@@ -8199,7 +8298,13 @@ window.deleteAppointment = async () => {
   try {
   const deletedAppointmentId = editId;
   const deletedAppointment = normalizeAppointment(appointments.find(a => a.id === deletedAppointmentId) || archiveAppointments.find(a => a.id === deletedAppointmentId));
-  await deleteDoc(doc(db, "appointments", deletedAppointmentId));
+  const mutationResult = await submitAtomicAppointmentMutation({
+    mode: 'delete',
+    appointmentId: deletedAppointmentId,
+    mutationId: createAppointmentMutationToken(),
+    expectedRevision: Number(deletedAppointment?.revision) || 0
+  });
+  if (!mutationResult) return;
   if (deletedAppointment) {
     await writeActivityLogEntry({
       staffId: deletedAppointment.staffId,
@@ -12107,6 +12212,8 @@ window.closeAppointment = () => {
    
   appointmentModal.classList.add('hidden');
   appointmentAction = 'create';
+  pendingCreateAppointmentId = null;
+  pendingCreateMutationId = null;
   setOnlineRequestModalMode(false);
       resetAppointmentModalTint();
 
@@ -13783,6 +13890,8 @@ window.openWalkIn = () => {
   if (!currentStaffId) return;
 
   editId = null;
+  pendingCreateAppointmentId = null;
+  pendingCreateMutationId = null;
   if (appointmentStatusBlock) appointmentStatusBlock.style.display = 'none';  
 document.getElementById('durationError').style.display = 'none';
 
