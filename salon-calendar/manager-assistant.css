@@ -27,6 +27,19 @@
   isolation: isolate;
 }
 
+#appointmentPrimaryBtn.manager-save-anyway {
+  min-height: 43px;
+  line-height: 1.05;
+}
+
+#appointmentPrimaryBtn.manager-save-anyway::after {
+  content: "anyway";
+  display: block;
+  margin-top: 2px;
+  color: #267a50;
+  font: 800 9px/1 system-ui, -apple-system, sans-serif;
+}
+
 .manager-assistant.manager-assistant--contained {
   position: absolute;
 }
@@ -79,7 +92,7 @@
   z-index: 1;
   width: min(238px, calc(100vw - 128px));
   margin: 0 0 39px -2px;
-  padding: 13px 14px 12px;
+  padding: 13px 14px 8px;
   border: 1px solid rgba(91, 68, 59, 0.16);
   border-radius: 18px 18px 18px 6px;
   background: rgba(255, 253, 251, 0.985);
@@ -106,6 +119,22 @@
   border-radius: 0 0 0 5px;
   background: #fffdfb;
   transform: rotate(45deg);
+}
+
+.manager-assistant.is-modal-speaking .manager-assistant__bubble {
+  width: min(316px, calc(100vw - 74px));
+  margin: 0;
+  padding: 10px 12px 6px;
+}
+
+.manager-assistant.has-dynamic-bubble .manager-assistant__bubble {
+  position: absolute;
+  margin: 0;
+}
+
+.manager-assistant.has-dynamic-bubble .manager-assistant__bubble::after {
+  top: var(--ma-tail-top, 18px);
+  bottom: auto;
 }
 
 .manager-assistant.is-bubble-visible .manager-assistant__bubble {
@@ -162,6 +191,112 @@
   margin: 0;
   color: #64564f;
   font: 650 11px/1.4 system-ui, -apple-system, sans-serif;
+}
+
+.manager-assistant__helper {
+  margin: 5px 0 0;
+  color: #91847c;
+  font: 650 9px/1.35 system-ui, -apple-system, sans-serif;
+}
+
+.manager-assistant__helper[hidden] {
+  display: none;
+}
+
+.manager-assistant__actions {
+  display: grid;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.manager-assistant__action-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.manager-assistant__actions[data-layout="single-row"] .manager-assistant__action-row,
+.manager-assistant__action-row--primary {
+  width: 100%;
+}
+
+.manager-assistant__actions[hidden],
+.manager-assistant__links[hidden],
+.manager-assistant__footer[hidden] {
+  display: none;
+}
+
+.manager-assistant__choice {
+  min-width: 0;
+  min-height: 27px;
+  padding: 5px 7px;
+  border: 1px solid rgba(199, 111, 137, 0.28);
+  border-radius: 999px;
+  background: #fff7f9;
+  color: #684d56;
+  font: 800 10px/1.2 system-ui, -apple-system, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.manager-assistant__choice--secondary {
+  min-height: 23px;
+  padding: 3px 7px;
+  border-color: rgba(91, 68, 59, 0.16);
+  background: #faf7f4;
+  color: #77675f;
+  font-size: 9px;
+}
+
+.manager-assistant__choice:hover,
+.manager-assistant__choice:focus-visible,
+.manager-assistant__link:hover,
+.manager-assistant__link:focus-visible,
+.manager-assistant__leave:hover,
+.manager-assistant__leave:focus-visible {
+  filter: brightness(0.98);
+  outline: 2px solid rgba(199, 111, 137, 0.22);
+  outline-offset: 1px;
+}
+
+.manager-assistant__links {
+  display: grid;
+  gap: 3px;
+  margin-top: 7px;
+}
+
+.manager-assistant__link {
+  width: 100%;
+  min-height: 29px;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: 7px;
+  background: #f9f5f1;
+  color: #7e5d69;
+  text-align: left;
+  font: 800 10px/1.3 system-ui, -apple-system, sans-serif;
+  cursor: pointer;
+}
+
+.manager-assistant__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+  padding-top: 2px;
+  border-top: 1px solid rgba(91, 68, 59, 0.09);
+}
+
+.manager-assistant__leave {
+  min-height: 18px;
+  padding: 1px 5px 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #8a7971;
+  font: 800 9px/1.2 system-ui, -apple-system, sans-serif;
+  cursor: pointer;
 }
 
 .manager-assistant.is-greeting-bubble .manager-assistant__title {
@@ -382,6 +517,25 @@ body.modal-open .manager-assistant.is-bubble-visible .manager-assistant__close {
   pointer-events: auto;
 }
 
+body.modal-open .manager-assistant.is-bubble-visible .manager-assistant__choice,
+body.modal-open .manager-assistant.is-bubble-visible .manager-assistant__link,
+body.modal-open .manager-assistant.is-bubble-visible .manager-assistant__leave {
+  pointer-events: auto;
+}
+
+.manager-assistant.is-modal-speaking .manager-assistant__title {
+  margin-bottom: 3px;
+}
+
+.manager-assistant.is-modal-speaking .manager-assistant__helper {
+  margin-top: 3px;
+}
+
+.manager-assistant.is-modal-speaking .manager-assistant__actions[data-layout="single-row"] .manager-assistant__choice,
+.manager-assistant.is-modal-speaking .manager-assistant__action-row--primary .manager-assistant__choice {
+  flex: 1 1 auto;
+}
+
 @media (max-width: 370px) {
   .manager-assistant__character-button {
     flex-basis: 114px;
@@ -396,6 +550,16 @@ body.modal-open .manager-assistant.is-bubble-visible .manager-assistant__close {
 
   .manager-assistant.is-greeting-bubble .manager-assistant__bubble {
     width: 166px;
+  }
+
+  .manager-assistant.is-modal-speaking .manager-assistant__bubble {
+    width: min(296px, calc(100vw - 68px));
+    padding-inline: 9px;
+  }
+
+  .manager-assistant.is-modal-speaking .manager-assistant__choice {
+    padding-inline: 5px;
+    font-size: 9px;
   }
 }
 

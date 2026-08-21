@@ -1,3 +1,9 @@
+export {
+  analyzeManagerService,
+  applyManagerServiceChoice,
+  getManagerServiceQuestion
+} from './manager-assistant-logic.js?v=service-assistant-v2';
+
 const STYLE_ID = 'managerAssistantStylesheet';
 const ROOT_ID = 'managerAssistant';
 const REDUCED_MOTION = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
@@ -42,13 +48,25 @@ const STATE_POSES = Object.freeze({
 });
 
 const STATE_CLASSES = Object.keys(STATE_POSES).map(state => `is-${state}`);
+const KEYBOARD_MIN_HEIGHT_CHANGE = 110;
+const MODAL_BUBBLE_EDGE_GAP = 6;
+
+function clamp(value, minimum, maximum) {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function isTextEntryElement(element) {
+  if (!element) return false;
+  if (element.isContentEditable) return true;
+  return ['INPUT', 'TEXTAREA'].includes(element.tagName);
+}
 
 function ensureStylesheet() {
   if (document.getElementById(STYLE_ID)) return;
   const link = document.createElement('link');
   link.id = STYLE_ID;
   link.rel = 'stylesheet';
-  link.href = new URL('./manager-assistant.css?v=final-motion-sequence', import.meta.url).href;
+  link.href = new URL('./manager-assistant.css?v=service-assistant-v2', import.meta.url).href;
   document.head.appendChild(link);
 }
 
@@ -124,8 +142,14 @@ export function createManagerAssistant({ host = document.body, contained = false
     <p class="manager-assistant__eyebrow">Buddha assistant</p>
     <h3 class="manager-assistant__title"></h3>
     <p class="manager-assistant__intro"></p>
+    <p class="manager-assistant__helper" hidden></p>
     <div class="manager-assistant__availability"></div>
     <p class="manager-assistant__empty" hidden></p>
+    <div class="manager-assistant__actions" hidden></div>
+    <div class="manager-assistant__links" hidden></div>
+    <div class="manager-assistant__footer" hidden>
+      <button class="manager-assistant__leave" type="button" data-assistant-action="leave-current">Leave current</button>
+    </div>
   `;
 
   root.append(characterButton, bubble);
@@ -133,8 +157,12 @@ export function createManagerAssistant({ host = document.body, contained = false
 
   const title = bubble.querySelector('.manager-assistant__title');
   const intro = bubble.querySelector('.manager-assistant__intro');
+  const helper = bubble.querySelector('.manager-assistant__helper');
   const availability = bubble.querySelector('.manager-assistant__availability');
   const empty = bubble.querySelector('.manager-assistant__empty');
+  const actions = bubble.querySelector('.manager-assistant__actions');
+  const links = bubble.querySelector('.manager-assistant__links');
+  const footer = bubble.querySelector('.manager-assistant__footer');
   const closeButton = bubble.querySelector('.manager-assistant__close');
   const timers = new Set();
   const posePreloads = new Map();
@@ -144,9 +172,15 @@ export function createManagerAssistant({ host = document.body, contained = false
   let modalTransitionTimer = 0;
   let pendingModalTip = null;
   let modalObserver = null;
+  let bubbleResizeObserver = null;
+  let bubblePositionFrame = 0;
+  let keyboardBaselineHeight = Math.max(window.innerHeight || 0, window.visualViewport?.height || 0);
+  let celebrateOnModalExit = false;
   let welcomeRequested = false;
   let welcomeShown = false;
   let welcomePending = false;
+  let activeActionHandler = null;
+  let activeDismissHandler = null;
 
   function later(callback, delay) {
     const timer = window.setTimeout(() => {
@@ -166,6 +200,71 @@ export function createManagerAssistant({ host = document.body, contained = false
     if (!modalTransitionTimer) return;
     window.clearTimeout(modalTransitionTimer);
     modalTransitionTimer = 0;
+  }
+
+  function clearModalBubblePosition() {
+    if (bubblePositionFrame) {
+      window.cancelAnimationFrame(bubblePositionFrame);
+      bubblePositionFrame = 0;
+    }
+    root.classList.remove('has-dynamic-bubble', 'is-keyboard-visible');
+    bubble.style.removeProperty('left');
+    bubble.style.removeProperty('top');
+    bubble.style.removeProperty('--ma-tail-top');
+  }
+
+  function getVisualViewportBounds() {
+    const viewport = window.visualViewport;
+    return {
+      left: viewport?.offsetLeft || 0,
+      top: viewport?.offsetTop || 0,
+      width: viewport?.width || window.innerWidth || document.documentElement.clientWidth,
+      height: viewport?.height || window.innerHeight || document.documentElement.clientHeight
+    };
+  }
+
+  function updateModalBubblePosition() {
+    bubblePositionFrame = 0;
+    if (!modalMode || !root.classList.contains('is-bubble-visible')) {
+      clearModalBubblePosition();
+      return;
+    }
+
+    const bounds = getVisualViewportBounds();
+    const viewportBottom = bounds.top + bounds.height;
+    const activeIsTextEntry = isTextEntryElement(document.activeElement);
+    if (!activeIsTextEntry) {
+      keyboardBaselineHeight = Math.max(keyboardBaselineHeight, bounds.height, window.innerHeight || 0);
+    }
+    const keyboardVisible = activeIsTextEntry && (
+      keyboardBaselineHeight - bounds.height >= KEYBOARD_MIN_HEIGHT_CHANGE ||
+      (window.innerHeight || 0) - bounds.height >= KEYBOARD_MIN_HEIGHT_CHANGE
+    );
+
+    root.classList.add('has-dynamic-bubble');
+    root.classList.toggle('is-keyboard-visible', keyboardVisible);
+
+    const rootRect = root.getBoundingClientRect();
+    const characterRect = characterImage.getBoundingClientRect();
+    const bubbleRect = bubble.getBoundingClientRect();
+    const preferredLeft = characterRect.left + characterRect.width * 0.82;
+    const maximumLeft = bounds.left + bounds.width - bubbleRect.width - MODAL_BUBBLE_EDGE_GAP;
+    const left = clamp(preferredLeft, bounds.left + 68, Math.max(bounds.left + 68, maximumLeft));
+    const preferredBottom = keyboardVisible
+      ? viewportBottom - MODAL_BUBBLE_EDGE_GAP
+      : Math.min(viewportBottom - MODAL_BUBBLE_EDGE_GAP, characterRect.bottom + 8);
+    const top = Math.max(bounds.top + MODAL_BUBBLE_EDGE_GAP, preferredBottom - bubbleRect.height);
+    const headY = characterRect.top + characterRect.height * 0.27;
+    const tailTop = clamp(headY - top - 10, 12, Math.max(12, bubbleRect.height - 30));
+
+    bubble.style.left = `${Math.round(left - rootRect.left)}px`;
+    bubble.style.top = `${Math.round(top - rootRect.top)}px`;
+    bubble.style.setProperty('--ma-tail-top', `${Math.round(tailTop)}px`);
+  }
+
+  function scheduleModalBubblePosition() {
+    if (bubblePositionFrame) window.cancelAnimationFrame(bubblePositionFrame);
+    bubblePositionFrame = window.requestAnimationFrame(updateModalBubblePosition);
   }
 
   function afterModalPoof(callback) {
@@ -199,6 +298,7 @@ export function createManagerAssistant({ host = document.body, contained = false
     root.classList.remove(...STATE_CLASSES);
     root.classList.add(`is-${state}`);
     setPose(STATE_POSES[state] || 'smile');
+    if (modalMode) scheduleModalBubblePosition();
   }
 
   function ensureVisible() {
@@ -215,13 +315,38 @@ export function createManagerAssistant({ host = document.body, contained = false
     root.classList.remove('is-bubble-visible');
     bubble.setAttribute('aria-hidden', 'true');
     setBubbleContext(null);
+    clearModalBubblePosition();
+  }
+
+  function makeActionButton(action, { link = false } = {}) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.assistantAction = String(action?.id || '');
+    button.textContent = String(action?.label || '');
+    button.className = link
+      ? 'manager-assistant__link'
+      : `manager-assistant__choice${action?.emphasis === 'secondary' ? ' manager-assistant__choice--secondary' : ''}`;
+    if (action?.disabled === true) button.disabled = true;
+    return button;
+  }
+
+  function appendActionRow(actionItems, modifier = '') {
+    if (!actionItems.length) return;
+    const row = document.createElement('div');
+    row.className = `manager-assistant__action-row${modifier ? ` ${modifier}` : ''}`;
+    actionItems.forEach(action => row.appendChild(makeActionButton(action)));
+    actions.appendChild(row);
   }
 
   function renderMessage(payload = {}) {
     title.textContent = payload.title || 'A little schedule check';
     intro.textContent = payload.intro || '';
     intro.hidden = !intro.textContent;
+    helper.textContent = payload.helper || '';
+    helper.hidden = !helper.textContent;
     availability.replaceChildren();
+    actions.replaceChildren();
+    links.replaceChildren();
 
     const nowGroup = makeAvailabilityGroup(payload.nowLabel || 'Free now', payload.availableNow || []);
     const soonGroup = makeAvailabilityGroup(
@@ -238,14 +363,38 @@ export function createManagerAssistant({ host = document.body, contained = false
     const emptyText = String(payload.emptyText || '');
     empty.hidden = hasItems || !emptyText;
     empty.textContent = hasItems ? '' : emptyText;
+
+    const actionItems = Array.isArray(payload.actions) ? payload.actions : [];
+    const actionLayout = payload.actionLayout || (actionItems.length <= 3 ? 'single-row' : 'compact-rows');
+    actions.dataset.layout = actionLayout;
+    if (actionLayout === 'mani-types') {
+      appendActionRow(actionItems.slice(0, 3), 'manager-assistant__action-row--primary');
+      appendActionRow(actionItems.slice(3), 'manager-assistant__action-row--secondary');
+    } else if (actionLayout === 'single-row') {
+      appendActionRow(actionItems);
+    } else {
+      for (let index = 0; index < actionItems.length; index += 3) {
+        appendActionRow(actionItems.slice(index, index + 3));
+      }
+    }
+    actions.hidden = !actionItems.length;
+
+    const linkItems = Array.isArray(payload.links) ? payload.links : [];
+    linkItems.forEach(action => links.appendChild(makeActionButton(action, { link: true })));
+    links.hidden = !linkItems.length;
+
+    footer.hidden = payload.leaveCurrent !== true;
   }
 
-  function showBubble(payload, { context, autoHideMs = 0 } = {}) {
+  function showBubble(payload, { context, autoHideMs = 0, onAction = null, onDismiss = null } = {}) {
     activeContext = context || null;
+    activeActionHandler = typeof onAction === 'function' ? onAction : null;
+    activeDismissHandler = typeof onDismiss === 'function' ? onDismiss : null;
     renderMessage(payload);
     setBubbleContext(activeContext);
     root.classList.add('is-bubble-visible');
     bubble.setAttribute('aria-hidden', 'false');
+    scheduleModalBubblePosition();
 
     if (autoHideMs > 0) {
       later(() => dismissTip(), autoHideMs);
@@ -259,18 +408,22 @@ export function createManagerAssistant({ host = document.body, contained = false
     pendingModalTip = null;
     setState('modal-speaking');
     showBubble(tip.payload, {
-      context: 'availability',
-      autoHideMs: tip.autoHideMs
+      context: tip.context || 'availability',
+      autoHideMs: tip.autoHideMs,
+      onAction: tip.onAction,
+      onDismiss: tip.onDismiss
     });
   }
 
-  function playEntrance({ showGreeting = false, autoHideMs = 5000 } = {}) {
+  function playEntrance({ showGreeting = false, autoHideMs = 5000, celebrateOnArrival = false } = {}) {
     clearTimers();
     clearModalTransitionTimer();
     ensureVisible();
     hideBubble();
     activeContext = null;
     pendingModalTip = null;
+    activeActionHandler = null;
+    activeDismissHandler = null;
     if (showGreeting) welcomePending = false;
     preloadPoses(['peek', 'walkA', 'walkB', 'wave', 'smile']);
     setState('peeking');
@@ -285,7 +438,13 @@ export function createManagerAssistant({ host = document.body, contained = false
       if (modalMode) return;
       setState(showGreeting ? 'greeting' : 'sitting');
 
-      if (!showGreeting) return;
+      if (!showGreeting) {
+        if (celebrateOnArrival) {
+          later(() => setState('laughing'), MOTION.frameMs);
+          later(() => setState('meditating'), MOTION.frameMs + MOTION.laughDurationMs);
+        }
+        return;
+      }
       later(() => {
         if (modalMode) return;
         welcomeShown = true;
@@ -323,8 +482,11 @@ export function createManagerAssistant({ host = document.body, contained = false
   function exitModalMode() {
     modalMode = false;
     const showDeferredGreeting = welcomePending && welcomeRequested && !welcomeShown;
+    const celebrateOnArrival = celebrateOnModalExit;
+    celebrateOnModalExit = false;
     welcomePending = false;
-    playEntrance({ showGreeting: showDeferredGreeting });
+    clearModalBubblePosition();
+    playEntrance({ showGreeting: showDeferredGreeting, celebrateOnArrival });
   }
 
   function syncModalMode() {
@@ -408,16 +570,26 @@ export function createManagerAssistant({ host = document.body, contained = false
     setState('meditating');
   }
 
+  function celebrateAfterModalClose() {
+    if (modalMode) {
+      celebrateOnModalExit = true;
+      return;
+    }
+    playLaugh();
+  }
+
   function dismissTip({ celebrate } = {}) {
     const shouldCelebrate = typeof celebrate === 'boolean'
       ? celebrate
-      : activeContext === 'availability';
+      : Boolean(activeContext);
 
     clearTimers();
     hideBubble();
     activeContext = null;
     ensureVisible();
     pendingModalTip = null;
+    activeActionHandler = null;
+    activeDismissHandler = null;
 
     if (modalMode) {
       if (!modalTransitionTimer) setState('modal-peeking');
@@ -440,7 +612,7 @@ export function createManagerAssistant({ host = document.body, contained = false
     preloadPoses(['wave', 'laugh', 'meditate', 'peekWave']);
 
     if (modalMode) {
-      pendingModalTip = { payload, autoHideMs };
+      pendingModalTip = { payload, autoHideMs, context: 'availability' };
       if (!modalTransitionTimer) showPendingModalTip();
       return;
     }
@@ -452,12 +624,29 @@ export function createManagerAssistant({ host = document.body, contained = false
     });
   }
 
+  function showPrompt(payload = {}, { autoHideMs = 0, onAction = null, onDismiss = null, context = 'prompt' } = {}) {
+    clearTimers();
+    ensureVisible();
+    preloadPoses(['wave', 'peekWave']);
+
+    if (modalMode) {
+      pendingModalTip = { payload, autoHideMs, onAction, onDismiss, context };
+      if (!modalTransitionTimer) showPendingModalTip();
+      return;
+    }
+
+    setState('speaking');
+    showBubble(payload, { context, autoHideMs, onAction, onDismiss });
+  }
+
   function hide({ immediate = false } = {}) {
     clearTimers();
     clearModalTransitionTimer();
     hideBubble();
     activeContext = null;
     pendingModalTip = null;
+    activeActionHandler = null;
+    activeDismissHandler = null;
 
     if (immediate) {
       root.hidden = true;
@@ -480,8 +669,16 @@ export function createManagerAssistant({ host = document.body, contained = false
   function destroy() {
     clearTimers();
     clearModalTransitionTimer();
+    clearModalBubblePosition();
     modalObserver?.disconnect();
     modalObserver = null;
+    bubbleResizeObserver?.disconnect();
+    bubbleResizeObserver = null;
+    window.visualViewport?.removeEventListener('resize', scheduleModalBubblePosition);
+    window.visualViewport?.removeEventListener('scroll', scheduleModalBubblePosition);
+    window.removeEventListener('resize', scheduleModalBubblePosition);
+    document.removeEventListener('focusin', scheduleModalBubblePosition);
+    document.removeEventListener('focusout', scheduleModalBubblePosition);
     root.remove();
     visible = false;
   }
@@ -491,28 +688,54 @@ export function createManagerAssistant({ host = document.body, contained = false
     attributes: true,
     attributeFilter: ['class']
   });
+  bubbleResizeObserver = typeof ResizeObserver === 'function'
+    ? new ResizeObserver(scheduleModalBubblePosition)
+    : null;
+  bubbleResizeObserver?.observe(bubble);
+  window.visualViewport?.addEventListener('resize', scheduleModalBubblePosition);
+  window.visualViewport?.addEventListener('scroll', scheduleModalBubblePosition);
+  window.addEventListener('resize', scheduleModalBubblePosition);
+  document.addEventListener('focusin', scheduleModalBubblePosition);
+  document.addEventListener('focusout', scheduleModalBubblePosition);
   syncModalMode();
 
   characterButton.addEventListener('click', () => {
     if (root.classList.contains('is-bubble-visible')) {
+      activeDismissHandler?.();
       dismissTip();
       return;
     }
     playLaugh();
   });
 
-  closeButton.addEventListener('click', () => dismissTip());
+  bubble.addEventListener('click', event => {
+    const actionButton = event.target.closest('[data-assistant-action]');
+    if (!actionButton || actionButton.disabled) return;
+    event.preventDefault();
+    event.stopPropagation();
+    activeActionHandler?.(actionButton.dataset.assistantAction, actionButton);
+  });
+
+  closeButton.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    activeDismissHandler?.();
+    dismissTip();
+  });
 
   return {
     showAvailability,
+    showPrompt,
     playWelcome,
     dismissTip,
     peek,
     smile,
     playLaugh,
     playMeditate,
+    celebrateAfterModalClose,
     hide,
     destroy,
-    isVisible: () => visible
+    isVisible: () => visible,
+    isWelcomeActive: () => welcomePending || (welcomeRequested && !welcomeShown) || activeContext === 'welcome'
   };
 }
