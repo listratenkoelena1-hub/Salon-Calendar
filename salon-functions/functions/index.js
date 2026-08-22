@@ -8,6 +8,7 @@ const admin = require("firebase-admin");
 const fetch = require("node-fetch");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
+const { canMutateAnyAppointment } = require("./appointment-access");
 const {
   SCHEDULE_SCHEMA_VERSION,
   appointmentUsesSchedule,
@@ -1087,7 +1088,7 @@ async function getAuthorizedCalendarActor(request) {
 
   const profile = userSnap.data() || {};
   const role = String(profile.role || "").trim();
-  if (!["manager", "reception", "staff"].includes(role)) {
+  if (!canMutateAnyAppointment(role)) {
     throw new HttpsError("permission-denied", "This user cannot change appointments.");
   }
 
@@ -1103,20 +1104,6 @@ async function getAuthorizedCalendarActor(request) {
     : (staffName || (role === "manager" ? "Manager" : "Staff"));
 
   return { uid: request.auth.uid, role, staffId, label };
-}
-
-function assertActorCanMutateAppointment(actor, before, after) {
-  if (actor.role !== "staff") return;
-  if (!actor.staffId) {
-    throw new HttpsError("permission-denied", "Staff profile is not connected.");
-  }
-
-  const outsideOwnCalendar = [before, after]
-    .filter(Boolean)
-    .some(appointment => appointment.staffId !== actor.staffId);
-  if (outsideOwnCalendar) {
-    throw new HttpsError("permission-denied", "Staff can change only their own appointments.");
-  }
 }
 
 function getAnyoneRemainingCapacity({
@@ -1752,8 +1739,6 @@ exports.mutateAppointment = onCall(
       } else {
         lastAction = "delete";
       }
-
-      assertActorCanMutateAppointment(actor, before, after);
 
       const mustValidatePlacement = Boolean(
         appointmentUsesSchedule(after, ANYONE_ID) &&
