@@ -6467,69 +6467,116 @@ function timeLabel(i){
   return `${h}:${String(m).padStart(2,'0')} ${am}`;
 }
 
-onSnapshot(collection(db,"staff"), s => {
-  const realStaff = s.docs
-    .map(d => ({ id: d.id, ...d.data() }))
-    .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
-  const anyoneStaff = { id: ANYONE_ID, name: "Anyone", color: "#eaeaea", active: true };
-  allStaff = [
-    anyoneStaff,
-    ...realStaff
-  ];
-  staff = [
-    anyoneStaff,
-    ...realStaff.filter(isActiveStaffRecord)
-  ];
-
-  renderStaff();
-  populateLogFilters();
-  populateArchiveTechnicianFilter();
-  refreshAnalyticsIfOpen();
-  renderCalendar();
-});
-
-onSnapshot(
-  query(
-    collection(db, "appointments"),
-    where("date", ">=", getArchiveCutoffDateString())
-  ),
-  s => {
-    appointments = normalizeAppointments(s.docs.map(d => ({ id: d.id, ...d.data() })));
-    archiveLoaded = false;
-    archiveAppointments = [];
-    analyticsAppointmentRangeCache.clear();
-    renderCalendar();
-    refreshAnalyticsIfOpen();
-    refreshDeclinedOnlineTray();
-  }
-);
-
 let offWork = [];
 let editingOffWorkId = null;
       
 // ===== WEEKLY OFF =====
 let weeklyOff = [];
+let calendarDataUnsubscribers = [];
+let calendarDataListenerErrorShown = false;
 
-onSnapshot(collection(db, "WeeklyOff"), s => {
-  weeklyOff = s.docs
-    .map(d => ({ id: d.id, ...d.data() }))
-    .filter(w => w.enabled !== false);
-    renderCalendar();
-    refreshAnalyticsIfOpen();
+function stopCalendarDataListeners({ clearData = false } = {}) {
+  calendarDataUnsubscribers.splice(0).forEach(unsubscribe => {
+    try {
+      unsubscribe();
+    } catch (err) {
+      console.warn('Calendar data listener did not stop cleanly:', err);
+    }
+  });
 
-});
+  if (!clearData) return;
 
-onSnapshot(
-  query(
-    collection(db, "OffWork"),
-    where("date", ">=", getArchiveCutoffDateString())
-  ),
-  s => {
-    offWork = s.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderCalendar();
-    refreshAnalyticsIfOpen();
-  }
-);
+  staff = [];
+  allStaff = [];
+  appointments = [];
+  archiveAppointments = [];
+  archiveLoaded = false;
+  offWork = [];
+  weeklyOff = [];
+  analyticsAppointmentRangeCache.clear();
+}
+
+function handleCalendarDataListenerError(label, err) {
+  console.error(`${label} listener failed:`, err);
+  if (!auth.currentUser || calendarDataListenerErrorShown) return;
+
+  calendarDataListenerErrorShown = true;
+  window.showToast?.('Calendar data could not be loaded. Please reload the page.', 'error', 5000);
+}
+
+function startCalendarDataListeners() {
+  stopCalendarDataListeners();
+  if (!auth.currentUser) return;
+
+  calendarDataListenerErrorShown = false;
+
+  calendarDataUnsubscribers.push(onSnapshot(
+    collection(db, "staff"),
+    s => {
+      const realStaff = s.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+      const anyoneStaff = { id: ANYONE_ID, name: "Anyone", color: "#eaeaea", active: true };
+      allStaff = [
+        anyoneStaff,
+        ...realStaff
+      ];
+      staff = [
+        anyoneStaff,
+        ...realStaff.filter(isActiveStaffRecord)
+      ];
+
+      renderStaff();
+      populateLogFilters();
+      populateArchiveTechnicianFilter();
+      refreshAnalyticsIfOpen();
+      renderCalendar();
+    },
+    err => handleCalendarDataListenerError('Staff', err)
+  ));
+
+  calendarDataUnsubscribers.push(onSnapshot(
+    query(
+      collection(db, "appointments"),
+      where("date", ">=", getArchiveCutoffDateString())
+    ),
+    s => {
+      appointments = normalizeAppointments(s.docs.map(d => ({ id: d.id, ...d.data() })));
+      archiveLoaded = false;
+      archiveAppointments = [];
+      analyticsAppointmentRangeCache.clear();
+      renderCalendar();
+      refreshAnalyticsIfOpen();
+      refreshDeclinedOnlineTray();
+    },
+    err => handleCalendarDataListenerError('Appointments', err)
+  ));
+
+  calendarDataUnsubscribers.push(onSnapshot(
+    collection(db, "WeeklyOff"),
+    s => {
+      weeklyOff = s.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(w => w.enabled !== false);
+      renderCalendar();
+      refreshAnalyticsIfOpen();
+    },
+    err => handleCalendarDataListenerError('Weekly off', err)
+  ));
+
+  calendarDataUnsubscribers.push(onSnapshot(
+    query(
+      collection(db, "OffWork"),
+      where("date", ">=", getArchiveCutoffDateString())
+    ),
+    s => {
+      offWork = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderCalendar();
+      refreshAnalyticsIfOpen();
+    },
+    err => handleCalendarDataListenerError('Off work', err)
+  ));
+}
 function renderCalendar() {
   if (calendarViewMode === 'week') {
     renderWeekCalendar();
@@ -8348,6 +8395,7 @@ window.login = async () => {
   }
 };
 window.logout = async () => {
+  stopCalendarDataListeners({ clearData: true });
   await signOut(auth);
 };
 window.resetPassword = async () => {
@@ -14021,8 +14069,14 @@ setTimeout(showLoadingRetry, 10000);
 
 onAuthStateChanged(auth, async (user) => {
 try {
+  stopCalendarDataListeners();
+
   if (!user) {
+    stopCalendarDataListeners({ clearData: true });
     stopStaffNotificationsListener();
+    currentUserRole = null;
+    currentUserStaffId = null;
+    currentUserEmail = '';
     document.getElementById('loginScreen').classList.remove('hidden');
     document.getElementById('calendar-container').style.display = 'none';
     hideLoadingScreen();
@@ -14117,6 +14171,7 @@ if (bottomOffWorkBtn) {
   }
 
   updateBottomToolbarByRole();
+  startCalendarDataListeners();
   startStaffNotificationsListener();
   initializeCalendarPushForUser();
   updateDateLabel();
