@@ -27,13 +27,17 @@ messaging.onBackgroundMessage((payload) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const appointmentId = String(event.notification.data?.appointmentId || '');
   const url = new URL('/', self.location.origin);
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
         if ('focus' in client) {
-          client.focus();
-          return;
+          return client.focus().then(() => {
+            if (appointmentId) {
+              client.postMessage({ type: 'OPEN_APPOINTMENT_FROM_PUSH', appointmentId });
+            }
+          });
         }
       }
       if (clients.openWindow) return clients.openWindow(url.href);

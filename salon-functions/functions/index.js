@@ -9,6 +9,7 @@ const fetch = require("node-fetch");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 const { canMutateAnyAppointment } = require("./appointment-access");
+const { shouldProcessStaffPush } = require("./push-notification");
 const {
   SCHEDULE_SCHEMA_VERSION,
   appointmentUsesSchedule,
@@ -2715,7 +2716,7 @@ async function handleStaffMessageCreated(event) {
     if (!snap) return;
 
     const data = snap.data() || {};
-    if (data.pushEligible !== true) {
+    if (!shouldProcessStaffPush(data)) {
       return;
     }
 
