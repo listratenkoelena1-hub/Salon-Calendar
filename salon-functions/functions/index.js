@@ -81,6 +81,9 @@ const TWILIO_ACCOUNT_SID = defineSecret("TWILIO_ACCOUNT_SID");
 const TWILIO_AUTH_TOKEN = defineSecret("TWILIO_AUTH_TOKEN");
 
 /* === ÐÐÐ¡Ð¢Ð ÐžÐ™ÐšÐ˜ TELEGRAM === */
+// Operational pause: keep the Telegram integration intact while preventing
+// queue writes and outbound messages. Set to false to resume Telegram.
+const TELEGRAM_NOTIFICATIONS_PAUSED = true;
 const BOT_TOKEN = "8570779845:AAHbb2LI4judUopNFDiMN3-gXmLzusRe9JE";
 
 // ===== TELEGRAM MODE =====
@@ -1365,6 +1368,7 @@ month: "long",
 
 // Ð¾Ñ‚Ð¿Ñ€Ð°Ð²ÐºÐ° Ð² Telegram
 async function sendTelegram(text) {
+if (TELEGRAM_NOTIFICATIONS_PAUSED) return;
 await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
 method: "POST",
 headers: { "Content-Type": "application/json" },
@@ -1429,6 +1433,8 @@ return plainLines([
 exports.telegramQueueCreated = onDocumentCreated(
   "TelegramQueue/{id}",
   async (event) => {
+    if (TELEGRAM_NOTIFICATIONS_PAUSED) return;
+
     const snap = event.data;
     if (!snap) return;
 
@@ -1918,7 +1924,9 @@ exports.createOnlineBookingRequest = onCall(
     const submissionRef = db.collection("onlineBookingSubmissions").doc(requestId);
     const appointmentRef = db.collection("appointments").doc();
     const logRef = db.collection("activityLog").doc();
-    const telegramRef = db.collection("TelegramQueue").doc();
+    const telegramRef = TELEGRAM_NOTIFICATIONS_PAUSED
+      ? null
+      : db.collection("TelegramQueue").doc();
     const staffMessageRef = db.collection("staffMessages").doc();
     const emailRef = email ? db.collection(EMAIL_QUEUE_COLLECTION).doc() : null;
     const emailContactRef = email ? db.collection(BOOKING_EMAIL_CONTACT_COLLECTION).doc(appointmentRef.id) : null;
@@ -2153,19 +2161,21 @@ exports.createOnlineBookingRequest = onCall(
 
       const onlineBookingTelegramMessage = buildOnlineBookingTelegramMessage(appointmentData, staffRecords);
       const messageGroupId = `online-booking-${appointmentRef.id}`;
-      tx.set(telegramRef, {
-        status: "pending",
-        message: onlineBookingTelegramMessage,
-        eventType: "online_request_created",
-        entityType: "appointment",
-        entityId: appointmentRef.id,
-        staffId,
-        staffName: getStaffName(staffRecords, staffId),
-        actorLabel: "Online Booking",
-        actorKey: "online_booking",
-        createdAt: FieldValue.serverTimestamp(),
-        source: "online_booking"
-      });
+      if (telegramRef) {
+        tx.set(telegramRef, {
+          status: "pending",
+          message: onlineBookingTelegramMessage,
+          eventType: "online_request_created",
+          entityType: "appointment",
+          entityId: appointmentRef.id,
+          staffId,
+          staffName: getStaffName(staffRecords, staffId),
+          actorLabel: "Online Booking",
+          actorKey: "online_booking",
+          createdAt: FieldValue.serverTimestamp(),
+          source: "online_booking"
+        });
+      }
 
       tx.set(staffMessageRef, buildCanonicalStaffMessageDoc({
         message: onlineBookingTelegramMessage,
@@ -2456,22 +2466,24 @@ exports.twilioIncomingSms = onRequest(
       });
     }
 
-    const from = readTwilioParam(req, "From");
-    const to = readTwilioParam(req, "To");
-    const body = readTwilioParam(req, "Body");
-    const message = buildIncomingSmsTelegramMessage({ from, to, body });
-
     try {
-      await db.collection("TelegramQueue").add({
-        status: "pending",
-        message,
-        eventType: "twilio_incoming_sms",
-        entityType: "twilio_sms",
-        phoneLast4: getPhoneLast4(from),
-        twilioToLast4: getPhoneLast4(to),
-        createdAt: FieldValue.serverTimestamp(),
-        source: "twilio"
-      });
+      if (!TELEGRAM_NOTIFICATIONS_PAUSED) {
+        const from = readTwilioParam(req, "From");
+        const to = readTwilioParam(req, "To");
+        const body = readTwilioParam(req, "Body");
+        const message = buildIncomingSmsTelegramMessage({ from, to, body });
+
+        await db.collection("TelegramQueue").add({
+          status: "pending",
+          message,
+          eventType: "twilio_incoming_sms",
+          entityType: "twilio_sms",
+          phoneLast4: getPhoneLast4(from),
+          twilioToLast4: getPhoneLast4(to),
+          createdAt: FieldValue.serverTimestamp(),
+          source: "twilio"
+        });
+      }
       res.status(200).type("text/xml").send("<Response></Response>");
     } catch (error) {
       console.error("Twilio incoming SMS webhook error:", error);
@@ -3026,23 +3038,14 @@ exports.createStaffAuthUser = onCall(
       { merge: true }
     );
 
-    if (isNewUser) {
+    if (isNewUser && !TELEGRAM_NOTIFICATIONS_PAUSED) {
  const telegramText =
   `Hello ${staffName}, welcome to Rose's Nails Calendar.\n\n` +
   `Your login is ready now.\n\n` +
   `Please use Forgot Password on the login screen.\n` +
   `If you do not see the email, please check your Spam/Junk folder.`;
       try {
-        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            chat_id: CHAT_ID,
-            text: telegramText
-          })
-        });
+        await sendTelegram(telegramText);
       } catch (telegramError) {
         console.error("Telegram welcome message error:", telegramError);
       }

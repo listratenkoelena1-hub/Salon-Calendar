@@ -4856,6 +4856,9 @@ const registerPushDevice = httpsCallable(functions, "registerPushDevice");
 const getStaffPushStatuses = httpsCallable(functions, "getStaffPushStatuses");
 const mutateAppointment = httpsCallable(functions, "mutateAppointment");
 const FCM_VAPID_KEY = "";
+// Operational pause: keep Telegram code and data intact while staffMessages
+// remains the active internal notification channel. Set to false to resume.
+const TELEGRAM_NOTIFICATIONS_PAUSED = true;
   let currentUserRole = null;
 let currentUserStaffId = null;
 let currentUserEmail = '';
@@ -10427,24 +10430,27 @@ async function queueTelegramMessage({
 }) {
   if (!message) return;
 
-  try {
-    await addDoc(collection(db, 'TelegramQueue'), {
-      status: 'pending',
-      message,
-      eventType,
-      entityType,
-      entityId,
-      staffId,
-      staffName: staffName || getActivityLogStaffName(staffId),
-      actorLabel: getCurrentActorLabel(),
-      actorKey: getCurrentActorKey(),
-      createdAt: serverTimestamp(),
-      source: 'calendar'
-    });
-    await queueStaffNotification({ message, eventType, entityType, entityId, staffId, staffName, additionalImportantStaffIds });
-  } catch (err) {
-    console.warn('Telegram message was not queued:', err);
+  if (!TELEGRAM_NOTIFICATIONS_PAUSED) {
+    try {
+      await addDoc(collection(db, 'TelegramQueue'), {
+        status: 'pending',
+        message,
+        eventType,
+        entityType,
+        entityId,
+        staffId,
+        staffName: staffName || getActivityLogStaffName(staffId),
+        actorLabel: getCurrentActorLabel(),
+        actorKey: getCurrentActorKey(),
+        createdAt: serverTimestamp(),
+        source: 'calendar'
+      });
+    } catch (err) {
+      console.warn('Telegram message was not queued:', err);
+    }
   }
+
+  await queueStaffNotification({ message, eventType, entityType, entityId, staffId, staffName, additionalImportantStaffIds });
 }
 
 function buildTelegramAppointmentMessage(data, original = null, mode = null) {
