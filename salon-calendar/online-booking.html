@@ -2736,9 +2736,18 @@
       document.body.classList.add('modal-open');
     }
 
+    function resetMenuView() {
+      openMenuGroup = '';
+      openMenuSubgroup = '';
+      openServiceDescription = '';
+      renderMenu();
+      document.getElementById('serviceMenu').scrollTop = 0;
+    }
+
     function closeMenuModal() {
       document.getElementById('menuModal').classList.remove('open');
       document.body.classList.remove('modal-open');
+      resetMenuView();
     }
 
     function openPrivacyModal() {
