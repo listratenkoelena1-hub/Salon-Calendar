@@ -1752,7 +1752,7 @@
       { label: 'Brows', group: 'brows', match: /\b(brow|brows|eyebrow|eyebrows)\b/i }
     ];
     const relatedChips = {
-      manicure: ['Gel polish', 'Regular polish', 'Hard gel', 'Acrylic powder'],
+      manicure: ['Gel polish Shellac', 'Regular polish', 'Hard gel', 'Acrylic powder', 'Change color, no manicure'],
       pedicure: ['No color', 'Gel polish', 'Regular polish', 'Deluxe', 'Toenail extension', 'Toenail refill', 'Change color, no washing', 'Design', 'Removing', 'Paraffin wax'],
       waxing: ['Eyebrow wax', 'Body wax'],
       lashes: ['Eyelash extensions', 'Refill lashes'],
@@ -1760,7 +1760,7 @@
     };
     const nestedChips = {
       'manicure:Design': ['French', 'Ombre', 'Chrome', 'Cat eye', 'Simple design', 'Full design', 'Glitter design'],
-      'manicure:Shape': ['Almond', 'Stiletto', 'Square', 'Ballerina', 'Oval'],
+      'manicure:Change shape': ['Almond', 'Stiletto', 'Square', 'Ballerina', 'Oval'],
       'pedicure:Design': ['French', 'Ombre', 'Chrome', 'Cat eye', 'Floral design', 'Glitter design', 'Glitters'],
       'waxing:Body wax': ['Lip wax', 'Underarm wax', 'Half arm wax', 'Full arm wax', 'Back wax', 'Half leg wax', 'Full leg wax', 'Bikini wax', 'Brazilian wax'],
       'lashes:Eyelash extensions': ['Classic lashes', 'Hybrid lashes', 'Volume lashes', 'Cat eye lashes', 'Drama volume lashes']
@@ -2272,8 +2272,10 @@
       return `${group}:${label}`;
     }
 
-    const manicureRootChips = ['Gel polish', 'Regular polish', 'Hard gel', 'Acrylic powder'];
-    const manicureGelPolishChips = ['Change color, no manicure', 'Removing', 'Design', 'Shape'];
+    const manicureRootChips = ['Gel polish Shellac', 'Regular polish', 'Hard gel', 'Acrylic powder', 'Change color, no manicure'];
+    const manicureGelPolishChips = ['Removing', 'Design', 'Change shape'];
+    const manicureRegularPolishChips = ['Change color, no manicure', 'Removing'];
+    const manicureChangeColorChips = ['Removing', 'Design', 'Change shape'];
     const manicureHardGelChips = ['Gel overlay', 'Nail extension', 'Refill', 'Removing'];
     const manicureAcrylicChips = ['Nail extension', 'Refill', 'Removing'];
     const manicureShapeChips = ['Almond', 'Stiletto', 'Square', 'Ballerina', 'Oval'];
@@ -2295,28 +2297,39 @@
     }
 
     function getManicureRelatedChips() {
-      if (!hasAnyChipSelection(manicureRootChips)) return manicureRootChips;
+      const rootSelection = manicureRootChips.find(label => hasChipSelection(label));
+      if (!rootSelection) return manicureRootChips;
+      if (hasChipSelection('Removing')) return [];
 
-      if (hasChipSelection('Gel polish')) {
+      if (rootSelection === 'Gel polish Shellac') {
         return filterUnselectedChips(manicureGelPolishChips);
       }
 
-      if (hasChipSelection('Regular polish')) {
-        return filterUnselectedChips(['Change color, no manicure', 'Removing']);
+      if (rootSelection === 'Regular polish') {
+        return hasChipSelection('Change color, no manicure')
+          ? filterUnselectedChips(manicureChangeColorChips)
+          : filterUnselectedChips(manicureRegularPolishChips);
       }
 
-      if (hasChipSelection('Hard gel')) {
-        if (!hasAnyChipSelection(manicureHardGelChips)) return manicureHardGelChips;
-        if (hasChipSelection('Nail extension')) return filterUnselectedChips(['Removing', 'Design', 'Shape']);
-        if (hasChipSelection('Gel overlay') || hasChipSelection('Refill')) {
-          return filterUnselectedChips(['Removing', 'Design', 'Shape']);
+      if (rootSelection === 'Change color, no manicure') {
+        return filterUnselectedChips(manicureChangeColorChips);
+      }
+
+      if (rootSelection === 'Hard gel') {
+        const hardGelSelection = manicureHardGelChips.find(label => hasChipSelection(label));
+        if (!hardGelSelection) return manicureHardGelChips;
+        if (hardGelSelection === 'Refill') return filterUnselectedChips(['Design', 'Change shape']);
+        if (hardGelSelection === 'Gel overlay' || hardGelSelection === 'Nail extension') {
+          return filterUnselectedChips(['Design']);
         }
         return [];
       }
 
-      if (hasChipSelection('Acrylic powder')) {
-        if (!hasAnyChipSelection(manicureAcrylicChips)) return manicureAcrylicChips;
-        if (hasChipSelection('Nail extension') || hasChipSelection('Refill') || hasChipSelection('Removing')) return [];
+      if (rootSelection === 'Acrylic powder') {
+        const acrylicSelection = manicureAcrylicChips.find(label => hasChipSelection(label));
+        if (!acrylicSelection) return manicureAcrylicChips;
+        if (acrylicSelection === 'Refill') return filterUnselectedChips(['Design', 'Change shape']);
+        if (acrylicSelection === 'Nail extension') return filterUnselectedChips(['Design']);
         return [];
       }
 
@@ -2324,7 +2337,7 @@
     }
 
     function getNestedChipLabels(key) {
-      if (key === 'manicure:Shape' && hasAnyChipSelection(manicureShapeChips)) return [];
+      if (key === 'manicure:Change shape' && hasAnyChipSelection(manicureShapeChips)) return [];
       return nestedChips[key] || [];
     }
 
