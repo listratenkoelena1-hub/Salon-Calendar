@@ -3,19 +3,74 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Rose's Nails Online Booking</title>
-  <meta name="description" content="Book your nail appointment online at Rose's Nails Londonderry in Edmonton. Choose a service, technician, date, and available time for your booking request.">
+  <title>Rose's Nails Londonderry Online Booking | Edmonton</title>
+  <meta name="description" content="Book a nail appointment online at Rose's Nails Londonderry Ltd. in Edmonton, Alberta. Choose your service, technician, date, and available time.">
   <meta name="robots" content="index, follow">
   <meta name="google-site-verification" content="rcYKKytvKhZusxXL9xUqAyHWEr5ArXVYncIB3sfWhRc" />
   <link rel="canonical" href="https://rosesnailsbooking.web.app/">
-  <meta property="og:title" content="Rose's Nails Online Booking">
-  <meta property="og:description" content="Book your nail appointment online at Rose's Nails Londonderry in Edmonton.">
+  <meta property="og:title" content="Rose's Nails Londonderry Online Booking">
+  <meta property="og:description" content="Book a nail appointment online at Rose's Nails Londonderry Ltd. in Edmonton, Alberta.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://rosesnailsbooking.web.app/">
   <meta property="og:image" content="https://rosesnailsbooking.web.app/apple-touch-icon.png">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="Rose's Nails Online Booking">
-  <meta name="twitter:description" content="Book your nail appointment online at Rose's Nails Londonderry in Edmonton.">
+  <meta name="twitter:title" content="Rose's Nails Londonderry Online Booking">
+  <meta name="twitter:description" content="Book a nail appointment online at Rose's Nails Londonderry Ltd. in Edmonton, Alberta.">
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BeautySalon",
+      "@id": "https://rosesnailsbooking.web.app/#business",
+      "name": "Rose's Nails Londonderry Ltd.",
+      "url": "https://rosesnailsbooking.web.app/",
+      "image": "https://rosesnailsbooking.web.app/apple-touch-icon.png",
+      "telephone": "+1-780-406-6767",
+      "email": "info@rosesnailslondonderry.ca",
+      "priceRange": "$$",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "13721 66 St NW",
+        "addressLocality": "Edmonton",
+        "addressRegion": "AB",
+        "postalCode": "T5C 3E1",
+        "addressCountry": "CA"
+      },
+      "openingHoursSpecification": [
+        {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+          "opens": "10:00",
+          "closes": "20:00"
+        },
+        {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": ["Saturday", "Sunday"],
+          "opens": "10:00",
+          "closes": "18:00"
+        }
+      ],
+      "sameAs": [
+        "https://rosesnailslondonderry.ca/",
+        "https://www.facebook.com/rosesnailslondonderry/"
+      ],
+      "potentialAction": {
+        "@type": "ReserveAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://rosesnailsbooking.web.app/",
+          "inLanguage": "en-CA",
+          "actionPlatform": [
+            "https://schema.org/DesktopWebPlatform",
+            "https://schema.org/MobileWebPlatform"
+          ]
+        },
+        "result": {
+          "@type": "Reservation",
+          "name": "Nail appointment request"
+        }
+      }
+    }
+  </script>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#ffffff">
   <style>
@@ -493,6 +548,30 @@
       margin-top: 10px;
       border-top: 1px solid rgba(89, 68, 55, 0.12);
       color: #5d463c;
+    }
+
+    .booking-search-intro {
+      display: grid;
+      gap: 7px;
+      max-width: 580px;
+    }
+
+    .booking-search-title {
+      margin: 0;
+      color: var(--deep-green);
+      font-family: "Cooper Black", "Cooper Std Black", "Bookman Old Style", Georgia, serif;
+      font-size: clamp(20px, 4vw, 24px);
+      font-style: italic;
+      font-weight: 800;
+      line-height: 1.15;
+    }
+
+    .booking-search-copy {
+      margin: 0;
+      color: #5d463c;
+      font-size: 14px;
+      font-weight: 650;
+      line-height: 1.5;
     }
 
     .booking-footer-grid {
@@ -1430,6 +1509,10 @@
               <button class="btn primary" data-next disabled>Continue</button>
             </nav>
             <footer class="booking-footer" aria-label="Salon contact information">
+              <section class="booking-search-intro" aria-labelledby="booking-search-title">
+                <h2 class="booking-search-title" id="booking-search-title">Rose's Nails Londonderry Online Booking</h2>
+                <p class="booking-search-copy">Request your nail appointment online at Rose's Nails Londonderry Ltd. in Edmonton, Alberta. Choose your service, preferred technician, date, and time — no account needed.</p>
+              </section>
               <div class="booking-footer-grid">
                 <section class="booking-footer-section">
                   <div class="booking-footer-title">Get in touch</div>
@@ -3206,6 +3289,7 @@
   </script>
 </body>
 </html>
+
 
 
 
