@@ -1753,7 +1753,7 @@
     ];
     const relatedChips = {
       manicure: ['Gel polish Shellac', 'Regular polish', 'Hard gel', 'Acrylic powder', 'Change color, no manicure'],
-      pedicure: ['No color', 'Gel polish', 'Regular polish', 'Deluxe', 'Toenail extension', 'Toenail refill', 'Change color, no washing', 'Design', 'Removing', 'Paraffin wax'],
+      pedicure: ['No color', 'Gel polish', 'Regular polish', 'Change color, no washing', 'Deluxe', 'Toenail extension', 'Toenail refill'],
       waxing: ['Eyebrow wax', 'Body wax'],
       lashes: ['Eyelash extensions', 'Refill lashes'],
       brows: ['Eyebrow wax', 'Eyebrow tinting']
@@ -2279,6 +2279,10 @@
     const manicureHardGelChips = ['Gel overlay', 'Nail extension', 'Refill', 'Removing'];
     const manicureAcrylicChips = ['Nail extension', 'Refill', 'Removing'];
     const manicureShapeChips = ['Almond', 'Stiletto', 'Square', 'Ballerina', 'Oval'];
+    const pedicureRootChips = ['No color', 'Gel polish', 'Regular polish', 'Change color, no washing', 'Deluxe', 'Toenail extension', 'Toenail refill'];
+    const pedicureGelPolishChips = ['Removing', 'Design', 'Paraffin wax'];
+    const pedicureToenailChips = ['Acrylic powder', 'Hard gel', 'Removing', 'Design'];
+    const pedicureToenailMaterials = ['Acrylic powder', 'Hard gel'];
 
     function hasAnyServiceText(labels) {
       return labels.some(label => hasServiceText(label));
@@ -2343,6 +2347,31 @@
       return [];
     }
 
+    function getPedicureRelatedChips() {
+      const rootSelection = pedicureRootChips.find(label => hasChipSelection(label));
+      if (!rootSelection) return pedicureRootChips;
+      if (hasAnyChipSelection(['Removing', 'Design', 'Paraffin wax'])) return [];
+
+      if (rootSelection === 'No color') return filterUnselectedChips(['Paraffin wax']);
+      if (rootSelection === 'Gel polish') return filterUnselectedChips(pedicureGelPolishChips);
+      if (rootSelection === 'Regular polish') return filterUnselectedChips(['Removing']);
+      if (rootSelection === 'Change color, no washing') return filterUnselectedChips(['Design']);
+      if (rootSelection === 'Deluxe') return [];
+
+      if (rootSelection === 'Toenail extension' || rootSelection === 'Toenail refill') {
+        const materialSelection = pedicureToenailMaterials.find(label => hasChipSelection(label));
+        if (!materialSelection) return filterUnselectedChips(pedicureToenailChips);
+        return filterUnselectedChips(['Removing', 'Design']);
+      }
+
+      return [];
+    }
+
+    function shouldShowPedicureBaseChip() {
+      const rootSelection = pedicureRootChips.find(label => hasChipSelection(label));
+      return ['No color', 'Gel polish', 'Change color, no washing'].includes(rootSelection);
+    }
+
     function getNestedChipLabels(key) {
       if (key === 'manicure:Change shape' && hasAnyChipSelection(manicureShapeChips)) return [];
       return nestedChips[key] || [];
@@ -2350,6 +2379,7 @@
 
     function getRelatedChipLabels(group) {
       if (group === 'manicure') return getManicureRelatedChips();
+      if (group === 'pedicure') return getPedicureRelatedChips();
       if (group === 'waxing' && (hasChipSelection('Body wax') || hasChipSelection('Eyebrow wax'))) return [];
       if (group === 'lashes' && (hasChipSelection('Eyelash extensions') || hasChipSelection('Refill lashes'))) return [];
       return (relatedChips[group] || []).filter(label => !hasChipSelection(label));
@@ -2374,7 +2404,11 @@
       }
 
       const hasBranchChips = chips.some(chip => chip.kind === 'related' || chip.kind === 'nested');
-      const showActiveBaseChip = Boolean(activeChipGroup && (activeNestedChip || !hasBranchChips));
+      const showActiveBaseChip = Boolean(activeChipGroup && (
+        activeNestedChip ||
+        !hasBranchChips ||
+        (activeChipGroup === 'pedicure' && shouldShowPedicureBaseChip())
+      ));
       if (activeChipGroup && hasBranchChips) chips.push({ kind: 'break' });
 
       baseChips.forEach(chip => {
