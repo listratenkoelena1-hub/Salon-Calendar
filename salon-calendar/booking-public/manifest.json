@@ -1,6 +1,6 @@
-﻿{
+{
     "theme_color":  "#f4d7e5",
-    "name":  "Rose\u0027s Nails Online Booking",
+    "name":  "Rose\u0027s Nails Booking",
     "display":  "standalone",
     "short_name":  "Rose\u0027s Booking",
     "background_color":  "#fffdf8",
@@ -23,3 +23,4 @@
                   }
               ]
 }
+
