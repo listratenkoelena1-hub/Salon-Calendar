@@ -297,6 +297,7 @@
     .brand-logo-sign {
       display: block;
       width: min(68vw, 330px);
+      max-width: 100%;
       height: auto;
       margin: 0 0 -2px;
     }
@@ -361,13 +362,25 @@
       transition: width 260ms ease;
     }
 
-    .viewport { width: 100%; max-width: 100%; overflow: hidden; min-height: 0; }
+    .viewport {
+      width: 100%;
+      max-width: 100%;
+      overflow: hidden;
+      min-height: 0;
+      transition: height 280ms ease;
+    }
 
     .slides {
+      position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
-      min-height: 100%;
+      height: 100%;
+      min-height: 0;
       display: flex;
-      transition: transform 320ms ease;
+      align-items: flex-start;
+      overflow: hidden;
+      scroll-behavior: auto;
     }
 
     .screen {
@@ -380,6 +393,26 @@
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto;
       gap: 18px;
+    }
+
+    .screen[aria-hidden="true"] {
+      min-height: 0 !important;
+      height: 0;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+      gap: 0;
+      visibility: hidden;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .screen.is-active {
+      animation: screen-enter 220ms ease both;
+    }
+
+    @keyframes screen-enter {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     h1, h2, p { margin: 0; }
@@ -775,6 +808,66 @@
       text-underline-offset: 2px;
       cursor: pointer;
     }
+
+    .email-update-note { margin-top: 6px; }
+
+    .existing-appointment-link,
+    .inline-action-link {
+      appearance: none;
+      width: fit-content;
+      border: 0;
+      background: transparent;
+      color: var(--deep-green);
+      padding: 2px 0;
+      font-family: inherit;
+      font-size: 14px;
+      font-style: normal;
+      font-weight: 780;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .existing-appointment-link {
+      margin-top: 2px;
+      text-decoration: none;
+    }
+
+    .inline-action-link {
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    .contact-field {
+      display: grid;
+      gap: 4px;
+    }
+
+    .field-error,
+    .lookup-error {
+      display: none;
+      color: #b42318;
+      font-size: 12px;
+      font-weight: 720;
+      line-height: 1.35;
+    }
+
+    .field-error.visible,
+    .lookup-error.visible { display: block; }
+
+    input[aria-invalid="true"] {
+      border-color: rgba(180, 35, 24, 0.72);
+      box-shadow: 0 0 0 3px rgba(180, 35, 24, 0.10);
+    }
+
+    .contact-helper {
+      display: none;
+      color: #b42318;
+      font-size: 13px;
+      font-weight: 740;
+      line-height: 1.4;
+    }
+
+    .contact-helper.visible { display: block; }
 
     .privacy-body {
       display: grid;
@@ -1183,6 +1276,121 @@
     .review-label { color: var(--muted); font-size: 12px; font-weight: 740; }
     .review-value { margin-top: 4px; overflow-wrap: anywhere; }
 
+    .decision-content {
+      align-content: space-between;
+      gap: 24px;
+    }
+
+    .btn.choice-button {
+      width: 100%;
+      max-width: 620px;
+      color: var(--deep-green);
+      border-color: rgba(47, 107, 59, 0.45);
+      background: rgba(255,255,255,0.82);
+    }
+
+    .security-copy,
+    .preview-copy {
+      max-width: 620px;
+      border-radius: 8px;
+      padding: 13px 14px;
+      color: #5d463c;
+      background: rgba(232, 244, 223, 0.62);
+      border: 1px solid rgba(89, 145, 62, 0.22);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .preview-copy {
+      color: #6c3e20;
+      background: rgba(243, 180, 55, 0.16);
+      border-color: rgba(233, 91, 31, 0.24);
+    }
+
+    .verification-field {
+      display: grid;
+      gap: 7px;
+      width: min(100%, 360px);
+    }
+
+    .verification-field input {
+      font-size: 22px;
+      font-weight: 780;
+      letter-spacing: 0.28em;
+      text-align: center;
+    }
+
+    .appointment-list {
+      display: grid;
+      gap: 12px;
+      width: min(100%, 620px);
+    }
+
+    .appointment-card {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px;
+      background: rgba(255,255,255,0.78);
+      color: var(--ink);
+      text-align: left;
+      display: grid;
+      gap: 8px;
+    }
+
+    .appointment-card.selected {
+      border-color: rgba(233, 91, 31, 0.62);
+      box-shadow: 0 0 0 4px rgba(241, 95, 126, 0.12);
+    }
+
+    .appointment-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .appointment-card-date {
+      color: #2f522f;
+      font-weight: 820;
+    }
+
+    .appointment-card-meta {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .appointment-status {
+      flex: 0 0 auto;
+      border-radius: 999px;
+      padding: 5px 8px;
+      font-size: 11px;
+      font-weight: 820;
+      background: rgba(232, 244, 223, 0.82);
+      color: var(--deep-green);
+    }
+
+    .appointment-status.awaiting {
+      color: #875014;
+      background: rgba(243, 180, 55, 0.20);
+    }
+
+    .btn.danger-button {
+      color: #fff;
+      background: linear-gradient(135deg, #c94832, var(--coral));
+      box-shadow: 0 10px 24px rgba(180, 35, 24, 0.20);
+    }
+
+    .appointment-cancel-summary {
+      display: grid;
+      gap: 8px;
+      width: min(100%, 620px);
+      border-left: 4px solid var(--coral);
+      padding: 12px 14px;
+      background: rgba(255, 228, 236, 0.48);
+    }
+
     .actions {
       display: flex;
       align-items: center;
@@ -1409,6 +1617,8 @@
     }
     @media (prefers-reduced-motion: reduce) {
       .success-confetti-piece { animation: none; opacity: .18; }
+      .viewport { transition: none; }
+      .screen.is-active { animation: none; }
     }
 
     @media (min-width: 760px) {
@@ -1489,7 +1699,7 @@
 
       <div class="viewport">
         <div class="slides" id="slides">
-          <section class="screen">
+          <section class="screen" data-screen="contact">
             <header>
               <div class="screen-share-row">
                 <button class="share-booking" id="shareBookingBtn" type="button" aria-label="Share booking link">
@@ -1506,28 +1716,35 @@
             </header>
             <div class="content">
               <div class="field-grid">
-                <div>
+                <div class="contact-field">
                   <label for="clientName">Name</label>
-                  <input id="clientName" autocomplete="name" placeholder="Your name">
+                  <input id="clientName" autocomplete="name" placeholder="Your name" aria-describedby="clientNameError">
+                  <div class="field-error" id="clientNameError" role="alert">Please enter your name.</div>
                 </div>
-                <div>
+                <div class="contact-field">
                   <label for="clientPhone">Phone number</label>
-                  <input id="clientPhone" autocomplete="tel" inputmode="tel" placeholder="Your phone number">
+                  <input id="clientPhone" autocomplete="tel" inputmode="tel" placeholder="Your phone number" aria-describedby="clientPhoneError">
+                  <div class="field-error" id="clientPhoneError" role="alert">Please enter your phone number.</div>
                 </div>
-                <div>
+                <div class="contact-field">
                   <label for="clientEmail">Email (optional)</label>
-                  <input id="clientEmail" type="email" autocomplete="email" placeholder="you@example.com">
-                  <div class="note">Add your email to receive booking updates faster.</div>
+                  <input id="clientEmail" type="email" autocomplete="email" placeholder="you@example.com" aria-describedby="clientEmailError">
+                  <div class="field-error" id="clientEmailError" role="alert">Please enter a valid email address or leave this field blank.</div>
+                  <div class="note email-update-note">Add your email to receive booking updates faster.</div>
                 </div>
               </div>
+              <button class="existing-appointment-link" id="existingAppointmentLink" type="button">Already have an appointment?</button>
+              <div class="contact-helper" id="contactHelper" role="alert">Enter your name and phone number, then continue.</div>
+              <div class="lookup-error" id="appointmentLookupError" role="alert"></div>
               <label class="checkline">
                 <input id="consent" type="checkbox">
                 <span>I agree to be contacted about my appointment and accept the <button class="privacy-link" id="privacyDetailsLink" type="button">Privacy details</button>.</span>
               </label>
+              <div class="field-error" id="consentError" role="alert">Please accept the Privacy details to continue.</div>
             </div>
             <nav class="actions">
               <span></span>
-              <button class="btn primary" data-next disabled>Continue</button>
+              <button class="btn primary" id="contactContinue" data-next disabled>Continue</button>
             </nav>
             <footer class="booking-footer" aria-label="Salon contact information">
               <section class="booking-search-intro" aria-labelledby="booking-search-title">
@@ -1552,7 +1769,7 @@
           </section>
 
 
-          <section class="screen">
+          <section class="screen" data-screen="services">
             <header>
               <div class="screen-heading-row"><h2>What would you like to do?</h2><button class="menu-button" id="openMenu" type="button" aria-label="Open Price List">
                 <img src="price-list-lines.png" alt="" aria-hidden="true">
@@ -1595,7 +1812,7 @@
             </nav>
           </section>
 
-          <section class="screen">
+          <section class="screen" data-screen="schedule">
             <header>
               <h2>Choose date, technician, and time</h2>
               <div class="note">Pick a date first, then choose an available technician and time.<br>If you do not see your technician in the list, it means this technician has no availability today.</div>
@@ -1621,7 +1838,7 @@
             </nav>
           </section>
 
-          <section class="screen">
+          <section class="screen" data-screen="review">
             <header>
               <h2>Review your request</h2>
             </header>
@@ -1635,7 +1852,7 @@
             </nav>
           </section>
 
-          <section class="screen">
+          <section class="screen" data-screen="success">
             <header>
               <div class="success-symbol-wrap" aria-hidden="true">
                 <svg class="success-coin" viewBox="0 0 100 100" role="img" aria-label="Lucky coin">
@@ -1668,6 +1885,130 @@
             <nav class="actions">
               <button class="btn" id="startOver" type="button">Start Over</button>
               <span></span>
+            </nav>
+          </section>
+
+          <section class="screen" data-screen="appointment-choice">
+            <header>
+              <h2>Upcoming appointment found</h2>
+              <p class="lead">Would you like to manage your upcoming appointments or request a new one?</p>
+            </header>
+            <div class="content decision-content">
+              <div class="security-copy">For privacy, appointment details remain hidden until your phone number is verified.</div>
+              <button class="btn choice-button" id="requestNewFromChoice" type="button">Request a new appointment</button>
+            </div>
+            <nav class="actions">
+              <button class="btn" id="appointmentChoiceBack" type="button">Back</button>
+              <button class="btn primary" id="manageAppointments" type="button">Manage appointments</button>
+            </nav>
+          </section>
+
+          <section class="screen" data-screen="no-appointments">
+            <header>
+              <h2>No upcoming appointments found</h2>
+              <p class="lead">We couldn't find any upcoming appointments for this name and phone number. Would you like to request a new appointment?</p>
+            </header>
+            <div class="content">
+              <div class="security-copy">Check the name and phone number used for the booking, or continue with a new request.</div>
+            </div>
+            <nav class="actions">
+              <button class="btn" id="noAppointmentsBack" type="button">Back</button>
+              <button class="btn primary" id="requestNewFromEmpty" type="button">Request a new appointment</button>
+            </nav>
+          </section>
+
+          <section class="screen" data-screen="verify-phone">
+            <header>
+              <h2>Verify your phone number</h2>
+              <p class="lead">To keep your appointment secure, we'll send a one-time verification code to the phone number used for the booking.</p>
+            </header>
+            <div class="content">
+              <div class="security-copy" id="verificationPhoneSummary"></div>
+              <div class="preview-copy" id="verificationPreviewNote" hidden>Test preview: no text message will be sent. Use code 123456.</div>
+              <div class="lookup-error" id="verificationSendError" role="alert"></div>
+            </div>
+            <nav class="actions">
+              <button class="btn" id="verifyPhoneBack" type="button">Back</button>
+              <button class="btn primary" id="sendVerificationCode" type="button">Send verification code</button>
+            </nav>
+          </section>
+
+          <section class="screen" data-screen="verification-code">
+            <header>
+              <h2>Enter verification code</h2>
+              <p class="lead" id="verificationCodeMessage">We sent a six-digit code to your phone number. Enter it below to access your appointments.</p>
+            </header>
+            <div class="content">
+              <div class="verification-field">
+                <label for="verificationCode">Verification code</label>
+                <input id="verificationCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" aria-describedby="verificationCodeError">
+                <div class="field-error" id="verificationCodeError" role="alert">The verification code is incorrect. Please try again.</div>
+                <button class="inline-action-link" id="sendNewCode" type="button">Send new code</button>
+              </div>
+              <div class="preview-copy" id="codePreviewNote" hidden>Test preview code: 123456. No text message was sent.</div>
+              <div class="lookup-error" id="newCodeStatus" role="status"></div>
+            </div>
+            <nav class="actions">
+              <button class="btn" id="verificationCodeBack" type="button">Back</button>
+              <button class="btn primary" id="continueVerification" type="button" disabled>Continue</button>
+            </nav>
+          </section>
+
+          <section class="screen" data-screen="appointments-list">
+            <header>
+              <h2>Your upcoming appointments</h2>
+              <p class="lead">Select an appointment to view its details.</p>
+            </header>
+            <div class="content">
+              <div class="appointment-list" id="upcomingAppointmentsList"></div>
+              <div class="preview-copy" id="appointmentsPreviewNote" hidden>Preview only: these appointments are examples and no calendar records were created.</div>
+            </div>
+            <nav class="actions">
+              <button class="btn" id="appointmentsListBack" type="button">Back</button>
+              <button class="btn primary" id="viewSelectedAppointment" type="button" disabled>Continue</button>
+            </nav>
+          </section>
+
+          <section class="screen" data-screen="appointment-details">
+            <header>
+              <h2>Appointment details</h2>
+            </header>
+            <div class="content decision-content">
+              <div class="review" id="appointmentDetails"></div>
+              <button class="btn choice-button" id="requestNewFromDetails" type="button">Request a new appointment</button>
+            </div>
+            <nav class="actions">
+              <button class="btn" id="appointmentDetailsBack" type="button">Back</button>
+              <button class="btn danger-button" id="cancelAppointment" type="button">Cancel appointment</button>
+            </nav>
+          </section>
+
+          <section class="screen" data-screen="cancel-confirmation">
+            <header>
+              <h2>Cancel this appointment?</h2>
+              <p class="lead">Please confirm that you want to cancel the appointment shown below.</p>
+            </header>
+            <div class="content">
+              <div class="appointment-cancel-summary" id="cancelAppointmentSummary"></div>
+              <div class="security-copy">The salon and the assigned technician will be notified when an appointment is cancelled.</div>
+            </div>
+            <nav class="actions">
+              <button class="btn" id="cancelConfirmationBack" type="button">Back</button>
+              <button class="btn danger-button" id="confirmAppointmentCancellation" type="button">Yes, cancel appointment</button>
+            </nav>
+          </section>
+
+          <section class="screen" data-screen="cancellation-complete">
+            <header>
+              <h2>Appointment cancelled</h2>
+              <p class="lead">Your appointment has been cancelled. The salon and your technician have been notified.</p>
+            </header>
+            <div class="content">
+              <div class="preview-copy" id="cancellationPreviewNote" hidden>Preview only: no calendar appointment was changed and no notification was sent.</div>
+            </div>
+            <nav class="actions">
+              <button class="btn" id="finishAppointmentManagement" type="button">Done</button>
+              <button class="btn primary" id="requestNewAfterCancellation" type="button">Request a new appointment</button>
             </nav>
           </section>
         </div>
@@ -1713,7 +2054,7 @@
       </div>
       <div class="menu-body privacy-body">
         <h2>Rose's Nails Londonderry Privacy Consent</h2>
-        <p class="privacy-muted">Consent version: privacy-consent-v2-2026-07-20</p>
+        <p class="privacy-muted">Consent version: privacy-consent-v3-2026-09-06</p>
         <p>This privacy consent explains how Rose's Nails Londonderry uses information when you request or schedule an appointment with us.</p>
 
         <h3>Information we collect</h3>
@@ -1732,10 +2073,10 @@
 
         <h3>Photos</h3>
         <p>If you upload photos, they are used only to help us review your requested service and prepare for your appointment. Staff may view the photos to understand your nail condition, inspiration picture, requested design, materials, technique, or service needs.</p>
-        <p>Photos are stored through a temporary booking photo link and are intended to be available for up to 24 hours after submission. After that, the photo files and temporary photo link details may be deleted or made unavailable.</p>
+        <p>Photos remain available while an online booking request is awaiting review. Once the request is confirmed or declined, the photo files and temporary photo link are kept for up to 24 hours and are then deleted or made unavailable. If a request remains pending for longer than 24 hours, the 24-hour deletion period begins only when the request is confirmed or declined.</p>
 
         <h3>Service providers</h3>
-        <p>Rose's Nails Londonderry may use trusted service providers to operate the booking system, calendar, hosting, database, cloud functions, file storage, email delivery, internal notifications, and SMS/text delivery. These providers may include Google/Firebase, Gmail or another email provider, Telegram for internal salon notifications, and Twilio or another third-party SMS provider.</p>
+        <p>Rose's Nails Londonderry may use trusted service providers to operate the booking system, calendar, hosting, database, cloud functions, file storage, email delivery, internal notifications, and SMS/text delivery. These providers may include Google/Firebase, Gmail or another email provider, and Twilio or another third-party SMS provider.</p>
         <p>Some service providers may store or process information outside Alberta or outside Canada. When that happens, your information may be subject to the laws of the place where it is processed.</p>
 
         <h3>Appointment records and consent records</h3>
@@ -1773,9 +2114,21 @@
     const firebaseFunctions = getFunctions(firebaseApp, "us-central1");
     const createOnlineBookingRequest = httpsCallable(firebaseFunctions, "createOnlineBookingRequest");
     const getOnlineBookingAvailability = httpsCallable(firebaseFunctions, "getOnlineBookingAvailability");
+    const checkUpcomingAppointments = httpsCallable(firebaseFunctions, "checkUpcomingAppointments");
 
-    const PRIVACY_CONSENT_VERSION = "privacy-consent-v2-2026-07-20";
+    const PRIVACY_CONSENT_VERSION = "privacy-consent-v3-2026-09-06";
     const BOOKING_PUBLIC_URL = "https://rosesnailsbooking.web.app";
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    const bookingUrlParams = new URLSearchParams(window.location.search);
+    const bookingHost = window.location.hostname.toLowerCase();
+    const isLocalBookingPreview = ["localhost", "127.0.0.1", "::1"].includes(bookingHost);
+    const isFirebasePreviewChannel = bookingHost.endsWith(".web.app") && bookingHost.includes("--");
+    const appointmentPreviewParam = String(bookingUrlParams.get("appointmentPreview") || "").toLowerCase();
+    const APPOINTMENT_PREVIEW_SCENARIO = (isLocalBookingPreview || isFirebasePreviewChannel)
+      ? (appointmentPreviewParam === "none" ? "none" : (appointmentPreviewParam || isFirebasePreviewChannel ? "found" : ""))
+      : "";
+    const APPOINTMENT_PREVIEW_ENABLED = Boolean(APPOINTMENT_PREVIEW_SCENARIO);
+    const APPOINTMENT_PREVIEW_CODE = "123456";
 
     const infoArticles = [
       {
@@ -1834,6 +2187,11 @@
 
     const state = {
       step: 0,
+      screen: 'contact',
+      manageIntent: false,
+      appointmentLookupPending: false,
+      previewAppointments: [],
+      selectedAppointmentId: '',
       selectedCategories: [],
       selectedServices: [],
       staff: '',
@@ -2247,6 +2605,7 @@
     ];
 
     const slides = document.getElementById('slides');
+    const bookingViewport = slides.parentElement;
     const progressFill = document.getElementById('progressFill');
     const stepLabel = document.getElementById('stepLabel');
     const nameInput = document.getElementById('clientName');
@@ -2257,6 +2616,26 @@
     const serviceText = document.getElementById('serviceText');
     const serviceWarning = document.getElementById('serviceWarning');
     const sendRequestButton = document.getElementById('sendRequest');
+    const contactContinueButton = document.getElementById('contactContinue');
+    const existingAppointmentLink = document.getElementById('existingAppointmentLink');
+    const contactHelper = document.getElementById('contactHelper');
+    const appointmentLookupError = document.getElementById('appointmentLookupError');
+    const verificationCodeInput = document.getElementById('verificationCode');
+    const continueVerificationButton = document.getElementById('continueVerification');
+    const bookingScreenNames = ['contact', 'services', 'schedule', 'review', 'success'];
+    const screenElements = Array.from(document.querySelectorAll('[data-screen]'));
+    const screenIndexes = new Map(screenElements.map((screen, index) => [screen.dataset.screen, index]));
+    let screenNavigationInitialized = false;
+    const managementScreenMeta = {
+      'appointment-choice': ['Manage appointments', 40],
+      'no-appointments': ['Manage appointments', 40],
+      'verify-phone': ['Secure verification', 55],
+      'verification-code': ['Secure verification', 70],
+      'appointments-list': ['Your appointments', 85],
+      'appointment-details': ['Your appointments', 90],
+      'cancel-confirmation': ['Cancel appointment', 95],
+      'cancellation-complete': ['Appointment cancelled', 100]
+    };
 
 
     function formatDisplayDate(value) {
@@ -2270,21 +2649,61 @@
     function updateDateDisplay() {
       if (dateDisplay) dateDisplay.textContent = formatDisplayDate(dateInput.value);
     }
+
+    function syncActiveScreenHeight() {
+      const activeScreen = screenElements.find((screen) => screen.classList.contains('is-active'));
+      if (!activeScreen || !bookingViewport) return;
+      bookingViewport.style.height = `${activeScreen.scrollHeight}px`;
+      const activeIndex = screenIndexes.get(activeScreen.dataset.screen);
+      slides.scrollTo({ left: activeIndex * bookingViewport.clientWidth, behavior: 'auto' });
+    }
+
     function scrollStepProgressIntoView() {
       requestAnimationFrame(() => {
-        stepLabel.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        const scrollTarget = window.innerWidth >= 760 ? document.querySelector('.app') : stepLabel;
+        scrollTarget?.scrollIntoView({ block: 'start', behavior: 'smooth' });
       });
     }
 
-    function go(step) {
-      state.step = Math.max(0, Math.min(4, step));
-      slides.style.transform = `translateX(-${state.step * 100}%)`;
-      progressFill.style.width = `${((state.step + 1) / 5) * 100}%`;
-      stepLabel.textContent = `Step ${state.step + 1} of 5`;
-      if (state.step === 3) renderReview();
-      if (state.step === 4) window.setTimeout(playSuccessBurst, 260);
+    function showScreen(screenName) {
+      const screenIndex = screenIndexes.get(screenName);
+      if (!Number.isInteger(screenIndex)) return;
+
+      state.screen = screenName;
+      screenElements.forEach((screen) => {
+        const isActive = screen.dataset.screen === screenName;
+        screen.classList.toggle('is-active', isActive);
+        screen.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+        screen.inert = !isActive;
+      });
+      slides.scrollTo({ left: screenIndex * bookingViewport.clientWidth, behavior: 'auto' });
+
+      const bookingStep = bookingScreenNames.indexOf(screenName);
+      if (bookingStep >= 0) {
+        state.step = bookingStep;
+        progressFill.style.width = `${((bookingStep + 1) / bookingScreenNames.length) * 100}%`;
+        stepLabel.textContent = `Step ${bookingStep + 1} of ${bookingScreenNames.length}`;
+        if (bookingStep === 3) renderReview();
+        if (bookingStep === 4) window.setTimeout(playSuccessBurst, 260);
+      } else {
+        const [label, progress] = managementScreenMeta[screenName] || ['Manage appointments', 50];
+        progressFill.style.width = `${progress}%`;
+        stepLabel.textContent = label;
+      }
+
       updateButtons();
-      scrollStepProgressIntoView();
+      requestAnimationFrame(syncActiveScreenHeight);
+      if (screenNavigationInitialized) {
+        scrollStepProgressIntoView();
+      } else {
+        screenNavigationInitialized = true;
+        requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
+      }
+    }
+
+    function go(step) {
+      const bookingStep = Math.max(0, Math.min(bookingScreenNames.length - 1, step));
+      showScreen(bookingScreenNames[bookingStep]);
     }
 
     function playSuccessBurst() {
@@ -2342,9 +2761,338 @@
       });
     }
 
-    document.querySelectorAll('[data-next]').forEach(button => button.addEventListener('click', () => go(state.step + 1)));
+    function setContactFieldError(input, errorId, invalid) {
+      const error = document.getElementById(errorId);
+      input.setAttribute('aria-invalid', invalid ? 'true' : 'false');
+      error?.classList.toggle('visible', invalid);
+    }
+
+    function validateContact(showErrors = false) {
+      const invalidName = !nameInput.value.trim();
+      const invalidPhone = !isValidPhoneNumber(phoneInput.value);
+      const invalidEmail = !isValidOptionalEmail(emailInput.value);
+      const invalidConsent = !consentInput.checked;
+
+      if (showErrors) {
+        setContactFieldError(nameInput, 'clientNameError', invalidName);
+        setContactFieldError(phoneInput, 'clientPhoneError', invalidPhone);
+        setContactFieldError(emailInput, 'clientEmailError', invalidEmail);
+        consentInput.setAttribute('aria-invalid', invalidConsent ? 'true' : 'false');
+        document.getElementById('consentError')?.classList.toggle('visible', invalidConsent);
+        contactHelper.classList.toggle('visible', invalidName || invalidPhone);
+      }
+
+      return !invalidName && !invalidPhone && !invalidEmail && !invalidConsent;
+    }
+
+    function scrollToFirstContactIssue() {
+      const target = !nameInput.value.trim()
+        ? nameInput
+        : (!isValidPhoneNumber(phoneInput.value)
+          ? phoneInput
+          : (!isValidOptionalEmail(emailInput.value) ? emailInput : consentInput));
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      window.setTimeout(() => target.focus({ preventScroll: true }), 260);
+    }
+
+    function setAppointmentLookupError(message = '') {
+      appointmentLookupError.textContent = message;
+      appointmentLookupError.classList.toggle('visible', Boolean(message));
+    }
+
+    function setAppointmentLookupBusy(busy) {
+      state.appointmentLookupPending = busy;
+      contactContinueButton.disabled = busy || !validateContact(false);
+      contactContinueButton.textContent = busy ? 'Checking...' : 'Continue';
+      existingAppointmentLink.disabled = busy;
+    }
+
+    function waitForPreview(milliseconds = 420) {
+      return new Promise(resolve => window.setTimeout(resolve, milliseconds));
+    }
+
+    function getPreviewIsoDate(daysAhead) {
+      const date = new Date();
+      date.setHours(12, 0, 0, 0);
+      date.setDate(date.getDate() + daysAhead);
+      return date.toISOString().slice(0, 10);
+    }
+
+    function createPreviewAppointments() {
+      return [
+        {
+          id: 'preview-confirmed',
+          status: 'confirmed',
+          date: getPreviewIsoDate(3),
+          time: '2:30 PM',
+          technician: 'Olga',
+          service: 'Gel polish manicure'
+        },
+        {
+          id: 'preview-awaiting',
+          status: 'request',
+          date: getPreviewIsoDate(8),
+          time: '11:00 AM',
+          technician: 'Anyone',
+          service: 'Pedicure'
+        }
+      ];
+    }
+
+    async function runUpcomingAppointmentCheck({ manageRequested = false } = {}) {
+      if (manageRequested) state.manageIntent = true;
+      setAppointmentLookupError('');
+
+      const missingName = !nameInput.value.trim();
+      const invalidPhone = !isValidPhoneNumber(phoneInput.value);
+      if (manageRequested && (missingName || invalidPhone)) {
+        setContactFieldError(nameInput, 'clientNameError', missingName);
+        setContactFieldError(phoneInput, 'clientPhoneError', invalidPhone);
+        contactHelper.classList.remove('visible');
+        consentInput.setAttribute('aria-invalid', 'false');
+        document.getElementById('consentError')?.classList.remove('visible');
+        scrollToFirstContactIssue();
+        updateButtons();
+        return;
+      }
+
+      if (!validateContact(true)) {
+        scrollToFirstContactIssue();
+        updateButtons();
+        return;
+      }
+
+      contactHelper.classList.remove('visible');
+      setAppointmentLookupBusy(true);
+      try {
+        let hasUpcomingAppointments = false;
+        if (APPOINTMENT_PREVIEW_ENABLED) {
+          await waitForPreview();
+          hasUpcomingAppointments = APPOINTMENT_PREVIEW_SCENARIO !== 'none';
+        } else {
+          const result = await checkUpcomingAppointments({
+            client: nameInput.value.trim(),
+            phone: phoneInput.value.trim(),
+            consentAccepted: consentInput.checked
+          });
+          hasUpcomingAppointments = result?.data?.hasUpcomingAppointments === true;
+        }
+
+        if (hasUpcomingAppointments) {
+          state.previewAppointments = APPOINTMENT_PREVIEW_ENABLED ? createPreviewAppointments() : [];
+          state.selectedAppointmentId = '';
+          showScreen('appointment-choice');
+        } else if (state.manageIntent) {
+          showScreen('no-appointments');
+        } else {
+          go(1);
+        }
+      } catch (error) {
+        if (state.manageIntent) {
+          setAppointmentLookupError('We could not check your appointments right now. Please try again.');
+        } else {
+          go(1);
+        }
+      } finally {
+        setAppointmentLookupBusy(false);
+      }
+    }
+
+    function beginNewAppointmentRequest() {
+      state.manageIntent = false;
+      state.selectedAppointmentId = '';
+      setAppointmentLookupError('');
+      go(1);
+    }
+
+    function maskPhoneNumber(value) {
+      const digits = String(value || '').replace(/\D/g, '');
+      return `••• ••• ${digits.slice(-4) || '0000'}`;
+    }
+
+    function openPhoneVerification() {
+      const maskedPhone = maskPhoneNumber(phoneInput.value);
+      document.getElementById('verificationPhoneSummary').textContent = `The verification code will be sent to ${maskedPhone}.`;
+      document.getElementById('verificationPreviewNote').hidden = !APPOINTMENT_PREVIEW_ENABLED;
+      document.getElementById('verificationSendError').classList.remove('visible');
+      showScreen('verify-phone');
+    }
+
+    function formatPreviewAppointmentDate(value) {
+      const [year, month, day] = String(value || '').split('-').map(Number);
+      if (!year || !month || !day) return value;
+      return new Intl.DateTimeFormat('en-CA', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      }).format(new Date(year, month - 1, day, 12));
+    }
+
+    function getSelectedPreviewAppointment() {
+      return state.previewAppointments.find(item => item.id === state.selectedAppointmentId) || null;
+    }
+
+    function getAppointmentStatusLabel(status) {
+      return status === 'confirmed' ? 'Confirmed' : 'Awaiting confirmation';
+    }
+
+    function renderUpcomingAppointments() {
+      const list = document.getElementById('upcomingAppointmentsList');
+      list.innerHTML = state.previewAppointments.map(appointment => {
+        const selected = appointment.id === state.selectedAppointmentId;
+        const awaitingClass = appointment.status === 'confirmed' ? '' : ' awaiting';
+        return `
+          <button class="appointment-card ${selected ? 'selected' : ''}" type="button" data-preview-appointment="${escapeHtml(appointment.id)}" aria-pressed="${selected}">
+            <span class="appointment-card-head">
+              <span class="appointment-card-date">${escapeHtml(formatPreviewAppointmentDate(appointment.date))}</span>
+              <span class="appointment-status${awaitingClass}">${escapeHtml(getAppointmentStatusLabel(appointment.status))}</span>
+            </span>
+            <span class="appointment-card-meta">${escapeHtml(appointment.time)} · ${escapeHtml(appointment.technician)}<br>${escapeHtml(appointment.service)}</span>
+          </button>
+        `;
+      }).join('');
+      document.getElementById('appointmentsPreviewNote').hidden = !APPOINTMENT_PREVIEW_ENABLED;
+      document.getElementById('viewSelectedAppointment').disabled = !state.selectedAppointmentId;
+
+      list.querySelectorAll('[data-preview-appointment]').forEach(button => {
+        button.addEventListener('click', () => {
+          state.selectedAppointmentId = button.dataset.previewAppointment || '';
+          renderUpcomingAppointments();
+        });
+      });
+    }
+
+    function renderAppointmentDetails() {
+      const appointment = getSelectedPreviewAppointment();
+      if (!appointment) return false;
+      const details = [
+        ['Status', getAppointmentStatusLabel(appointment.status)],
+        ['Date', formatPreviewAppointmentDate(appointment.date)],
+        ['Time', appointment.time],
+        ['Technician', appointment.technician],
+        ['Service', appointment.service]
+      ];
+      document.getElementById('appointmentDetails').innerHTML = details.map(([label, value]) => `
+        <div class="review-item">
+          <div class="review-label">${escapeHtml(label)}</div>
+          <div class="review-value">${escapeHtml(value)}</div>
+        </div>
+      `).join('');
+      return true;
+    }
+
+    function renderCancellationSummary() {
+      const appointment = getSelectedPreviewAppointment();
+      if (!appointment) return false;
+      document.getElementById('cancelAppointmentSummary').innerHTML = `
+        <strong>${escapeHtml(formatPreviewAppointmentDate(appointment.date))} at ${escapeHtml(appointment.time)}</strong>
+        <span>${escapeHtml(appointment.technician)} · ${escapeHtml(appointment.service)}</span>
+      `;
+      return true;
+    }
+
+    const bookingNextButtons = Array.from(document.querySelectorAll('[data-next]'));
+    bookingNextButtons[0]?.addEventListener('click', () => runUpcomingAppointmentCheck());
+    bookingNextButtons[1]?.addEventListener('click', () => go(2));
+    bookingNextButtons[2]?.addEventListener('click', () => go(3));
     document.querySelectorAll('[data-back]').forEach(button => button.addEventListener('click', () => go(state.step - 1)));
-    [nameInput, phoneInput, emailInput, consentInput, dateInput].forEach(el => el.addEventListener('input', updateButtons));
+    existingAppointmentLink.addEventListener('click', () => runUpcomingAppointmentCheck({ manageRequested: true }));
+    [nameInput, phoneInput, emailInput, consentInput].forEach(el => el.addEventListener('input', () => {
+      if (contactHelper.classList.contains('visible')) validateContact(true);
+      setAppointmentLookupError('');
+      updateButtons();
+    }));
+    dateInput.addEventListener('input', updateButtons);
+
+    document.getElementById('appointmentChoiceBack').addEventListener('click', () => showScreen('contact'));
+    document.getElementById('noAppointmentsBack').addEventListener('click', () => showScreen('contact'));
+    document.getElementById('requestNewFromChoice').addEventListener('click', beginNewAppointmentRequest);
+    document.getElementById('requestNewFromEmpty').addEventListener('click', beginNewAppointmentRequest);
+    document.getElementById('manageAppointments').addEventListener('click', openPhoneVerification);
+    document.getElementById('verifyPhoneBack').addEventListener('click', () => showScreen('appointment-choice'));
+    document.getElementById('verificationCodeBack').addEventListener('click', () => showScreen('verify-phone'));
+    document.getElementById('appointmentsListBack').addEventListener('click', () => showScreen('appointment-choice'));
+    document.getElementById('appointmentDetailsBack').addEventListener('click', () => showScreen('appointments-list'));
+    document.getElementById('cancelConfirmationBack').addEventListener('click', () => showScreen('appointment-details'));
+    document.getElementById('requestNewFromDetails').addEventListener('click', beginNewAppointmentRequest);
+    document.getElementById('requestNewAfterCancellation').addEventListener('click', beginNewAppointmentRequest);
+
+    document.getElementById('sendVerificationCode').addEventListener('click', async event => {
+      const button = event.currentTarget;
+      const error = document.getElementById('verificationSendError');
+      error.classList.remove('visible');
+      button.disabled = true;
+      button.textContent = 'Sending...';
+      await waitForPreview();
+      button.disabled = false;
+      button.textContent = 'Send verification code';
+
+      if (!APPOINTMENT_PREVIEW_ENABLED) {
+        error.textContent = 'SMS verification is intentionally disabled in this test version.';
+        error.classList.add('visible');
+        return;
+      }
+
+      const maskedPhone = maskPhoneNumber(phoneInput.value);
+      document.getElementById('verificationCodeMessage').textContent = `We sent a six-digit code to ${maskedPhone}. Enter it below to access your appointments.`;
+      document.getElementById('codePreviewNote').hidden = false;
+      verificationCodeInput.value = '';
+      continueVerificationButton.disabled = true;
+      showScreen('verification-code');
+      window.setTimeout(() => verificationCodeInput.focus(), 360);
+    });
+
+    verificationCodeInput.addEventListener('input', () => {
+      verificationCodeInput.value = verificationCodeInput.value.replace(/\D/g, '').slice(0, 6);
+      verificationCodeInput.setAttribute('aria-invalid', 'false');
+      document.getElementById('verificationCodeError').classList.remove('visible');
+      continueVerificationButton.disabled = verificationCodeInput.value.length !== 6;
+    });
+
+    continueVerificationButton.addEventListener('click', () => {
+      const valid = APPOINTMENT_PREVIEW_ENABLED && verificationCodeInput.value === APPOINTMENT_PREVIEW_CODE;
+      if (!valid) {
+        verificationCodeInput.setAttribute('aria-invalid', 'true');
+        document.getElementById('verificationCodeError').classList.add('visible');
+        verificationCodeInput.focus();
+        return;
+      }
+      if (!state.previewAppointments.length) state.previewAppointments = createPreviewAppointments();
+      state.selectedAppointmentId = '';
+      renderUpcomingAppointments();
+      showScreen('appointments-list');
+    });
+
+    document.getElementById('sendNewCode').addEventListener('click', () => {
+      const status = document.getElementById('newCodeStatus');
+      status.textContent = APPOINTMENT_PREVIEW_ENABLED
+        ? 'A new test code is ready. Use 123456.'
+        : 'SMS verification is intentionally disabled in this test version.';
+      status.classList.add('visible');
+      verificationCodeInput.value = '';
+      continueVerificationButton.disabled = true;
+      verificationCodeInput.focus();
+    });
+
+    document.getElementById('viewSelectedAppointment').addEventListener('click', () => {
+      if (renderAppointmentDetails()) showScreen('appointment-details');
+    });
+    document.getElementById('cancelAppointment').addEventListener('click', () => {
+      if (renderCancellationSummary()) showScreen('cancel-confirmation');
+    });
+    document.getElementById('confirmAppointmentCancellation').addEventListener('click', () => {
+      const appointment = getSelectedPreviewAppointment();
+      if (appointment) appointment.status = 'cancelled-preview';
+      document.getElementById('cancellationPreviewNote').hidden = !APPOINTMENT_PREVIEW_ENABLED;
+      showScreen('cancellation-complete');
+    });
+    document.getElementById('finishAppointmentManagement').addEventListener('click', () => {
+      state.manageIntent = false;
+      state.selectedAppointmentId = '';
+      showScreen('contact');
+    });
+
     serviceText.addEventListener('input', () => {
       activeChipSelections = [];
       activeNestedChip = '';
@@ -3194,6 +3942,11 @@
       const start = getSelectedTimeSlot();
       if (start == null) return;
 
+      if (APPOINTMENT_PREVIEW_ENABLED) {
+        alert('This is a test preview. No appointment request was created.');
+        return;
+      }
+
       sendRequestButton.disabled = true;
       sendRequestButton.textContent = 'Sending...';
 
@@ -3231,6 +3984,9 @@
       }
     });
     document.getElementById('startOver').addEventListener('click', () => {
+      state.manageIntent = false;
+      state.previewAppointments = [];
+      state.selectedAppointmentId = '';
       state.selectedCategories = [];
       state.selectedServices = [];
       state.staff = '';
@@ -3242,7 +3998,9 @@
       document.querySelectorAll('input, textarea').forEach(el => {
         if (el.type === 'checkbox') el.checked = false;
         else if (el.type !== 'file' && el.type !== 'date') el.value = '';
+        el.setAttribute('aria-invalid', 'false');
       });
+      document.querySelectorAll('.field-error, .contact-helper, .lookup-error').forEach(el => el.classList.remove('visible'));
       resetPhotoSlots();
       setInitialDate();
       renderCategories();
@@ -3302,6 +4060,9 @@
     renderCategories();
     renderStaff();
     renderTimes();
+    const screenResizeObserver = new ResizeObserver(syncActiveScreenHeight);
+    screenElements.forEach((screen) => screenResizeObserver.observe(screen));
+    window.addEventListener('resize', syncActiveScreenHeight);
     if (new URLSearchParams(window.location.search).has('successPreview')) {
       go(4);
     } else {

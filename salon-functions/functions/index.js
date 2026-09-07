@@ -11,6 +11,13 @@ const nodemailer = require("nodemailer");
 const { canMutateAnyAppointment } = require("./appointment-access");
 const { shouldProcessStaffPush } = require("./push-notification");
 const {
+  buildPhoneLookupVariants,
+  getPhotoRetentionDeadlineMs,
+  isUpcomingAppointmentForClient,
+  normalizeClientName,
+  normalizePhoneDigits
+} = require("./booking-management");
+const {
   SCHEDULE_SCHEMA_VERSION,
   appointmentUsesSchedule,
   buildScheduleSlots,
@@ -69,7 +76,7 @@ const SALON_PHONE_DISPLAY = "+1 780-406-6767";
 const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER || "+15876060462";
 const BOOKING_EMAIL_CONTACT_COLLECTION = "onlineBookingEmailContacts";
 const BOOKING_EMAIL_TTL_MS = 3 * 24 * 60 * 60 * 1000;
-const PRIVACY_CONSENT_VERSION = "privacy-consent-v2-2026-07-20";
+const PRIVACY_CONSENT_VERSION = "privacy-consent-v3-2026-09-06";
 const EMAIL_DEFAULT_FROM_NAME = "Rose's Nails";
 const EMAIL_DEFAULT_FROM_EMAIL = "booking@rosesnailslondonderry.ca";
 const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || "gmailTest";
@@ -922,6 +929,7 @@ function normalizeOptionalText(value, field, max) {
 function sanitizeAppointmentForm(input, actor) {
   const raw = input && typeof input === "object" ? input : {};
   const staffId = assertString(raw.staffId, "staffId", { min: 1, max: 100 });
+  const phone = normalizeOptionalText(raw.phone, "phone", 40);
   const groupTagInput = normalizeOptionalText(raw.groupTag, "groupTag", 40);
   const groupTag = actor.role === "manager" && groupTagInput && /^[A-Za-z0-9_-]+$/.test(groupTagInput)
     ? groupTagInput
@@ -930,7 +938,8 @@ function sanitizeAppointmentForm(input, actor) {
   return {
     date: assertDate(raw.date),
     staffId,
-    phone: normalizeOptionalText(raw.phone, "phone", 40),
+    phone,
+    phoneLookup: normalizePhoneDigits(phone) || null,
     start: assertAppointmentStart(raw.start),
     duration: assertAppointmentDuration(raw.duration, staffId),
     client: assertString(raw.client, "client", { max: 120 }),
@@ -1524,7 +1533,6 @@ async function storeOnlineBookingPhotos({ photos, appointmentId, requestId }) {
 
   const token = crypto.randomBytes(24).toString("base64url");
   const bucket = getPhotoBucket();
-  const expiresAtDate = new Date(Date.now() + PHOTO_TTL_MS);
   const files = [];
 
   for (let index = 0; index < photos.length; index += 1) {
@@ -1555,7 +1563,9 @@ async function storeOnlineBookingPhotos({ photos, appointmentId, requestId }) {
     files,
     reviewUrl,
     createdAt: FieldValue.serverTimestamp(),
-    expiresAt: admin.firestore.Timestamp.fromDate(expiresAtDate)
+    retentionState: "pending_appointment_decision",
+    retentionPolicyVersion: 3,
+    expiresAt: null
   });
 
   return {
@@ -1876,6 +1886,69 @@ exports.auditAppointmentOverlaps = onCall(
   }
 );
 
+exports.checkUpcomingAppointments = onCall(
+  {
+    region: "us-central1",
+    maxInstances: 10
+  },
+  async (request) => {
+    const input = request.data || {};
+    const client = assertString(input.client, "client", { min: 2, max: 80 });
+    const phone = assertString(input.phone, "phone", { min: 7, max: 30 });
+    if (input.consentAccepted !== true) {
+      throw new HttpsError("invalid-argument", "Consent is required.");
+    }
+
+    const phoneDigits = normalizePhoneDigits(phone);
+    const clientName = normalizeClientName(client);
+    if (!phoneDigits) {
+      throw new HttpsError("invalid-argument", "Please enter a valid phone number.");
+    }
+    if (!clientName) {
+      throw new HttpsError("invalid-argument", "Please enter your name.");
+    }
+
+    const phoneVariants = buildPhoneLookupVariants(phone);
+    const queries = [
+      db.collection("appointments")
+        .where("phoneLookup", "==", phoneDigits)
+        .limit(75)
+        .get()
+    ];
+    if (phoneVariants.length) {
+      queries.push(
+        db.collection("appointments")
+          .where("phone", "in", phoneVariants)
+          .limit(75)
+          .get()
+      );
+    }
+
+    const snapshots = await Promise.all(queries);
+    const candidates = new Map();
+    snapshots.forEach(snapshot => {
+      snapshot.docs.forEach(docSnap => {
+        candidates.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+      });
+    });
+
+    const salonNow = getSalonNowParts();
+    const hasUpcomingAppointments = Array.from(candidates.values()).some(appointment =>
+      isUpcomingAppointmentForClient(appointment, {
+        phoneDigits,
+        clientName,
+        today: salonNow.date,
+        currentMinutes: salonNow.minutes
+      })
+    );
+
+    return {
+      ok: true,
+      hasUpcomingAppointments
+    };
+  }
+);
+
 exports.createOnlineBookingRequest = onCall(
   {
     region: "us-central1",
@@ -1902,10 +1975,16 @@ exports.createOnlineBookingRequest = onCall(
       : [];
     const requestedGroups = getRequestedServiceGroups(input);
     const uploadedPhotos = validatePhotoUploads(input.photos);
-    const consentVersion = String(input.consentVersion || PRIVACY_CONSENT_VERSION).trim();
+    const consentVersion = String(input.consentVersion || "").trim();
 
     if (input.consentAccepted !== true) {
       throw new HttpsError("invalid-argument", "Consent is required.");
+    }
+    if (consentVersion !== PRIVACY_CONSENT_VERSION) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Privacy details have been updated. Please refresh the booking page and try again."
+      );
     }
 
     if (!serviceDetails && !selectedServices.length) {
@@ -2072,6 +2151,7 @@ exports.createOnlineBookingRequest = onCall(
         date,
         staffId,
         phone,
+        phoneLookup: normalizePhoneDigits(phone),
         emailProvided: Boolean(email),
         start,
         duration,
@@ -2446,6 +2526,32 @@ exports.appointmentStatusEmailUpdated = onDocumentUpdated(
     }
 
     await Promise.all(writes);
+  }
+);
+
+exports.appointmentPhotoRetentionUpdated = onDocumentUpdated(
+  {
+    document: "appointments/{appointmentId}",
+    region: "us-central1"
+  },
+  async (event) => {
+    const before = event.data?.before?.data() || {};
+    const after = event.data?.after?.data() || {};
+    if (after.source !== "online_booking" || before.status === after.status) return;
+    if (!["confirmed", "declined"].includes(after.status) || !after.photoReviewToken) return;
+
+    const deadlineMs = getPhotoRetentionDeadlineMs(after, PHOTO_TTL_MS);
+    if (!deadlineMs) return;
+
+    await db.collection(PHOTO_COLLECTION).doc(after.photoReviewToken).set({
+      retentionState: "decision_made",
+      retentionPolicyVersion: 3,
+      decisionStatus: after.status,
+      retentionStartedAt: after.status === "confirmed"
+        ? (after.confirmedAt || FieldValue.serverTimestamp())
+        : (after.declinedAt || FieldValue.serverTimestamp()),
+      expiresAt: admin.firestore.Timestamp.fromMillis(deadlineMs)
+    }, { merge: true });
   }
 );
 
@@ -2899,6 +3005,7 @@ exports.cleanupExpiredOnlineBookingPhotos = onSchedule(
     timeZone: "America/Edmonton"
   },
   async () => {
+    const nowMs = Date.now();
     const snap = await db.collection(PHOTO_COLLECTION)
       .where("expiresAt", "<=", admin.firestore.Timestamp.now())
       .limit(50)
@@ -2907,9 +3014,49 @@ exports.cleanupExpiredOnlineBookingPhotos = onSchedule(
     await Promise.all(snap.docs.map(async docSnap => {
       const data = docSnap.data() || {};
       if (data.status === "active" || data.status === "error") {
+        let appointment = null;
+        if (data.appointmentId) {
+          const appointmentSnap = await db.collection("appointments").doc(data.appointmentId).get();
+          appointment = appointmentSnap.exists ? appointmentSnap.data() || {} : null;
+        }
+
+        if (appointment && isPendingOnlineRequest(appointment)) {
+          await docSnap.ref.set({
+            retentionState: "pending_appointment_decision",
+            retentionPolicyVersion: 3,
+            expiresAt: FieldValue.delete(),
+            retentionDeferredAt: FieldValue.serverTimestamp()
+          }, { merge: true });
+          return;
+        }
+
+        const existingDeadlineMs = data.expiresAt?.toMillis ? data.expiresAt.toMillis() : 0;
+        const fallbackDecisionMs = data.retentionPolicyVersion === 3 && existingDeadlineMs
+          ? existingDeadlineMs - PHOTO_TTL_MS
+          : nowMs;
+        const decisionDeadlineMs = getPhotoRetentionDeadlineMs(
+          appointment,
+          PHOTO_TTL_MS,
+          fallbackDecisionMs
+        );
+        if (decisionDeadlineMs && decisionDeadlineMs > nowMs) {
+          await docSnap.ref.set({
+            retentionState: "decision_made",
+            retentionPolicyVersion: 3,
+            decisionStatus: appointment.status,
+            retentionStartedAt: appointment.status === "confirmed"
+              ? (appointment.confirmedAt || FieldValue.serverTimestamp())
+              : (appointment.declinedAt || FieldValue.serverTimestamp()),
+            expiresAt: admin.firestore.Timestamp.fromMillis(decisionDeadlineMs)
+          }, { merge: true });
+          return;
+        }
+
         await deletePhotoFiles(data.files || []);
         await docSnap.ref.set({
           status: "expired",
+          retentionState: "expired",
+          retentionPolicyVersion: 3,
           filesDeletedAt: FieldValue.serverTimestamp(),
           expiredAt: FieldValue.serverTimestamp()
         }, { merge: true });
