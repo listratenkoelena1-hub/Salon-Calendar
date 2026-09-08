@@ -1289,8 +1289,7 @@
       background: rgba(255,255,255,0.82);
     }
 
-    .security-copy,
-    .preview-copy {
+    .security-copy {
       max-width: 620px;
       border-radius: 8px;
       padding: 13px 14px;
@@ -1299,12 +1298,6 @@
       border: 1px solid rgba(89, 145, 62, 0.22);
       font-size: 13px;
       line-height: 1.45;
-    }
-
-    .preview-copy {
-      color: #6c3e20;
-      background: rgba(243, 180, 55, 0.16);
-      border-color: rgba(233, 91, 31, 0.24);
     }
 
     .verification-field {
@@ -1891,7 +1884,7 @@
           <section class="screen" data-screen="appointment-choice">
             <header>
               <h2>Upcoming appointment found</h2>
-              <p class="lead">Would you like to manage your upcoming appointments or request a new one?</p>
+              <p class="lead">We found one or more upcoming appointments requested through this online booking page. Would you like to manage them or request a new appointment?</p>
             </header>
             <div class="content decision-content">
               <div class="security-copy">For privacy, appointment details remain hidden until your phone number is verified.</div>
@@ -1905,11 +1898,11 @@
 
           <section class="screen" data-screen="no-appointments">
             <header>
-              <h2>No upcoming appointments found</h2>
-              <p class="lead">We couldn't find any upcoming appointments for this name and phone number. Would you like to request a new appointment?</p>
+              <h2>No online booking appointments found</h2>
+              <p class="lead">We couldn't find any upcoming appointments requested through this online booking page for this name and phone number.</p>
             </header>
             <div class="content">
-              <div class="security-copy">Check the name and phone number used for the booking, or continue with a new request.</div>
+              <div class="security-copy">If your appointment was booked by phone or directly with our manager, please <a class="salon-phone-link" href="tel:+17804066767">contact salon at 780-406-6767</a> to confirm it.</div>
             </div>
             <nav class="actions">
               <button class="btn" id="noAppointmentsBack" type="button">Back</button>
@@ -1924,7 +1917,6 @@
             </header>
             <div class="content">
               <div class="security-copy" id="verificationPhoneSummary"></div>
-              <div class="preview-copy" id="verificationPreviewNote" hidden>Test preview: no text message will be sent. Use code 123456.</div>
               <div class="lookup-error" id="verificationSendError" role="alert"></div>
             </div>
             <nav class="actions">
@@ -1945,7 +1937,6 @@
                 <div class="field-error" id="verificationCodeError" role="alert">The verification code is incorrect. Please try again.</div>
                 <button class="inline-action-link" id="sendNewCode" type="button">Send new code</button>
               </div>
-              <div class="preview-copy" id="codePreviewNote" hidden>Test preview code: 123456. No text message was sent.</div>
               <div class="lookup-error" id="newCodeStatus" role="status"></div>
             </div>
             <nav class="actions">
@@ -1961,7 +1952,6 @@
             </header>
             <div class="content">
               <div class="appointment-list" id="upcomingAppointmentsList"></div>
-              <div class="preview-copy" id="appointmentsPreviewNote" hidden>Preview only: these appointments are examples and no calendar records were created.</div>
             </div>
             <nav class="actions">
               <button class="btn" id="appointmentsListBack" type="button">Back</button>
@@ -2003,9 +1993,7 @@
               <h2>Appointment cancelled</h2>
               <p class="lead">Your appointment has been cancelled. The salon and your technician have been notified.</p>
             </header>
-            <div class="content">
-              <div class="preview-copy" id="cancellationPreviewNote" hidden>Preview only: no calendar appointment was changed and no notification was sent.</div>
-            </div>
+            <div class="content"></div>
             <nav class="actions">
               <button class="btn" id="finishAppointmentManagement" type="button">Done</button>
               <button class="btn primary" id="requestNewAfterCancellation" type="button">Request a new appointment</button>
@@ -2913,7 +2901,6 @@
     function openPhoneVerification() {
       const maskedPhone = maskPhoneNumber(phoneInput.value);
       document.getElementById('verificationPhoneSummary').textContent = `The verification code will be sent to ${maskedPhone}.`;
-      document.getElementById('verificationPreviewNote').hidden = !APPOINTMENT_PREVIEW_ENABLED;
       document.getElementById('verificationSendError').classList.remove('visible');
       showScreen('verify-phone');
     }
@@ -2952,7 +2939,6 @@
           </button>
         `;
       }).join('');
-      document.getElementById('appointmentsPreviewNote').hidden = !APPOINTMENT_PREVIEW_ENABLED;
       document.getElementById('viewSelectedAppointment').disabled = !state.selectedAppointmentId;
 
       list.querySelectorAll('[data-preview-appointment]').forEach(button => {
@@ -3029,14 +3015,13 @@
       button.textContent = 'Send verification code';
 
       if (!APPOINTMENT_PREVIEW_ENABLED) {
-        error.textContent = 'SMS verification is intentionally disabled in this test version.';
+        error.textContent = 'We could not send a verification code right now. Please contact salon.';
         error.classList.add('visible');
         return;
       }
 
       const maskedPhone = maskPhoneNumber(phoneInput.value);
       document.getElementById('verificationCodeMessage').textContent = `We sent a six-digit code to ${maskedPhone}. Enter it below to access your appointments.`;
-      document.getElementById('codePreviewNote').hidden = false;
       verificationCodeInput.value = '';
       continueVerificationButton.disabled = true;
       showScreen('verification-code');
@@ -3067,8 +3052,8 @@
     document.getElementById('sendNewCode').addEventListener('click', () => {
       const status = document.getElementById('newCodeStatus');
       status.textContent = APPOINTMENT_PREVIEW_ENABLED
-        ? 'A new test code is ready. Use 123456.'
-        : 'SMS verification is intentionally disabled in this test version.';
+        ? 'A new verification code has been sent.'
+        : 'We could not send a new verification code right now. Please contact salon.';
       status.classList.add('visible');
       verificationCodeInput.value = '';
       continueVerificationButton.disabled = true;
@@ -3084,7 +3069,6 @@
     document.getElementById('confirmAppointmentCancellation').addEventListener('click', () => {
       const appointment = getSelectedPreviewAppointment();
       if (appointment) appointment.status = 'cancelled-preview';
-      document.getElementById('cancellationPreviewNote').hidden = !APPOINTMENT_PREVIEW_ENABLED;
       showScreen('cancellation-complete');
     });
     document.getElementById('finishAppointmentManagement').addEventListener('click', () => {
@@ -3943,7 +3927,7 @@
       if (start == null) return;
 
       if (APPOINTMENT_PREVIEW_ENABLED) {
-        alert('This is a test preview. No appointment request was created.');
+        go(4);
         return;
       }
 
