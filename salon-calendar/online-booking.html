@@ -1981,6 +1981,7 @@
             <div class="content">
               <div class="appointment-cancel-summary" id="cancelAppointmentSummary"></div>
               <div class="security-copy">The salon and the assigned technician will be notified when an appointment is cancelled.</div>
+              <div class="lookup-error" id="cancellationError" role="alert"></div>
             </div>
             <nav class="actions">
               <button class="btn" id="cancelConfirmationBack" type="button">Back</button>
@@ -2052,8 +2053,9 @@
         <p>We use booking information only to review, schedule, confirm, decline, update, cancel, or remind you about appointments with Rose's Nails Londonderry. We do not use booking information for advertising, newsletters, promotions, unrelated marketing, or selling customer lists.</p>
 
         <h3>Phone calls and SMS/text messages</h3>
-        <p>Your phone number may be kept with your appointment record and appointment history so we can contact you about current or future appointments with Rose's Nails Londonderry. This may include appointment-related phone calls or text messages about confirmations, declines, changes, cancellations, earlier or later time options, and reminders.</p>
+        <p>Your phone number may be kept with your appointment record and appointment history so we can contact you about current or future appointments with Rose's Nails Londonderry. This may include appointment-related phone calls or text messages about confirmations, declines, changes, cancellations, earlier or later time options, reminders, and one-time security codes used to access online booking appointments.</p>
         <p>If SMS/text messaging is enabled, messages may be sent through Twilio or another third-party SMS provider. SMS/text messages are appointment-related only and are not used for marketing. Message and data rates may apply depending on your mobile provider. SMS delivery is not guaranteed, and you are still responsible for keeping track of your appointment even if a reminder is not received.</p>
+        <p>One-time verification codes and secure access sessions expire automatically. Verification codes are not stored in readable form.</p>
 
         <h3>Email</h3>
         <p>Your email address is optional. If you provide an email address through online booking, we use it only for booking-related emails, such as request received, confirmed, declined, unavailable, changed, or cancelled appointment messages. Appointment emails may be sent using Gmail/Google or another email service provider.</p>
@@ -2061,7 +2063,7 @@
 
         <h3>Photos</h3>
         <p>If you upload photos, they are used only to help us review your requested service and prepare for your appointment. Staff may view the photos to understand your nail condition, inspiration picture, requested design, materials, technique, or service needs.</p>
-        <p>Photos remain available while an online booking request is awaiting review. Once the request is confirmed or declined, the photo files and temporary photo link are kept for up to 24 hours and are then deleted or made unavailable. If a request remains pending for longer than 24 hours, the 24-hour deletion period begins only when the request is confirmed or declined.</p>
+        <p>Photos remain available while an online booking request is awaiting review. Once the request is confirmed, declined, or cancelled by the client through online booking, the photo files and temporary photo link are kept for up to 24 hours and are then deleted or made unavailable. If a request remains pending for longer than 24 hours, the 24-hour deletion period begins only when the request reaches one of these outcomes.</p>
 
         <h3>Service providers</h3>
         <p>Rose's Nails Londonderry may use trusted service providers to operate the booking system, calendar, hosting, database, cloud functions, file storage, email delivery, internal notifications, and SMS/text delivery. These providers may include Google/Firebase, Gmail or another email provider, and Twilio or another third-party SMS provider.</p>
@@ -2103,6 +2105,9 @@
     const createOnlineBookingRequest = httpsCallable(firebaseFunctions, "createOnlineBookingRequest");
     const getOnlineBookingAvailability = httpsCallable(firebaseFunctions, "getOnlineBookingAvailability");
     const checkUpcomingAppointments = httpsCallable(firebaseFunctions, "checkUpcomingAppointments");
+    const sendOnlineBookingVerificationCode = httpsCallable(firebaseFunctions, "sendOnlineBookingVerificationCode");
+    const verifyOnlineBookingCode = httpsCallable(firebaseFunctions, "verifyOnlineBookingCode");
+    const cancelOnlineBookingAppointment = httpsCallable(firebaseFunctions, "cancelOnlineBookingAppointment");
 
     const PRIVACY_CONSENT_VERSION = "privacy-consent-v3-2026-09-06";
     const BOOKING_PUBLIC_URL = "https://rosesnailsbooking.web.app";
@@ -2178,8 +2183,11 @@
       screen: 'contact',
       manageIntent: false,
       appointmentLookupPending: false,
-      previewAppointments: [],
+      managedAppointments: [],
       selectedAppointmentId: '',
+      verificationChallengeId: '',
+      appointmentSessionToken: '',
+      appointmentSessionExpiresAt: '',
       selectedCategories: [],
       selectedServices: [],
       staff: '',
@@ -2867,18 +2875,25 @@
         }
 
         if (hasUpcomingAppointments) {
-          state.previewAppointments = APPOINTMENT_PREVIEW_ENABLED ? createPreviewAppointments() : [];
+          state.managedAppointments = APPOINTMENT_PREVIEW_ENABLED ? createPreviewAppointments() : [];
           state.selectedAppointmentId = '';
+          clearVerifiedAppointmentAccess();
           showScreen('appointment-choice');
         } else if (state.manageIntent) {
+          state.managedAppointments = [];
+          clearVerifiedAppointmentAccess();
           showScreen('no-appointments');
         } else {
+          state.managedAppointments = [];
+          clearVerifiedAppointmentAccess();
           go(1);
         }
       } catch (error) {
         if (state.manageIntent) {
           setAppointmentLookupError('We could not check your appointments right now. Please try again.');
         } else {
+          state.managedAppointments = [];
+          clearVerifiedAppointmentAccess();
           go(1);
         }
       } finally {
@@ -2889,8 +2904,32 @@
     function beginNewAppointmentRequest() {
       state.manageIntent = false;
       state.selectedAppointmentId = '';
+      state.managedAppointments = [];
+      clearVerifiedAppointmentAccess();
       setAppointmentLookupError('');
       go(1);
+    }
+
+    function clearVerifiedAppointmentAccess() {
+      state.verificationChallengeId = '';
+      state.appointmentSessionToken = '';
+      state.appointmentSessionExpiresAt = '';
+    }
+
+    function getCallableErrorCode(error) {
+      return String(error?.code || '').split('/').pop();
+    }
+
+    function getCallableErrorMessage(error, fallback) {
+      const code = getCallableErrorCode(error);
+      const rawMessage = String(error?.message || '').trim()
+        .replace(/^Firebase:\s*/i, '')
+        .replace(/\s*\(functions\/[a-z-]+\)\.?$/i, '')
+        .trim();
+      if (['resource-exhausted', 'failed-precondition', 'unauthenticated', 'not-found'].includes(code) && rawMessage) {
+        return rawMessage;
+      }
+      return fallback;
     }
 
     function maskPhoneNumber(value) {
@@ -2899,13 +2938,25 @@
     }
 
     function openPhoneVerification() {
+      const sessionExpiresAtMs = Date.parse(state.appointmentSessionExpiresAt || '');
+      if (
+        state.appointmentSessionToken &&
+        state.managedAppointments.length &&
+        Number.isFinite(sessionExpiresAtMs) &&
+        sessionExpiresAtMs > Date.now()
+      ) {
+        state.selectedAppointmentId = '';
+        renderUpcomingAppointments();
+        showScreen('appointments-list');
+        return;
+      }
       const maskedPhone = maskPhoneNumber(phoneInput.value);
       document.getElementById('verificationPhoneSummary').textContent = `The verification code will be sent to ${maskedPhone}.`;
       document.getElementById('verificationSendError').classList.remove('visible');
       showScreen('verify-phone');
     }
 
-    function formatPreviewAppointmentDate(value) {
+    function formatManagedAppointmentDate(value) {
       const [year, month, day] = String(value || '').split('-').map(Number);
       if (!year || !month || !day) return value;
       return new Intl.DateTimeFormat('en-CA', {
@@ -2916,8 +2967,8 @@
       }).format(new Date(year, month - 1, day, 12));
     }
 
-    function getSelectedPreviewAppointment() {
-      return state.previewAppointments.find(item => item.id === state.selectedAppointmentId) || null;
+    function getSelectedManagedAppointment() {
+      return state.managedAppointments.find(item => item.id === state.selectedAppointmentId) || null;
     }
 
     function getAppointmentStatusLabel(status) {
@@ -2926,13 +2977,13 @@
 
     function renderUpcomingAppointments() {
       const list = document.getElementById('upcomingAppointmentsList');
-      list.innerHTML = state.previewAppointments.map(appointment => {
+      list.innerHTML = state.managedAppointments.map(appointment => {
         const selected = appointment.id === state.selectedAppointmentId;
         const awaitingClass = appointment.status === 'confirmed' ? '' : ' awaiting';
         return `
-          <button class="appointment-card ${selected ? 'selected' : ''}" type="button" data-preview-appointment="${escapeHtml(appointment.id)}" aria-pressed="${selected}">
+          <button class="appointment-card ${selected ? 'selected' : ''}" type="button" data-managed-appointment="${escapeHtml(appointment.id)}" aria-pressed="${selected}">
             <span class="appointment-card-head">
-              <span class="appointment-card-date">${escapeHtml(formatPreviewAppointmentDate(appointment.date))}</span>
+              <span class="appointment-card-date">${escapeHtml(formatManagedAppointmentDate(appointment.date))}</span>
               <span class="appointment-status${awaitingClass}">${escapeHtml(getAppointmentStatusLabel(appointment.status))}</span>
             </span>
             <span class="appointment-card-meta">${escapeHtml(appointment.time)} · ${escapeHtml(appointment.technician)}<br>${escapeHtml(appointment.service)}</span>
@@ -2941,20 +2992,20 @@
       }).join('');
       document.getElementById('viewSelectedAppointment').disabled = !state.selectedAppointmentId;
 
-      list.querySelectorAll('[data-preview-appointment]').forEach(button => {
+      list.querySelectorAll('[data-managed-appointment]').forEach(button => {
         button.addEventListener('click', () => {
-          state.selectedAppointmentId = button.dataset.previewAppointment || '';
+          state.selectedAppointmentId = button.dataset.managedAppointment || '';
           renderUpcomingAppointments();
         });
       });
     }
 
     function renderAppointmentDetails() {
-      const appointment = getSelectedPreviewAppointment();
+      const appointment = getSelectedManagedAppointment();
       if (!appointment) return false;
       const details = [
         ['Status', getAppointmentStatusLabel(appointment.status)],
-        ['Date', formatPreviewAppointmentDate(appointment.date)],
+        ['Date', formatManagedAppointmentDate(appointment.date)],
         ['Time', appointment.time],
         ['Technician', appointment.technician],
         ['Service', appointment.service]
@@ -2969,13 +3020,79 @@
     }
 
     function renderCancellationSummary() {
-      const appointment = getSelectedPreviewAppointment();
+      const appointment = getSelectedManagedAppointment();
       if (!appointment) return false;
+      document.getElementById('cancellationError').classList.remove('visible');
       document.getElementById('cancelAppointmentSummary').innerHTML = `
-        <strong>${escapeHtml(formatPreviewAppointmentDate(appointment.date))} at ${escapeHtml(appointment.time)}</strong>
+        <strong>${escapeHtml(formatManagedAppointmentDate(appointment.date))} at ${escapeHtml(appointment.time)}</strong>
         <span>${escapeHtml(appointment.technician)} · ${escapeHtml(appointment.service)}</span>
       `;
       return true;
+    }
+
+    async function requestAppointmentVerificationCode({ resend = false, button } = {}) {
+      const error = document.getElementById('verificationSendError');
+      const resendStatus = document.getElementById('newCodeStatus');
+      error.classList.remove('visible');
+      resendStatus.classList.remove('visible');
+      if (button) {
+        button.disabled = true;
+        button.textContent = resend ? 'Sending...' : 'Sending...';
+      }
+
+      try {
+        let resultData;
+        if (APPOINTMENT_PREVIEW_ENABLED) {
+          await waitForPreview();
+          resultData = {
+            challengeId: 'preview-verification-challenge',
+            maskedPhone: maskPhoneNumber(phoneInput.value)
+          };
+        } else {
+          const result = await sendOnlineBookingVerificationCode({
+            client: nameInput.value.trim(),
+            phone: phoneInput.value.trim(),
+            consentAccepted: consentInput.checked
+          });
+          resultData = result?.data || {};
+        }
+
+        state.verificationChallengeId = String(resultData.challengeId || '');
+        state.appointmentSessionToken = '';
+        state.appointmentSessionExpiresAt = '';
+        if (!state.verificationChallengeId) throw new Error('Missing verification challenge.');
+
+        const maskedPhone = String(resultData.maskedPhone || maskPhoneNumber(phoneInput.value));
+        document.getElementById('verificationCodeMessage').textContent = `We sent a six-digit code to ${maskedPhone}. Enter it below to access your appointments.`;
+        verificationCodeInput.value = '';
+        verificationCodeInput.setAttribute('aria-invalid', 'false');
+        document.getElementById('verificationCodeError').classList.remove('visible');
+        continueVerificationButton.disabled = true;
+
+        if (resend) {
+          resendStatus.textContent = 'A new verification code has been sent.';
+          resendStatus.classList.add('visible');
+          verificationCodeInput.focus();
+        } else {
+          showScreen('verification-code');
+          window.setTimeout(() => verificationCodeInput.focus(), 360);
+        }
+        return true;
+      } catch (requestError) {
+        const message = getCallableErrorMessage(
+          requestError,
+          'We could not send a verification code right now. Please try again or contact salon.'
+        );
+        const target = resend ? resendStatus : error;
+        target.textContent = message;
+        target.classList.add('visible');
+        return false;
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = resend ? 'Send new code' : 'Send verification code';
+        }
+      }
     }
 
     const bookingNextButtons = Array.from(document.querySelectorAll('[data-next]'));
@@ -2988,6 +3105,11 @@
       if (contactHelper.classList.contains('visible')) validateContact(true);
       setAppointmentLookupError('');
       updateButtons();
+    }));
+    [nameInput, phoneInput].forEach(el => el.addEventListener('input', () => {
+      state.managedAppointments = [];
+      state.selectedAppointmentId = '';
+      clearVerifiedAppointmentAccess();
     }));
     dateInput.addEventListener('input', updateButtons);
 
@@ -3004,28 +3126,8 @@
     document.getElementById('requestNewFromDetails').addEventListener('click', beginNewAppointmentRequest);
     document.getElementById('requestNewAfterCancellation').addEventListener('click', beginNewAppointmentRequest);
 
-    document.getElementById('sendVerificationCode').addEventListener('click', async event => {
-      const button = event.currentTarget;
-      const error = document.getElementById('verificationSendError');
-      error.classList.remove('visible');
-      button.disabled = true;
-      button.textContent = 'Sending...';
-      await waitForPreview();
-      button.disabled = false;
-      button.textContent = 'Send verification code';
-
-      if (!APPOINTMENT_PREVIEW_ENABLED) {
-        error.textContent = 'We could not send a verification code right now. Please contact salon.';
-        error.classList.add('visible');
-        return;
-      }
-
-      const maskedPhone = maskPhoneNumber(phoneInput.value);
-      document.getElementById('verificationCodeMessage').textContent = `We sent a six-digit code to ${maskedPhone}. Enter it below to access your appointments.`;
-      verificationCodeInput.value = '';
-      continueVerificationButton.disabled = true;
-      showScreen('verification-code');
-      window.setTimeout(() => verificationCodeInput.focus(), 360);
+    document.getElementById('sendVerificationCode').addEventListener('click', event => {
+      requestAppointmentVerificationCode({ button: event.currentTarget });
     });
 
     verificationCodeInput.addEventListener('input', () => {
@@ -3035,29 +3137,62 @@
       continueVerificationButton.disabled = verificationCodeInput.value.length !== 6;
     });
 
-    continueVerificationButton.addEventListener('click', () => {
-      const valid = APPOINTMENT_PREVIEW_ENABLED && verificationCodeInput.value === APPOINTMENT_PREVIEW_CODE;
-      if (!valid) {
+    continueVerificationButton.addEventListener('click', async () => {
+      const error = document.getElementById('verificationCodeError');
+      error.classList.remove('visible');
+      continueVerificationButton.disabled = true;
+      continueVerificationButton.textContent = 'Checking...';
+
+      try {
+        let resultData;
+        if (APPOINTMENT_PREVIEW_ENABLED) {
+          await waitForPreview();
+          if (verificationCodeInput.value !== APPOINTMENT_PREVIEW_CODE) {
+            const previewError = new Error('The verification code is incorrect. Please try again.');
+            previewError.code = 'functions/unauthenticated';
+            throw previewError;
+          }
+          resultData = {
+            sessionToken: 'preview-session-token-1234567890',
+            sessionExpiresAt: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
+            appointments: createPreviewAppointments()
+          };
+        } else {
+          const result = await verifyOnlineBookingCode({
+            challengeId: state.verificationChallengeId,
+            code: verificationCodeInput.value
+          });
+          resultData = result?.data || {};
+        }
+
+        state.appointmentSessionToken = String(resultData.sessionToken || '');
+        state.appointmentSessionExpiresAt = String(resultData.sessionExpiresAt || '');
+        state.managedAppointments = Array.isArray(resultData.appointments) ? resultData.appointments : [];
+        state.selectedAppointmentId = '';
+        if (!state.appointmentSessionToken || !state.managedAppointments.length) {
+          clearVerifiedAppointmentAccess();
+          showScreen('no-appointments');
+          return;
+        }
+        renderUpcomingAppointments();
+        showScreen('appointments-list');
+      } catch (verificationError) {
         verificationCodeInput.setAttribute('aria-invalid', 'true');
-        document.getElementById('verificationCodeError').classList.add('visible');
+        error.textContent = getCallableErrorMessage(
+          verificationError,
+          'We could not verify this code right now. Please try again.'
+        );
+        error.classList.add('visible');
         verificationCodeInput.focus();
-        return;
+        verificationCodeInput.select();
+      } finally {
+        continueVerificationButton.textContent = 'Continue';
+        continueVerificationButton.disabled = verificationCodeInput.value.length !== 6;
       }
-      if (!state.previewAppointments.length) state.previewAppointments = createPreviewAppointments();
-      state.selectedAppointmentId = '';
-      renderUpcomingAppointments();
-      showScreen('appointments-list');
     });
 
-    document.getElementById('sendNewCode').addEventListener('click', () => {
-      const status = document.getElementById('newCodeStatus');
-      status.textContent = APPOINTMENT_PREVIEW_ENABLED
-        ? 'A new verification code has been sent.'
-        : 'We could not send a new verification code right now. Please contact salon.';
-      status.classList.add('visible');
-      verificationCodeInput.value = '';
-      continueVerificationButton.disabled = true;
-      verificationCodeInput.focus();
+    document.getElementById('sendNewCode').addEventListener('click', event => {
+      requestAppointmentVerificationCode({ resend: true, button: event.currentTarget });
     });
 
     document.getElementById('viewSelectedAppointment').addEventListener('click', () => {
@@ -3066,14 +3201,44 @@
     document.getElementById('cancelAppointment').addEventListener('click', () => {
       if (renderCancellationSummary()) showScreen('cancel-confirmation');
     });
-    document.getElementById('confirmAppointmentCancellation').addEventListener('click', () => {
-      const appointment = getSelectedPreviewAppointment();
-      if (appointment) appointment.status = 'cancelled-preview';
-      showScreen('cancellation-complete');
+    document.getElementById('confirmAppointmentCancellation').addEventListener('click', async event => {
+      const appointment = getSelectedManagedAppointment();
+      if (!appointment) return;
+
+      const button = event.currentTarget;
+      const error = document.getElementById('cancellationError');
+      error.classList.remove('visible');
+      button.disabled = true;
+      button.textContent = 'Cancelling...';
+      try {
+        if (APPOINTMENT_PREVIEW_ENABLED) {
+          await waitForPreview();
+        } else {
+          await cancelOnlineBookingAppointment({
+            challengeId: state.verificationChallengeId,
+            sessionToken: state.appointmentSessionToken,
+            appointmentId: appointment.id
+          });
+        }
+        state.managedAppointments = state.managedAppointments.filter(item => item.id !== appointment.id);
+        state.selectedAppointmentId = '';
+        showScreen('cancellation-complete');
+      } catch (cancellationRequestError) {
+        error.textContent = getCallableErrorMessage(
+          cancellationRequestError,
+          'We could not cancel this appointment right now. Please try again or contact salon.'
+        );
+        error.classList.add('visible');
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Yes, cancel appointment';
+      }
     });
     document.getElementById('finishAppointmentManagement').addEventListener('click', () => {
       state.manageIntent = false;
       state.selectedAppointmentId = '';
+      state.managedAppointments = [];
+      clearVerifiedAppointmentAccess();
       showScreen('contact');
     });
 
@@ -3969,8 +4134,9 @@
     });
     document.getElementById('startOver').addEventListener('click', () => {
       state.manageIntent = false;
-      state.previewAppointments = [];
+      state.managedAppointments = [];
       state.selectedAppointmentId = '';
+      clearVerifiedAppointmentAccess();
       state.selectedCategories = [];
       state.selectedServices = [];
       state.staff = '';
