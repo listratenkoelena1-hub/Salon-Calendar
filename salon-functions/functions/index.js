@@ -11,6 +11,18 @@ const nodemailer = require("nodemailer");
 const { canMutateAnyAppointment } = require("./appointment-access");
 const { shouldProcessStaffPush } = require("./push-notification");
 const {
+  buildSessionTokenHash,
+  buildVerificationCodeHash,
+  buildPhoneLookupVariants,
+  getClientCancellationRecordState,
+  getPhotoRetentionDeadlineMs,
+  getVerificationRateDecision,
+  isUpcomingAppointmentForClient,
+  normalizeClientName,
+  normalizePhoneDigits,
+  secureHashesEqual
+} = require("./booking-management");
+const {
   SCHEDULE_SCHEMA_VERSION,
   appointmentUsesSchedule,
   buildScheduleSlots,
@@ -64,12 +76,19 @@ const PHOTO_REVIEW_BASE_URL = "https://rosesnails-calendar.web.app/booking-photo
 const PHOTO_BUCKET_NAME = "rosesnails-calendar.firebasestorage.app";
 const EMAIL_QUEUE_COLLECTION = "EmailQueue";
 const SMS_QUEUE_COLLECTION = "SmsQueue";
+const BOOKING_VERIFICATION_COLLECTION = "onlineBookingVerificationChallenges";
+const BOOKING_VERIFICATION_RATE_COLLECTION = "onlineBookingVerificationRateLimits";
+const BOOKING_VERIFICATION_CODE_TTL_MS = 10 * 60 * 1000;
+const BOOKING_VERIFICATION_SESSION_TTL_MS = 20 * 60 * 1000;
+const BOOKING_VERIFICATION_CLEANUP_TTL_MS = 24 * 60 * 60 * 1000;
+const BOOKING_VERIFICATION_MAX_ATTEMPTS = 5;
+const ONLINE_BOOKING_CLIENT_CANCEL_COMMENT = "Client cancelled appointment through online booking.";
 const SALON_PHONE_E164 = "+17804066767";
 const SALON_PHONE_DISPLAY = "+1 780-406-6767";
 const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER || "+15876060462";
 const BOOKING_EMAIL_CONTACT_COLLECTION = "onlineBookingEmailContacts";
 const BOOKING_EMAIL_TTL_MS = 3 * 24 * 60 * 60 * 1000;
-const PRIVACY_CONSENT_VERSION = "privacy-consent-v2-2026-07-20";
+const PRIVACY_CONSENT_VERSION = "privacy-consent-v3-2026-09-06";
 const EMAIL_DEFAULT_FROM_NAME = "Rose's Nails";
 const EMAIL_DEFAULT_FROM_EMAIL = "booking@rosesnailslondonderry.ca";
 const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || "gmailTest";
@@ -922,6 +941,7 @@ function normalizeOptionalText(value, field, max) {
 function sanitizeAppointmentForm(input, actor) {
   const raw = input && typeof input === "object" ? input : {};
   const staffId = assertString(raw.staffId, "staffId", { min: 1, max: 100 });
+  const phone = normalizeOptionalText(raw.phone, "phone", 40);
   const groupTagInput = normalizeOptionalText(raw.groupTag, "groupTag", 40);
   const groupTag = actor.role === "manager" && groupTagInput && /^[A-Za-z0-9_-]+$/.test(groupTagInput)
     ? groupTagInput
@@ -930,7 +950,8 @@ function sanitizeAppointmentForm(input, actor) {
   return {
     date: assertDate(raw.date),
     staffId,
-    phone: normalizeOptionalText(raw.phone, "phone", 40),
+    phone,
+    phoneLookup: normalizePhoneDigits(phone) || null,
     start: assertAppointmentStart(raw.start),
     duration: assertAppointmentDuration(raw.duration, staffId),
     client: assertString(raw.client, "client", { max: 120 }),
@@ -1524,7 +1545,6 @@ async function storeOnlineBookingPhotos({ photos, appointmentId, requestId }) {
 
   const token = crypto.randomBytes(24).toString("base64url");
   const bucket = getPhotoBucket();
-  const expiresAtDate = new Date(Date.now() + PHOTO_TTL_MS);
   const files = [];
 
   for (let index = 0; index < photos.length; index += 1) {
@@ -1555,7 +1575,9 @@ async function storeOnlineBookingPhotos({ photos, appointmentId, requestId }) {
     files,
     reviewUrl,
     createdAt: FieldValue.serverTimestamp(),
-    expiresAt: admin.firestore.Timestamp.fromDate(expiresAtDate)
+    retentionState: "pending_appointment_decision",
+    retentionPolicyVersion: 3,
+    expiresAt: null
   });
 
   return {
@@ -1876,6 +1898,459 @@ exports.auditAppointmentOverlaps = onCall(
   }
 );
 
+function getBookingManagementIdentity(input, { requireConsent = false } = {}) {
+  const client = assertString(input?.client, "client", { min: 2, max: 80 });
+  const phone = assertString(input?.phone, "phone", { min: 7, max: 30 });
+  if (requireConsent && input?.consentAccepted !== true) {
+    throw new HttpsError("invalid-argument", "Consent is required.");
+  }
+
+  const phoneDigits = normalizePhoneDigits(phone);
+  const clientName = normalizeClientName(client);
+  if (!phoneDigits) {
+    throw new HttpsError("invalid-argument", "Please enter a valid phone number.");
+  }
+  if (!clientName) {
+    throw new HttpsError("invalid-argument", "Please enter your name.");
+  }
+
+  return { client, phone, phoneDigits, clientName };
+}
+
+function getBookingVerificationIdentityId(phoneDigits, clientName) {
+  return crypto
+    .createHash("sha256")
+    .update(`${phoneDigits}\n${clientName}`)
+    .digest("hex");
+}
+
+function getBookingVerificationCodeSecret() {
+  const secret = TWILIO_AUTH_TOKEN.value();
+  if (!secret) {
+    throw new HttpsError("unavailable", "Phone verification is temporarily unavailable.");
+  }
+  return secret;
+}
+
+function maskBookingPhone(phoneDigits) {
+  return `••• ••• ${String(phoneDigits || "").slice(-4) || "0000"}`;
+}
+
+async function loadUpcomingAppointmentsForClient({ phone, phoneDigits, clientName }) {
+  const phoneVariants = buildPhoneLookupVariants(phone || phoneDigits);
+  const queries = [
+    db.collection("appointments")
+      .where("phoneLookup", "==", phoneDigits)
+      .limit(75)
+      .get()
+  ];
+  if (phoneVariants.length) {
+    queries.push(
+      db.collection("appointments")
+        .where("phone", "in", phoneVariants)
+        .limit(75)
+        .get()
+    );
+  }
+
+  const snapshots = await Promise.all(queries);
+  const candidates = new Map();
+  snapshots.forEach(snapshot => {
+    snapshot.docs.forEach(docSnap => {
+      candidates.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+    });
+  });
+
+  const salonNow = getSalonNowParts();
+  return Array.from(candidates.values())
+    .filter(appointment => isUpcomingAppointmentForClient(appointment, {
+      phoneDigits,
+      clientName,
+      today: salonNow.date,
+      currentMinutes: salonNow.minutes
+    }))
+    .sort((left, right) => {
+      const dateComparison = String(left.date || "").localeCompare(String(right.date || ""));
+      return dateComparison || (Number(left.start) || 0) - (Number(right.start) || 0);
+    });
+}
+
+function buildBookingManagementAppointment(appointment, staffRecords) {
+  const selectedServiceText = Array.isArray(appointment.selectedServices)
+    ? appointment.selectedServices.map(item => String(item || "").trim()).filter(Boolean).join(", ")
+    : "";
+  const start = Number(appointment.start);
+  return {
+    id: appointment.id,
+    status: appointment.status === "confirmed" ? "confirmed" : "request",
+    date: String(appointment.date || ""),
+    time: Number.isFinite(start) && start >= 0 ? slotToTime(start) : "Morning",
+    technician: getStaffName(staffRecords, appointment.staffId),
+    service: String(appointment.note || selectedServiceText || "Service details not provided").trim().slice(0, 600)
+  };
+}
+
+exports.checkUpcomingAppointments = onCall(
+  {
+    region: "us-central1",
+    maxInstances: 10
+  },
+  async (request) => {
+    const identity = getBookingManagementIdentity(request.data || {}, { requireConsent: true });
+    const appointments = await loadUpcomingAppointmentsForClient(identity);
+    return {
+      ok: true,
+      hasUpcomingAppointments: appointments.length > 0
+    };
+  }
+);
+
+exports.sendOnlineBookingVerificationCode = onCall(
+  {
+    region: "us-central1",
+    maxInstances: 10,
+    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN]
+  },
+  async (request) => {
+    const identity = getBookingManagementIdentity(request.data || {}, { requireConsent: true });
+    const appointments = await loadUpcomingAppointmentsForClient(identity);
+    if (!appointments.length) {
+      throw new HttpsError("not-found", "No upcoming online booking appointments were found.");
+    }
+
+    const secret = getBookingVerificationCodeSecret();
+    const nowMs = Date.now();
+    const challengeRef = db.collection(BOOKING_VERIFICATION_COLLECTION).doc();
+    const identityId = getBookingVerificationIdentityId(identity.phoneDigits, identity.clientName);
+    const rateRef = db.collection(BOOKING_VERIFICATION_RATE_COLLECTION).doc(identityId);
+    const code = crypto.randomInt(0, 1000000).toString().padStart(6, "0");
+    const codeHash = buildVerificationCodeHash({ challengeId: challengeRef.id, code, secret });
+    const expiresAtMs = nowMs + BOOKING_VERIFICATION_CODE_TTL_MS;
+    const cleanupAtMs = nowMs + BOOKING_VERIFICATION_CLEANUP_TTL_MS;
+    let challengeReserved = false;
+
+    await db.runTransaction(async tx => {
+      const rateSnap = await tx.get(rateRef);
+      const decision = getVerificationRateDecision(rateSnap.exists ? rateSnap.data() : null, nowMs);
+      if (!decision.allowed) {
+        const message = decision.reason === "cooldown"
+          ? `Please wait ${decision.retryAfterSeconds} seconds before requesting another code.`
+          : "Too many verification codes were requested. Please try again later.";
+        throw new HttpsError("resource-exhausted", message, {
+          reason: decision.reason,
+          retryAfterSeconds: decision.retryAfterSeconds
+        });
+      }
+
+      tx.set(rateRef, {
+        sendCount: decision.sendCount,
+        windowStartedAt: admin.firestore.Timestamp.fromMillis(decision.windowStartedAtMs),
+        dailySendCount: decision.dailySendCount,
+        dailyWindowStartedAt: admin.firestore.Timestamp.fromMillis(decision.dailyWindowStartedAtMs),
+        lastSentAt: admin.firestore.Timestamp.fromMillis(decision.lastSentAtMs),
+        latestChallengeId: challengeRef.id,
+        cleanupAt: admin.firestore.Timestamp.fromMillis(cleanupAtMs)
+      }, { merge: true });
+      tx.set(challengeRef, {
+        identityId,
+        phoneDigits: identity.phoneDigits,
+        clientName: identity.clientName,
+        codeHash,
+        attempts: 0,
+        status: "sending",
+        createdAt: FieldValue.serverTimestamp(),
+        expiresAt: admin.firestore.Timestamp.fromMillis(expiresAtMs),
+        cleanupAt: admin.firestore.Timestamp.fromMillis(cleanupAtMs)
+      });
+    });
+    challengeReserved = true;
+
+    try {
+      const result = await sendSmsViaTwilio({
+        to: normalizePhoneToE164(identity.phoneDigits),
+        body: `Rose's Nails verification code: ${code}. It expires in 10 minutes. Do not share this code.`
+      });
+      if (result?.skipped) {
+        throw new Error(result.reason || "twilio_not_configured");
+      }
+
+      await challengeRef.set({
+        status: "active",
+        sentAt: FieldValue.serverTimestamp(),
+        providerMessageId: result?.providerMessageId || null
+      }, { merge: true });
+
+      return {
+        ok: true,
+        challengeId: challengeRef.id,
+        maskedPhone: maskBookingPhone(identity.phoneDigits),
+        expiresInSeconds: Math.floor(BOOKING_VERIFICATION_CODE_TTL_MS / 1000)
+      };
+    } catch (error) {
+      if (challengeReserved) {
+        await challengeRef.set({
+          status: "failed",
+          failedAt: FieldValue.serverTimestamp(),
+          codeHash: FieldValue.delete()
+        }, { merge: true }).catch(() => null);
+      }
+      console.error("Online booking verification SMS failed", {
+        challengeId: challengeRef.id,
+        phoneLast4: getPhoneLast4(identity.phoneDigits),
+        error: error && error.message ? error.message : String(error)
+      });
+      throw new HttpsError("unavailable", "We could not send a verification code right now. Please try again.");
+    }
+  }
+);
+
+exports.verifyOnlineBookingCode = onCall(
+  {
+    region: "us-central1",
+    maxInstances: 10,
+    secrets: [TWILIO_AUTH_TOKEN]
+  },
+  async (request) => {
+    const input = request.data || {};
+    const challengeId = assertAppointmentToken(input.challengeId, "challengeId", { min: 12, max: 100 });
+    const code = assertString(input.code, "code", { min: 6, max: 6 });
+    if (!/^\d{6}$/.test(code)) {
+      throw new HttpsError("invalid-argument", "Enter the six-digit verification code.");
+    }
+
+    const secret = getBookingVerificationCodeSecret();
+    const challengeRef = db.collection(BOOKING_VERIFICATION_COLLECTION).doc(challengeId);
+    const sessionToken = crypto.randomBytes(32).toString("base64url");
+    const sessionTokenHash = buildSessionTokenHash(sessionToken);
+    const nowMs = Date.now();
+    const sessionExpiresAtMs = nowMs + BOOKING_VERIFICATION_SESSION_TTL_MS;
+
+    const verification = await db.runTransaction(async tx => {
+      const challengeSnap = await tx.get(challengeRef);
+      if (!challengeSnap.exists) return { ok: false, reason: "expired" };
+
+      const challenge = challengeSnap.data() || {};
+      const rateRef = challenge.identityId
+        ? db.collection(BOOKING_VERIFICATION_RATE_COLLECTION).doc(String(challenge.identityId))
+        : null;
+      const rateSnap = rateRef ? await tx.get(rateRef) : null;
+      if (!rateSnap?.exists || rateSnap.data()?.latestChallengeId !== challengeId) {
+        tx.set(challengeRef, {
+          status: "superseded",
+          supersededAt: FieldValue.serverTimestamp(),
+          codeHash: FieldValue.delete()
+        }, { merge: true });
+        return { ok: false, reason: "expired" };
+      }
+
+      const expiresAtMs = challenge.expiresAt?.toMillis ? challenge.expiresAt.toMillis() : 0;
+      if (challenge.status !== "active" || !expiresAtMs || expiresAtMs <= nowMs) {
+        if (challenge.status === "active") {
+          tx.set(challengeRef, {
+            status: "expired",
+            expiredAt: FieldValue.serverTimestamp(),
+            codeHash: FieldValue.delete()
+          }, { merge: true });
+        }
+        return { ok: false, reason: "expired" };
+      }
+
+      const attempts = Math.max(0, Number(challenge.attempts) || 0);
+      if (attempts >= BOOKING_VERIFICATION_MAX_ATTEMPTS) {
+        return { ok: false, reason: "locked" };
+      }
+
+      const submittedHash = buildVerificationCodeHash({ challengeId, code, secret });
+      if (!secureHashesEqual(challenge.codeHash, submittedHash)) {
+        const nextAttempts = attempts + 1;
+        tx.set(challengeRef, {
+          attempts: nextAttempts,
+          lastAttemptAt: FieldValue.serverTimestamp(),
+          status: nextAttempts >= BOOKING_VERIFICATION_MAX_ATTEMPTS ? "locked" : "active",
+          ...(nextAttempts >= BOOKING_VERIFICATION_MAX_ATTEMPTS
+            ? { codeHash: FieldValue.delete(), lockedAt: FieldValue.serverTimestamp() }
+            : {})
+        }, { merge: true });
+        return {
+          ok: false,
+          reason: nextAttempts >= BOOKING_VERIFICATION_MAX_ATTEMPTS ? "locked" : "incorrect"
+        };
+      }
+
+      tx.set(challengeRef, {
+        status: "verified",
+        verifiedAt: FieldValue.serverTimestamp(),
+        codeHash: FieldValue.delete(),
+        sessionTokenHash,
+        sessionExpiresAt: admin.firestore.Timestamp.fromMillis(sessionExpiresAtMs),
+        cleanupAt: admin.firestore.Timestamp.fromMillis(sessionExpiresAtMs + BOOKING_VERIFICATION_CLEANUP_TTL_MS)
+      }, { merge: true });
+
+      return {
+        ok: true,
+        phoneDigits: String(challenge.phoneDigits || ""),
+        clientName: String(challenge.clientName || "")
+      };
+    });
+
+    if (!verification.ok) {
+      const message = verification.reason === "incorrect"
+        ? "The verification code is incorrect. Please try again."
+        : "This verification code has expired or can no longer be used. Please send a new code.";
+      throw new HttpsError(
+        verification.reason === "incorrect" ? "unauthenticated" : "failed-precondition",
+        message,
+        { reason: verification.reason }
+      );
+    }
+
+    const appointments = await loadUpcomingAppointmentsForClient({
+      phone: verification.phoneDigits,
+      phoneDigits: verification.phoneDigits,
+      clientName: verification.clientName
+    });
+    const staffSnap = await db.collection("staff").get();
+    const staffRecords = staffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+
+    return {
+      ok: true,
+      challengeId,
+      sessionToken,
+      sessionExpiresAt: new Date(sessionExpiresAtMs).toISOString(),
+      appointments: appointments.map(appointment => buildBookingManagementAppointment(appointment, staffRecords))
+    };
+  }
+);
+
+exports.cancelOnlineBookingAppointment = onCall(
+  {
+    region: "us-central1",
+    maxInstances: 10
+  },
+  async (request) => {
+    const input = request.data || {};
+    const challengeId = assertAppointmentToken(input.challengeId, "challengeId", { min: 12, max: 100 });
+    const sessionToken = assertAppointmentToken(input.sessionToken, "sessionToken", { min: 32, max: 200 });
+    const appointmentId = assertAppointmentToken(input.appointmentId, "appointmentId", { min: 12, max: 100 });
+    const challengeRef = db.collection(BOOKING_VERIFICATION_COLLECTION).doc(challengeId);
+    const appointmentRef = db.collection("appointments").doc(appointmentId);
+    const logRef = db.collection("activityLog").doc();
+    const staffMessageRef = db.collection("staffMessages").doc();
+    const sessionTokenHash = buildSessionTokenHash(sessionToken);
+    const salonNow = getSalonNowParts();
+    const nowMs = Date.now();
+    const mutationId = `online_cancel_${crypto.randomBytes(12).toString("base64url")}`;
+
+    return db.runTransaction(async tx => {
+      const challengeSnap = await tx.get(challengeRef);
+      if (!challengeSnap.exists) {
+        throw new HttpsError("unauthenticated", "Your secure session has expired. Please verify your phone again.");
+      }
+      const challenge = challengeSnap.data() || {};
+      const sessionExpiresAtMs = challenge.sessionExpiresAt?.toMillis ? challenge.sessionExpiresAt.toMillis() : 0;
+      if (
+        challenge.status !== "verified" ||
+        !sessionExpiresAtMs ||
+        sessionExpiresAtMs <= nowMs ||
+        !secureHashesEqual(challenge.sessionTokenHash, sessionTokenHash)
+      ) {
+        throw new HttpsError("unauthenticated", "Your secure session has expired. Please verify your phone again.");
+      }
+
+      const appointmentSnap = await tx.get(appointmentRef);
+      if (!appointmentSnap.exists) {
+        throw new HttpsError("not-found", "This appointment is no longer available.");
+      }
+      const before = appointmentSnap.data() || {};
+      const previouslyManagedIds = Array.isArray(challenge.managedAppointmentIds)
+        ? challenge.managedAppointmentIds
+        : [];
+      if (
+        before.canceled === true &&
+        before.cancelComment === ONLINE_BOOKING_CLIENT_CANCEL_COMMENT &&
+        previouslyManagedIds.includes(appointmentId)
+      ) {
+        return {
+          ok: true,
+          duplicate: true,
+          appointmentId,
+          comment: ONLINE_BOOKING_CLIENT_CANCEL_COMMENT
+        };
+      }
+      if (!isUpcomingAppointmentForClient(before, {
+        phoneDigits: String(challenge.phoneDigits || ""),
+        clientName: String(challenge.clientName || ""),
+        today: salonNow.date,
+        currentMinutes: salonNow.minutes
+      })) {
+        throw new HttpsError("failed-precondition", "This appointment is no longer available to manage.");
+      }
+
+      const staffSnap = await tx.get(db.collection("staff"));
+      const staffRecords = staffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+      const cancellationState = getClientCancellationRecordState(before);
+      const after = {
+        ...before,
+        ...cancellationState,
+        cancelComment: ONLINE_BOOKING_CLIENT_CANCEL_COMMENT,
+        canceledAt: FieldValue.serverTimestamp(),
+        canceledBy: "Online Booking Client",
+        lastEditedBy: "Online Booking Client",
+        lastAction: "cancel",
+        lastActionAt: FieldValue.serverTimestamp(),
+        lastMutationId: mutationId,
+        lastMutationMode: "online_client_cancel",
+        revision: (Number(before.revision) || 0) + 1
+      };
+
+      const scheduleStates = await loadAppointmentScheduleStates(tx, [before, after]);
+      updateAppointmentScheduleStates(scheduleStates, before, after, appointmentId);
+
+      writeAppointmentScheduleStates(tx, scheduleStates);
+      tx.set(appointmentRef, after);
+      tx.set(logRef, {
+        createdAt: FieldValue.serverTimestamp(),
+        logDate: before.date,
+        actorLabel: "Online Booking Client",
+        actorKey: "online_booking_client",
+        staffId: before.staffId,
+        eventType: "canceled",
+        entityType: "appointment",
+        entityId: appointmentId,
+        client: before.client,
+        phone: before.phone || null,
+        service: before.note || "",
+        details: `${buildAppointmentLogDetails(before, staffRecords)}; canceled; ${ONLINE_BOOKING_CLIENT_CANCEL_COMMENT}`,
+        source: "online_booking"
+      });
+
+      const staffName = getStaffName(staffRecords, before.staffId);
+      const message = `Appointment for ${before.client || "Client"} with ${staffName} was canceled. ${ONLINE_BOOKING_CLIENT_CANCEL_COMMENT}`;
+      tx.set(staffMessageRef, buildCanonicalStaffMessageDoc({
+        message,
+        eventType: "canceled",
+        entityType: "appointment",
+        entityId: appointmentId,
+        staffId: before.staffId,
+        staffName,
+        staffRecords,
+        source: "online_booking",
+        messageGroupId: `online-booking-cancel-${appointmentId}`
+      }));
+      tx.set(challengeRef, {
+        sessionLastUsedAt: FieldValue.serverTimestamp(),
+        managedAppointmentIds: FieldValue.arrayUnion(appointmentId)
+      }, { merge: true });
+
+      return {
+        ok: true,
+        appointmentId,
+        comment: ONLINE_BOOKING_CLIENT_CANCEL_COMMENT
+      };
+    });
+  }
+);
+
 exports.createOnlineBookingRequest = onCall(
   {
     region: "us-central1",
@@ -1902,10 +2377,16 @@ exports.createOnlineBookingRequest = onCall(
       : [];
     const requestedGroups = getRequestedServiceGroups(input);
     const uploadedPhotos = validatePhotoUploads(input.photos);
-    const consentVersion = String(input.consentVersion || PRIVACY_CONSENT_VERSION).trim();
+    const consentVersion = String(input.consentVersion || "").trim();
 
     if (input.consentAccepted !== true) {
       throw new HttpsError("invalid-argument", "Consent is required.");
+    }
+    if (consentVersion !== PRIVACY_CONSENT_VERSION) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Privacy details have been updated. Please refresh the booking page and try again."
+      );
     }
 
     if (!serviceDetails && !selectedServices.length) {
@@ -2072,6 +2553,7 @@ exports.createOnlineBookingRequest = onCall(
         date,
         staffId,
         phone,
+        phoneLookup: normalizePhoneDigits(phone),
         emailProvided: Boolean(email),
         start,
         duration,
@@ -2446,6 +2928,36 @@ exports.appointmentStatusEmailUpdated = onDocumentUpdated(
     }
 
     await Promise.all(writes);
+  }
+);
+
+exports.appointmentPhotoRetentionUpdated = onDocumentUpdated(
+  {
+    document: "appointments/{appointmentId}",
+    region: "us-central1"
+  },
+  async (event) => {
+    const before = event.data?.before?.data() || {};
+    const after = event.data?.after?.data() || {};
+    if (after.source !== "online_booking" || before.status === after.status) return;
+    const isClientCancellation = after.status === "cancelled" && after.canceled === true;
+    if (!["confirmed", "declined"].includes(after.status) && !isClientCancellation) return;
+    if (!after.photoReviewToken) return;
+
+    const deadlineMs = getPhotoRetentionDeadlineMs(after, PHOTO_TTL_MS);
+    if (!deadlineMs) return;
+
+    const retentionStartedAt = after.status === "confirmed"
+      ? after.confirmedAt
+      : (after.status === "declined" ? after.declinedAt : after.canceledAt);
+
+    await db.collection(PHOTO_COLLECTION).doc(after.photoReviewToken).set({
+      retentionState: "decision_made",
+      retentionPolicyVersion: 3,
+      decisionStatus: after.status,
+      retentionStartedAt: retentionStartedAt || FieldValue.serverTimestamp(),
+      expiresAt: admin.firestore.Timestamp.fromMillis(deadlineMs)
+    }, { merge: true });
   }
 );
 
@@ -2892,6 +3404,32 @@ exports.cleanupExpiredStaffNotifications = onSchedule(
   }
 );
 
+exports.cleanupExpiredOnlineBookingVerificationData = onSchedule(
+  {
+    region: "us-central1",
+    schedule: "every 6 hours",
+    timeZone: "America/Edmonton"
+  },
+  async () => {
+    const now = admin.firestore.Timestamp.now();
+    const [challengeSnap, rateSnap] = await Promise.all([
+      db.collection(BOOKING_VERIFICATION_COLLECTION)
+        .where("cleanupAt", "<=", now)
+        .limit(250)
+        .get(),
+      db.collection(BOOKING_VERIFICATION_RATE_COLLECTION)
+        .where("cleanupAt", "<=", now)
+        .limit(250)
+        .get()
+    ]);
+
+    await Promise.all([
+      ...challengeSnap.docs.map(docSnap => docSnap.ref.delete()),
+      ...rateSnap.docs.map(docSnap => docSnap.ref.delete())
+    ]);
+  }
+);
+
 exports.cleanupExpiredOnlineBookingPhotos = onSchedule(
   {
     region: "us-central1",
@@ -2899,6 +3437,7 @@ exports.cleanupExpiredOnlineBookingPhotos = onSchedule(
     timeZone: "America/Edmonton"
   },
   async () => {
+    const nowMs = Date.now();
     const snap = await db.collection(PHOTO_COLLECTION)
       .where("expiresAt", "<=", admin.firestore.Timestamp.now())
       .limit(50)
@@ -2907,9 +3446,50 @@ exports.cleanupExpiredOnlineBookingPhotos = onSchedule(
     await Promise.all(snap.docs.map(async docSnap => {
       const data = docSnap.data() || {};
       if (data.status === "active" || data.status === "error") {
+        let appointment = null;
+        if (data.appointmentId) {
+          const appointmentSnap = await db.collection("appointments").doc(data.appointmentId).get();
+          appointment = appointmentSnap.exists ? appointmentSnap.data() || {} : null;
+        }
+
+        if (appointment && isPendingOnlineRequest(appointment)) {
+          await docSnap.ref.set({
+            retentionState: "pending_appointment_decision",
+            retentionPolicyVersion: 3,
+            expiresAt: FieldValue.delete(),
+            retentionDeferredAt: FieldValue.serverTimestamp()
+          }, { merge: true });
+          return;
+        }
+
+        const existingDeadlineMs = data.expiresAt?.toMillis ? data.expiresAt.toMillis() : 0;
+        const fallbackDecisionMs = data.retentionPolicyVersion === 3 && existingDeadlineMs
+          ? existingDeadlineMs - PHOTO_TTL_MS
+          : nowMs;
+        const decisionDeadlineMs = getPhotoRetentionDeadlineMs(
+          appointment,
+          PHOTO_TTL_MS,
+          fallbackDecisionMs
+        );
+        if (decisionDeadlineMs && decisionDeadlineMs > nowMs) {
+          const retentionStartedAt = appointment.status === "confirmed"
+            ? appointment.confirmedAt
+            : (appointment.status === "declined" ? appointment.declinedAt : appointment.canceledAt);
+          await docSnap.ref.set({
+            retentionState: "decision_made",
+            retentionPolicyVersion: 3,
+            decisionStatus: appointment.status,
+            retentionStartedAt: retentionStartedAt || FieldValue.serverTimestamp(),
+            expiresAt: admin.firestore.Timestamp.fromMillis(decisionDeadlineMs)
+          }, { merge: true });
+          return;
+        }
+
         await deletePhotoFiles(data.files || []);
         await docSnap.ref.set({
           status: "expired",
+          retentionState: "expired",
+          retentionPolicyVersion: 3,
           filesDeletedAt: FieldValue.serverTimestamp(),
           expiredAt: FieldValue.serverTimestamp()
         }, { merge: true });
