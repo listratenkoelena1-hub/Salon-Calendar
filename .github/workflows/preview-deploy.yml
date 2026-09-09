@@ -31,8 +31,9 @@ jobs:
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-key.json
         run: |
-          CHANNEL_ID=$(echo "${{ github.ref_name }}" | tr -c 'a-zA-Z0-9-' '-' | cut -c1-30)
+          CHANNEL_ID=$(printf '%s' "${{ github.ref_name }}" | tr -c 'a-zA-Z0-9-' '-' | sed 's/^-*//; s/-*$//' | cut -c1-30 | sed 's/-*$//')
           firebase hosting:channel:deploy "$CHANNEL_ID" \
+            --only calendar \
             --expires 7d \
             --project rosesnails-calendar \
             --non-interactive
