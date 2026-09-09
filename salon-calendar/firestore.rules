@@ -34,7 +34,13 @@ service cloud.firestore {
       allow read, create, update, delete: if false;
     }
 
+    // Production collision locks written transactionally by mutateAppointment.
+    // These are not calendar projections and must remain server-only.
     match /appointmentSchedules/{appointmentId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /appointmentPublic/{appointmentId} {
       allow read: if signedIn();
       allow create, update, delete: if false;
     }
@@ -136,6 +142,7 @@ service cloud.firestore {
       allow read, write: if signedIn()
         && collection != 'appointments'
         && collection != 'appointmentSchedules'
+        && collection != 'appointmentPublic'
         && collection != 'activityLog'
         && collection != 'activityLogPublic'
         && collection != 'users'

@@ -25,7 +25,9 @@ const FieldValue = admin.firestore.FieldValue;
 const CLIENT_LOOKUP_PEPPER = defineSecret("CLIENT_LOOKUP_PEPPER");
 const REGION = "us-central1";
 const PRIVATE_APPOINTMENT_COLLECTION = "appointmentPrivate";
-const PUBLIC_APPOINTMENT_COLLECTION = "appointmentSchedules";
+// appointmentSchedules is the production collision-lock collection used by
+// mutateAppointment. Public calendar projections must never overwrite it.
+const PUBLIC_APPOINTMENT_COLLECTION = "appointmentPublic";
 const CLIENT_COLLECTION = "clientLookup";
 const CLIENT_PROFILE_COLLECTION = "clientProfiles";
 const CLIENT_PHONE_INDEX_COLLECTION = "clientPhoneIndex";
