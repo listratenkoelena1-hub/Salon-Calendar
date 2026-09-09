@@ -1,10 +1,5 @@
 rules_version = '2';
 
-// FINAL PRIVACY CUTOVER ONLY.
-// Do not deploy this file until appointmentPublic/activityLogPublic backfills
-// are complete and every live calendar reads those projections. Use
-// firebase.pre-migration.json for the backward-compatible first stage.
-
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() {
@@ -19,47 +14,25 @@ service cloud.firestore {
       return signedIn() && currentUser().role == role;
     }
 
-    function hasNoPrivateContactFields() {
-      return !request.resource.data.keys().hasAny([
-        'phone',
-        'phoneDisplay',
-        'phoneLast4',
-        'contactPhone',
-        'email',
-        'clientId',
-        'profileId',
-        'phoneNormalized',
-        'phoneHash'
-      ]);
-    }
-
-    // Raw appointments may contain contact data and are server-only. Every
-    // signed-in calendar reads the server-made contact-free projection.
-    match /appointments/{appointmentId} {
-      allow read, create, update, delete: if false;
-    }
-
-    // Production collision locks written transactionally by mutateAppointment.
-    // These are not calendar projections and must remain server-only.
-    match /appointmentSchedules/{appointmentId} {
-      allow read, create, update, delete: if false;
-    }
-
-    match /appointmentPublic/{appointmentId} {
+    // Compatibility phase: production keeps reading raw appointments until
+    // every existing record has a contact-free appointmentPublic projection.
+    match /appointments/{document=**} {
       allow read: if signedIn();
       allow create, update, delete: if false;
     }
 
-    // The activity log follows the same split. Browsers may submit sanitized
-    // entries, but every browser reads only the server-made public projection.
-    match /activityLog/{logId} {
-      allow read: if false;
-      allow create: if signedIn() && hasNoPrivateContactFields();
-      allow update: if hasRole('manager') && hasNoPrivateContactFields();
-      allow delete: if false;
+    // Existing production collision locks. Never expose or repurpose them.
+    match /appointmentSchedules/{document=**} {
+      allow read, write: if false;
     }
 
-    match /activityLogPublic/{logId} {
+    // Contact-free projection populated by server functions during migration.
+    match /appointmentPublic/{document=**} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+    }
+
+    match /activityLogPublic/{document=**} {
       allow read: if signedIn();
       allow create, update, delete: if false;
     }
@@ -79,27 +52,8 @@ service cloud.firestore {
             .hasOnly(['color', 'bookingDurations']));
     }
 
-    match /managerAssistantState/{document=**} {
-      allow read, write: if hasRole('manager');
-    }
-
-    // Queue documents can contain delivery addresses or short-lived contact
-    // details. Admin SDK workers still have access; browsers never do.
-    match /EmailQueue/{document=**} {
-      allow read, write: if false;
-    }
-
-    match /SmsQueue/{document=**} {
-      allow read, write: if false;
-    }
-
-    match /TelegramQueue/{document=**} {
-      allow create: if signedIn();
-      allow read, update, delete: if false;
-    }
-
-    // All client identity/contact collections are server-only, including for a
-    // manager. Managers access narrow, rate-limited callable endpoints instead.
+    // These collections are server-only before the first private record is
+    // written. Admin SDK functions bypass Firestore Security Rules.
     match /clientLookup/{document=**} {
       allow read, write: if false;
     }
@@ -140,22 +94,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Preserve the rest of the existing authenticated calendar behavior. Every
-    // collection controlled above is excluded because Firestore grants access
-    // when any matching rule allows it.
+    // Preserve all other currently authenticated browser operations during
+    // migration. Explicit exclusions prevent this wildcard from reopening a
+    // protected collection because Firestore allows access if any match does.
     match /{collection}/{document=**} {
       allow read, write: if signedIn()
         && collection != 'appointments'
         && collection != 'appointmentSchedules'
         && collection != 'appointmentPublic'
-        && collection != 'activityLog'
         && collection != 'activityLogPublic'
         && collection != 'users'
         && collection != 'staff'
-        && collection != 'managerAssistantState'
-        && collection != 'EmailQueue'
-        && collection != 'SmsQueue'
-        && collection != 'TelegramQueue'
         && collection != 'clientLookup'
         && collection != 'clientProfiles'
         && collection != 'clientPhoneIndex'

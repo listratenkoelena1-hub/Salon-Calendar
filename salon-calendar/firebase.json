@@ -12,7 +12,9 @@
                         "public":  ".",
                         "ignore":  [
                                        "firebase.json",
+                                       "firebase.pre-migration.json",
                                        "firestore.rules",
+                                       "firestore.pre-migration.rules",
                                        "firestore.indexes.json",
                                        "storage.rules",
                                        "**/*.test.mjs",
