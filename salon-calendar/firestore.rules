@@ -1,0 +1,159 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function currentUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(role) {
+      return signedIn() && currentUser().role == role;
+    }
+
+    function hasNoPrivateContactFields() {
+      return !request.resource.data.keys().hasAny([
+        'phone',
+        'phoneDisplay',
+        'phoneLast4',
+        'contactPhone',
+        'email',
+        'clientId',
+        'profileId',
+        'phoneNormalized',
+        'phoneHash'
+      ]);
+    }
+
+    // Raw appointments may contain contact data and are server-only. Every
+    // signed-in calendar reads the server-made contact-free projection.
+    match /appointments/{appointmentId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /appointmentSchedules/{appointmentId} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+    }
+
+    // The activity log follows the same split. Browsers may submit sanitized
+    // entries, but every browser reads only the server-made public projection.
+    match /activityLog/{logId} {
+      allow read: if false;
+      allow create: if signedIn() && hasNoPrivateContactFields();
+      allow update: if hasRole('manager') && hasNoPrivateContactFields();
+      allow delete: if false;
+    }
+
+    match /activityLogPublic/{logId} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || hasRole('manager'));
+      allow write: if false;
+    }
+
+    match /staff/{staffId} {
+      allow read: if signedIn();
+      allow create, delete: if hasRole('manager');
+      allow update: if hasRole('manager')
+        || (hasRole('staff')
+          && currentUser().staffId == staffId
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['color', 'bookingDurations']));
+    }
+
+    match /managerAssistantState/{document=**} {
+      allow read, write: if hasRole('manager');
+    }
+
+    // Queue documents can contain delivery addresses or short-lived contact
+    // details. Admin SDK workers still have access; browsers never do.
+    match /EmailQueue/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /SmsQueue/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /TelegramQueue/{document=**} {
+      allow create: if signedIn();
+      allow read, update, delete: if false;
+    }
+
+    // All client identity/contact collections are server-only, including for a
+    // manager. Managers access narrow, rate-limited callable endpoints instead.
+    match /clientLookup/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /clientProfiles/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /clientPhoneIndex/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /appointmentPrivate/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /activityLogPrivate/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /clientLookupAudit/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /clientLookupRateLimits/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /onlineBookingEmailContacts/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /onlineBookingPrivateData/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /onlineBookingVerificationData/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Preserve the rest of the existing authenticated calendar behavior. Every
+    // collection controlled above is excluded because Firestore grants access
+    // when any matching rule allows it.
+    match /{collection}/{document=**} {
+      allow read, write: if signedIn()
+        && collection != 'appointments'
+        && collection != 'appointmentSchedules'
+        && collection != 'activityLog'
+        && collection != 'activityLogPublic'
+        && collection != 'users'
+        && collection != 'staff'
+        && collection != 'managerAssistantState'
+        && collection != 'EmailQueue'
+        && collection != 'SmsQueue'
+        && collection != 'TelegramQueue'
+        && collection != 'clientLookup'
+        && collection != 'clientProfiles'
+        && collection != 'clientPhoneIndex'
+        && collection != 'appointmentPrivate'
+        && collection != 'activityLogPrivate'
+        && collection != 'clientLookupAudit'
+        && collection != 'clientLookupRateLimits'
+        && collection != 'onlineBookingEmailContacts'
+        && collection != 'onlineBookingPrivateData'
+        && collection != 'onlineBookingVerificationData';
+    }
+  }
+}

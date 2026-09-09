@@ -2,7 +2,7 @@ export {
   analyzeManagerService,
   applyManagerServiceChoice,
   getManagerServiceQuestion
-} from './manager-assistant-logic.js?v=service-assistant-v3';
+} from './manager-assistant-logic.js?v=client-history-v1';
 
 const STYLE_ID = 'managerAssistantStylesheet';
 const ROOT_ID = 'managerAssistant';
@@ -66,7 +66,7 @@ function ensureStylesheet() {
   const link = document.createElement('link');
   link.id = STYLE_ID;
   link.rel = 'stylesheet';
-  link.href = new URL('./manager-assistant.css?v=service-assistant-v3', import.meta.url).href;
+  link.href = new URL('./manager-assistant.css?v=client-history-v1', import.meta.url).href;
   document.head.appendChild(link);
 }
 
@@ -148,6 +148,7 @@ export function createManagerAssistant({ host = document.body, contained = false
     <div class="manager-assistant__actions" hidden></div>
     <div class="manager-assistant__links" hidden></div>
     <div class="manager-assistant__footer" hidden>
+      <div class="manager-assistant__footer-actions"></div>
       <button class="manager-assistant__leave" type="button" data-assistant-action="leave-current">Leave current</button>
     </div>
   `;
@@ -163,6 +164,7 @@ export function createManagerAssistant({ host = document.body, contained = false
   const actions = bubble.querySelector('.manager-assistant__actions');
   const links = bubble.querySelector('.manager-assistant__links');
   const footer = bubble.querySelector('.manager-assistant__footer');
+  const footerActions = bubble.querySelector('.manager-assistant__footer-actions');
   const closeButton = bubble.querySelector('.manager-assistant__close');
   const timers = new Set();
   const posePreloads = new Map();
@@ -317,14 +319,16 @@ export function createManagerAssistant({ host = document.body, contained = false
     clearModalBubblePosition();
   }
 
-  function makeActionButton(action, { link = false } = {}) {
+  function makeActionButton(action, { link = false, footerAction = false } = {}) {
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.assistantAction = String(action?.id || '');
     button.textContent = String(action?.label || '');
-    button.className = link
-      ? 'manager-assistant__link'
-      : `manager-assistant__choice${action?.emphasis === 'secondary' ? ' manager-assistant__choice--secondary' : ''}`;
+    button.className = footerAction
+      ? 'manager-assistant__footer-action'
+      : link
+        ? 'manager-assistant__link'
+        : `manager-assistant__choice${action?.emphasis === 'secondary' ? ' manager-assistant__choice--secondary' : ''}`;
     if (action?.disabled === true) button.disabled = true;
     return button;
   }
@@ -346,6 +350,7 @@ export function createManagerAssistant({ host = document.body, contained = false
     availability.replaceChildren();
     actions.replaceChildren();
     links.replaceChildren();
+    footerActions.replaceChildren();
 
     const nowGroup = makeAvailabilityGroup(payload.nowLabel || 'Free now', payload.availableNow || []);
     const soonGroup = makeAvailabilityGroup(
@@ -382,7 +387,12 @@ export function createManagerAssistant({ host = document.body, contained = false
     linkItems.forEach(action => links.appendChild(makeActionButton(action, { link: true })));
     links.hidden = !linkItems.length;
 
-    footer.hidden = payload.leaveCurrent !== true;
+    const footerItems = Array.isArray(payload.footerActions) ? payload.footerActions : [];
+    footerItems.forEach(action => footerActions.appendChild(makeActionButton(action, { footerAction: true })));
+    footerActions.hidden = !footerItems.length;
+    const leaveCurrent = payload.leaveCurrent === true;
+    bubble.querySelector('.manager-assistant__leave').hidden = !leaveCurrent;
+    footer.hidden = !leaveCurrent && !footerItems.length;
   }
 
   function showBubble(payload, { context, autoHideMs = 0, onAction = null, onDismiss = null } = {}) {

@@ -48,6 +48,10 @@
   display: none;
 }
 
+body.client-history-open .manager-assistant {
+  visibility: hidden;
+}
+
 .manager-assistant__character-button {
   position: relative;
   z-index: 2;
@@ -258,6 +262,8 @@
 .manager-assistant__choice:focus-visible,
 .manager-assistant__link:hover,
 .manager-assistant__link:focus-visible,
+.manager-assistant__footer-action:hover,
+.manager-assistant__footer-action:focus-visible,
 .manager-assistant__leave:hover,
 .manager-assistant__leave:focus-visible {
   filter: brightness(0.98);
@@ -286,10 +292,34 @@
 
 .manager-assistant__footer {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-top: 4px;
   padding-top: 2px;
   border-top: 1px solid rgba(91, 68, 59, 0.09);
+}
+
+.manager-assistant__footer-actions {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.manager-assistant__footer-actions[hidden],
+.manager-assistant__leave[hidden] {
+  display: none;
+}
+
+.manager-assistant__footer-action {
+  min-height: 18px;
+  padding: 1px 5px 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #b35c78;
+  font: 850 9px/1.2 system-ui, -apple-system, sans-serif;
+  cursor: pointer;
 }
 
 .manager-assistant__leave {
@@ -523,6 +553,7 @@ body.modal-open .manager-assistant.is-bubble-visible .manager-assistant__close {
 
 body.modal-open .manager-assistant.is-bubble-visible .manager-assistant__choice,
 body.modal-open .manager-assistant.is-bubble-visible .manager-assistant__link,
+body.modal-open .manager-assistant.is-bubble-visible .manager-assistant__footer-action,
 body.modal-open .manager-assistant.is-bubble-visible .manager-assistant__leave {
   pointer-events: auto;
 }

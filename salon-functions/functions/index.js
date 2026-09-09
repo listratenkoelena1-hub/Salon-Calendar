@@ -216,7 +216,6 @@ return {
   entityType: "appointment",
   entityId: appointmentId,
   client: appointmentData.client,
-  phone: appointmentData.phone || null,
   email,
   bookingDate: appointmentData.date,
   bookingTime: slotToTime(appointmentData.start),
@@ -2418,6 +2417,10 @@ exports.createStaffAuthUser = onCall(
     };
   }
 );
+
+// Buddha client lookup is isolated in its own module so it can be reviewed and
+// deployed function-by-function without replacing unrelated production code.
+Object.assign(exports, require("./client-lookup"));
 
 
 
