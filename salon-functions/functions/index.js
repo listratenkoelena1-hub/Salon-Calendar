@@ -1,4 +1,4 @@
-﻿const { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } =
+﻿const { onDocumentCreated, onDocumentUpdated, onDocumentDeleted, onDocumentWritten } =
 require("firebase-functions/v2/firestore");
 const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
@@ -32,6 +32,34 @@ const {
   releaseAppointmentFromSlots,
   reserveAppointmentSlots
 } = require("./appointment-schedule");
+const {
+  applyHistoryPreferences,
+  getServiceFingerprint,
+  normalizePhone,
+  parseServiceIntent,
+  stripPrivateAppointmentFields,
+  summarizeClientHistory
+} = require("./client-history-core");
+const {
+  APPOINTMENT_PRIVATE_COLLECTION,
+  CLIENT_HISTORY_COLLECTION,
+  CLIENT_PROFILE_COLLECTION,
+  CLIENT_SCHEMA_VERSION,
+  CLIENT_SUMMARY_VERSION,
+  applyClientIdentityPlan,
+  deleteClientAppointmentRecords,
+  getCachedProfileSummary,
+  invalidateClientProfileSummary,
+  loadClientHistoryInTransaction,
+  planClientIdentityInTransaction,
+  readClientContext,
+  readClientIdentity,
+  readPhoneClient,
+  writeClientAppointmentRecords
+} = require("./client-history-store");
+const {
+  getBookingDurationDecision
+} = require("./booking-duration");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -45,21 +73,6 @@ const ANYONE_REQUIRED_DURATION = 4;
 const MAX_PHOTO_LINKS = 2;
 const MAX_REQUEST_TEXT = 1200;
 const BOOKING_DURATION = 4;
-const STAFF_BOOKING_DURATION_DEFAULT_SLOTS = 4;
-const STAFF_BOOKING_DURATION_KEYS = [
-  "manicureNoColor",
-  "pedicureNoColor",
-  "manicureGelPolish",
-  "pedicureGelPolish",
-  "changeColor",
-  "pedicureChangeColor",
-  "refillNoDesign",
-  "extensionsNoDesign",
-  "eyebrowWax",
-  "eyebrowWaxTinting",
-  "eyelashExtensions",
-  "refillLashes"
-];
 const BOOKING_LATEST_START_SLOT = 42; // 6:30 PM
 const BOOKING_MIN_LEAD_MINUTES = 60;
 const SALON_TIME_ZONE = "America/Edmonton";
@@ -98,6 +111,13 @@ const EMAIL_FROM_EMAIL = process.env.EMAIL_FROM_EMAIL || (EMAIL_PROVIDER === "gm
 const GMAIL_APP_PASSWORD = defineSecret("GMAIL_APP_PASSWORD");
 const TWILIO_ACCOUNT_SID = defineSecret("TWILIO_ACCOUNT_SID");
 const TWILIO_AUTH_TOKEN = defineSecret("TWILIO_AUTH_TOKEN");
+const CLIENT_LOOKUP_PEPPER = defineSecret("CLIENT_LOOKUP_PEPPER");
+
+function getClientLookupPepper() {
+  const value = String(CLIENT_LOOKUP_PEPPER.value() || "").trim();
+  if (!value) throw new Error("CLIENT_LOOKUP_PEPPER is not configured.");
+  return value;
+}
 
 /* === ÐÐÐ¡Ð¢Ð ÐžÐ™ÐšÐ˜ TELEGRAM === */
 // Operational pause: keep the Telegram integration intact while preventing
@@ -251,7 +271,6 @@ return {
   entityType: "appointment",
   entityId: appointmentId,
   client: appointmentData.client,
-  phone: appointmentData.phone || null,
   email,
   bookingDate: appointmentData.date,
   bookingTime: slotToTime(appointmentData.start),
@@ -563,13 +582,15 @@ function normalizeServiceGroups(value) {
 function inferServiceGroupsFromText(text) {
   const normalized = String(text || "").toLowerCase();
   const groups = [];
+  const serviceIntent = parseServiceIntent({ serviceDetails: normalized });
 
   if (/brow|eyebrow|tint/.test(normalized)) groups.push("brows");
   if (/lash|eyelash/.test(normalized)) groups.push("lashes");
   if (/wax|waxing/.test(normalized) && !/brow|eyebrow/.test(normalized)) groups.push("waxing");
-  if (/acrylic/.test(normalized)) groups.push("acrylics");
-  if (/pedicure|\bpedi\b/.test(normalized)) groups.push("pedicure");
-  if (/manicure|\bmani\b|nail|gel|shellac|french|design/.test(normalized)) groups.push("manicure");
+  if (/acrylic|акрил/.test(normalized)) groups.push("acrylics");
+  if (serviceIntent.feet) groups.push("pedicure");
+  if (serviceIntent.hands && !/^acrylic/.test(serviceIntent.hands.key || "")) groups.push("manicure");
+  if (!serviceIntent.hands && /nail|gel|shellac|french|design/.test(normalized)) groups.push("manicure");
 
   return [...new Set(groups)];
 }
@@ -583,206 +604,6 @@ function getRequestedServiceGroups(input = {}) {
     : "";
   const inferred = inferServiceGroupsFromText(`${selectedText} ${input.serviceDetails || ""}`);
   return inferred.length ? inferred : [...DEFAULT_BOOKING_SERVICE_GROUPS];
-}
-
-function normalizeDurationSlots(value, fallback = STAFF_BOOKING_DURATION_DEFAULT_SLOTS) {
-  const slots = Number(value);
-  if (!Number.isFinite(slots) || slots <= 0) return fallback;
-  return Math.max(1, Math.min(24, Math.ceil(slots)));
-}
-
-function getStaffBookingDuration(staffRecord, key, fallback = STAFF_BOOKING_DURATION_DEFAULT_SLOTS) {
-  const durations = staffRecord?.bookingDurations && typeof staffRecord.bookingDurations === "object"
-    ? staffRecord.bookingDurations
-    : {};
-  if (!STAFF_BOOKING_DURATION_KEYS.includes(key)) return fallback;
-  return normalizeDurationSlots(durations[key], fallback);
-}
-
-function buildBookingDurationText(input = {}) {
-  const selectedText = Array.isArray(input.selectedServices)
-    ? input.selectedServices.join(" ")
-    : "";
-  return `${selectedText} ${input.serviceDetails || ""}`.toLowerCase();
-}
-
-function textMatches(text, patterns) {
-  return patterns.some(pattern => pattern.test(text));
-}
-
-function getRequestedBookingDurationSegments(input = {}) {
-  const serviceDetails = String(input.serviceDetails || "").trim();
-  if (serviceDetails) {
-    const segments = serviceDetails
-      .split(";")
-      .map(item => item.trim())
-      .filter(Boolean);
-    if (segments.length) return segments;
-  }
-
-  if (Array.isArray(input.selectedServices) && input.selectedServices.length) {
-    return input.selectedServices
-      .map(item => String(item || "").trim())
-      .filter(Boolean);
-  }
-
-  const text = buildBookingDurationText(input).trim();
-  return text ? [text] : [];
-}
-
-function getSegmentZones(text) {
-  const zones = [];
-  const hasFeet = textMatches(text, [/\bpedicure\b/, /\bpedi\b/, /\btoe(s)?\b/, /\btoenail(s)?\b/]);
-  const hasHands = textMatches(text, [/\bmanicure\b/, /\bmani\b/, /\bfingernail(s)?\b/]);
-
-  if (hasHands) zones.push("hands");
-  if (hasFeet) zones.push("feet");
-  return zones;
-}
-
-function addDurationZone(zoneSet, zone) {
-  if (zone) zoneSet.add(zone);
-}
-
-function getRequestedBookingDurationSlots(input = {}, staffRecord = {}) {
-  const requestedGroups = input.requestedGroups || getRequestedServiceGroups(input);
-  const requestText = buildBookingDurationText(input);
-  const hasNailGroups = requestedGroups.some(group => ["manicure", "pedicure", "acrylics"].includes(group));
-
-  if (!hasNailGroups && requestedGroups.includes("brows") && /brow|eyebrow/.test(requestText)) {
-    const key = /tint/.test(requestText) ? "eyebrowWaxTinting" : "eyebrowWax";
-    return getStaffBookingDuration(staffRecord, key);
-  }
-
-  if (!hasNailGroups && requestedGroups.includes("lashes") && /lash|eyelash/.test(requestText)) {
-    const key = /refill/.test(requestText) ? "refillLashes" : "eyelashExtensions";
-    return getStaffBookingDuration(staffRecord, key);
-  }
-
-  const hasLashesOrWaxingOnly =
-    requestedGroups.some(group => ["lashes", "waxing", "brows"].includes(group)) &&
-    !hasNailGroups;
-  if (hasLashesOrWaxingOnly) return BOOKING_DURATION;
-
-  const segments = getRequestedBookingDurationSegments(input);
-
-  let handsMain = 0;
-  let feetMain = 0;
-  let removingAddOn = 0;
-  let otherAddOns = 0;
-  let hasOneNailExtensionOnly = false;
-  const frenchZones = new Set();
-  const designZones = new Set();
-
-  segments.forEach(rawSegment => {
-    const segment = String(rawSegment || "").toLowerCase();
-    if (!segment) return;
-
-    const zones = getSegmentZones(segment);
-    const hasHandsZone = zones.includes("hands");
-    const hasFeetZone = zones.includes("feet");
-    const defaultNailZone = hasFeetZone ? "feet" : "hands";
-
-    const hasGel = textMatches(segment, [/\bgel\b/, /\bshellac\b/, /\bgel\s*polish\b/]);
-    const hasDeluxe = textMatches(segment, [/\bdeluxe\b/]);
-    const hasNoColor = textMatches(segment, [/\bno\s*colou?r\b/, /\bno\s*polish\b/, /\bwithout\s*colou?r\b/, /\bcleaning\s*only\b/]);
-    const hasChangeColor = textMatches(segment, [/\bchange\s*colou?r\b/, /\bpolish\s*change\b/, /\bcolour\s*change\b/, /\bapply\s*gel\s*polish\b/]);
-    const hasRefill = textMatches(segment, [/\brefill\b/, /\bfill\b/]);
-    const hasExtensions = textMatches(segment, [/\bextension(s)?\b/, /\bnew\s*set\b/, /\bfull\s*set\b/]);
-    const hasGelOverlay = textMatches(segment, [/\bgel\s*overlay\b/, /\boverlay\b/, /\bbuilder\s*gel\b/, /\bhard\s*gel\b/]);
-    const hasOneNailExtension = textMatches(segment, [/\bone\s*nail\s*extension\b/]);
-    const hasManicure = hasHandsZone || textMatches(segment, [/\bmanicure\b/, /\bmani\b/]);
-    const hasPedicure = hasFeetZone || textMatches(segment, [/\bpedicure\b/, /\bpedi\b/]);
-    const isCombo = hasManicure && hasPedicure;
-    const wantsRemoving = textMatches(segment, [/\bremov(e|ing|al)\b/, /\btake\s*off\b/]);
-    const isStandaloneRemoving = wantsRemoving &&
-      !isCombo &&
-      !hasManicure &&
-      !hasPedicure &&
-      !hasRefill &&
-      !(hasExtensions && !hasOneNailExtension) &&
-      !hasChangeColor;
-
-    if (!isStandaloneRemoving && isCombo) {
-      if (hasGel && !hasNoColor) {
-        handsMain = Math.max(handsMain, getStaffBookingDuration(staffRecord, "manicureGelPolish"));
-        feetMain = Math.max(feetMain, getStaffBookingDuration(staffRecord, "pedicureGelPolish"));
-      } else {
-        handsMain = Math.max(handsMain, getStaffBookingDuration(staffRecord, "manicureNoColor"));
-        feetMain = Math.max(feetMain, getStaffBookingDuration(staffRecord, hasDeluxe && !hasNoColor ? "pedicureGelPolish" : "pedicureNoColor"));
-      }
-    } else if (!isStandaloneRemoving && hasFeetZone) {
-      if (hasExtensions || hasRefill) {
-        feetMain = Math.max(feetMain, BOOKING_DURATION);
-      }
-      if (hasChangeColor) {
-        feetMain = Math.max(feetMain, getStaffBookingDuration(staffRecord, "pedicureChangeColor"));
-      }
-      if (hasPedicure) {
-        feetMain = Math.max(
-          feetMain,
-          getStaffBookingDuration(staffRecord, (hasGel || hasDeluxe) && !hasNoColor ? "pedicureGelPolish" : "pedicureNoColor")
-        );
-      }
-    } else if (!isStandaloneRemoving && (hasHandsZone || hasRefill || hasExtensions || hasGelOverlay || hasChangeColor || textMatches(segment, [/\bnail(s)?\b/]))) {
-      if (hasRefill) {
-        handsMain = Math.max(handsMain, getStaffBookingDuration(staffRecord, "refillNoDesign"));
-      }
-      if (hasExtensions && !hasOneNailExtension) {
-        handsMain = Math.max(handsMain, getStaffBookingDuration(staffRecord, "extensionsNoDesign"));
-      }
-      if (hasGelOverlay) {
-        handsMain = Math.max(handsMain, BOOKING_DURATION);
-      }
-      if (hasChangeColor) {
-        handsMain = Math.max(handsMain, getStaffBookingDuration(staffRecord, "changeColor"));
-      }
-      if (hasManicure) {
-        handsMain = Math.max(
-          handsMain,
-          getStaffBookingDuration(staffRecord, hasGel && !hasNoColor ? "manicureGelPolish" : "manicureNoColor")
-        );
-      }
-    }
-
-    if (isStandaloneRemoving) {
-      if (textMatches(segment, [/\bacrylic\b/, /\bextension(s)?\b/, /\bnail(s)?\b/])) removingAddOn = Math.max(removingAddOn, 2);
-      else if (textMatches(segment, [/\bbuilder\s*gel\b/, /\bhard\s*gel\b/])) removingAddOn = Math.max(removingAddOn, 2);
-      else if (textMatches(segment, [/\bgel\b/, /\bshellac\b/, /\bcolou?r\b/])) removingAddOn = Math.max(removingAddOn, 1);
-    }
-
-    const hasFrench = textMatches(segment, [/\bfrench\b/, /\bwhite\s*tips?\b/]);
-    if (hasFrench) {
-      if (hasHandsZone) addDurationZone(frenchZones, "hands");
-      else if (hasFeetZone) addDurationZone(frenchZones, "feet");
-      else addDurationZone(frenchZones, defaultNailZone);
-    }
-
-    const hasDesign = !hasFrench && textMatches(segment, [/\bdesign\b/, /\bnail\s*art\b/, /\bart\b/, /\bombre\b/, /\bchrome\b/, /\bcat\s*eye\b/, /\bglitter\b/, /\bfloral\b/]);
-    if (hasDesign) {
-      if (hasHandsZone) addDurationZone(designZones, "hands");
-      else if (hasFeetZone) addDurationZone(designZones, "feet");
-      else addDurationZone(designZones, defaultNailZone);
-    }
-
-    if (hasOneNailExtension) hasOneNailExtensionOnly = true;
-    if (textMatches(segment, [/\bparaffin\b/])) otherAddOns += 1;
-    if (textMatches(segment, [/\bcut\s*nails?\b/, /\bcut\s*toe\s*nails?\b/, /\bnail\s*trim\b/, /\btoenail\s*trim\b/])) otherAddOns += 1;
-    if (textMatches(segment, [/\bchange\s*nails?\s*shape\b/, /\breshape\b/])) otherAddOns += 1;
-  });
-
-  let total = handsMain + feetMain + removingAddOn + otherAddOns;
-
-  if (hasOneNailExtensionOnly && handsMain === 0) total += 1;
-
-  const frenchCount = Math.max(0, frenchZones.size);
-  if (frenchCount) {
-    total += frenchCount;
-  }
-
-  total += designZones.size;
-
-  return total > 0 ? Math.max(1, Math.min(24, total)) : BOOKING_DURATION;
 }
 
 function isActiveStaffRecord(staffRecord) {
@@ -941,7 +762,8 @@ function normalizeOptionalText(value, field, max) {
 function sanitizeAppointmentForm(input, actor) {
   const raw = input && typeof input === "object" ? input : {};
   const staffId = assertString(raw.staffId, "staffId", { min: 1, max: 100 });
-  const phone = normalizeOptionalText(raw.phone, "phone", 40);
+  const submittedPhone = normalizeOptionalText(raw.phone, "phone", 40);
+  const phone = actor.role === "manager" ? submittedPhone : null;
   const groupTagInput = normalizeOptionalText(raw.groupTag, "groupTag", 40);
   const groupTag = actor.role === "manager" && groupTagInput && /^[A-Za-z0-9_-]+$/.test(groupTagInput)
     ? groupTagInput
@@ -1131,6 +953,14 @@ async function getAuthorizedCalendarActor(request) {
   return { uid: request.auth.uid, role, staffId, label };
 }
 
+async function requireManagerActor(request) {
+  const actor = await getAuthorizedCalendarActor(request);
+  if (actor.role !== "manager") {
+    throw new HttpsError("permission-denied", "Manager access is required.");
+  }
+  return actor;
+}
+
 function getAnyoneRemainingCapacity({
   date,
   start,
@@ -1138,22 +968,34 @@ function getAnyoneRemainingCapacity({
   staffRecords,
   offWorkRecords,
   weeklyOffRecords,
-  requestedGroups = DEFAULT_BOOKING_SERVICE_GROUPS
+  requestedGroups = DEFAULT_BOOKING_SERVICE_GROUPS,
+  durationInput = {},
+  clientSummary = null
 }) {
-  const end = start + ANYONE_REQUIRED_DURATION;
   const realStaff = staffRecords
     .filter(s => s.id && s.id !== ANYONE_ID)
     .filter(s => s.bookingEnabled !== false)
     .filter(s => s.availableForAnyone !== false)
-    .filter(s => staffCanDoServiceGroups(s, requestedGroups));
+    .filter(s => staffCanDoServiceGroups(s, requestedGroups))
+    .map(s => ({
+      ...s,
+      requestedDuration: getBookingDurationDecision({
+        ...durationInput,
+        requestedGroups
+      }, s, clientSummary).duration
+    }));
   const availableStaffCount = realStaff.filter(s => realStaffAvailable({
     staffId: s.id,
     date,
     start,
-    end,
+    end: start + s.requestedDuration,
     appointments,
     offWorkRecords,
     weeklyOffRecords
+  }) && isBookableOnlineStart({
+    date,
+    start,
+    duration: s.requestedDuration
   })).length;
 
   const existingAnyoneCount = appointments.filter(a => {
@@ -1161,7 +1003,12 @@ function getAnyoneRemainingCapacity({
     if (a.staffId !== ANYONE_ID) return false;
     if (a.date !== date) return false;
     const anyoneStart = Number(a.start);
-    return rangesOverlap(start, end, anyoneStart, anyoneStart + ANYONE_REQUIRED_DURATION);
+    return rangesOverlap(
+      start,
+      start + ANYONE_REQUIRED_DURATION,
+      anyoneStart,
+      anyoneStart + ANYONE_REQUIRED_DURATION
+    );
   }).length;
 
   return availableStaffCount - existingAnyoneCount;
@@ -1174,7 +1021,8 @@ function getAvailabilityForDate({
   appointments,
   staffRecords,
   offWorkRecords,
-  weeklyOffRecords
+  weeklyOffRecords,
+  clientSummary = null
 }) {
   const hours = getSalonBookingHours(date);
   const minBookableSlot = Math.max(hours.start, getMinimumBookableSlot(date));
@@ -1183,17 +1031,17 @@ function getAvailabilityForDate({
     .filter(s => s.id && s.id !== ANYONE_ID)
     .filter(s => s.bookingEnabled !== false)
     .map(s => {
-      const requestedDuration = getRequestedBookingDurationSlots({
+      const durationDecision = getBookingDurationDecision({
         ...durationInput,
         requestedGroups
-      }, s);
+      }, s, clientSummary);
       return {
         id: s.id,
         name: s.name || "Staff",
         availableForAnyone: s.availableForAnyone !== false,
         serviceGroups: getStaffServiceGroups(s),
         canDoRequestedServices: staffCanDoServiceGroups(s, requestedGroups),
-        requestedDuration
+        requestedDuration: durationDecision.duration
       };
     });
 
@@ -1219,10 +1067,12 @@ function getAvailabilityForDate({
           date,
           start: slot,
           appointments,
-          staffRecords: realStaff,
+          staffRecords,
           offWorkRecords,
           weeklyOffRecords,
-          requestedGroups
+          requestedGroups,
+          durationInput,
+          clientSummary
         })
       : 0;
 
@@ -1240,7 +1090,11 @@ function getAvailabilityForDate({
   return {
     date,
     serviceGroups: requestedGroups,
-    staff: realStaff,
+    staff: realStaff.map(member => ({
+      id: member.id,
+      name: member.name,
+      serviceGroups: member.serviceGroups
+    })),
     times
   };
 }
@@ -1630,7 +1484,8 @@ async function readPhotoReviewFiles(files) {
 exports.mutateAppointment = onCall(
   {
     region: "us-central1",
-    maxInstances: 10
+    maxInstances: 10,
+    secrets: [CLIENT_LOOKUP_PEPPER]
   },
   async (request) => {
     const actor = await getAuthorizedCalendarActor(request);
@@ -1649,6 +1504,7 @@ exports.mutateAppointment = onCall(
     }
 
     const appointmentRef = db.collection("appointments").doc(appointmentId);
+    const privateAppointmentRef = db.collection(APPOINTMENT_PRIVATE_COLLECTION).doc(appointmentId);
 
     return db.runTransaction(async tx => {
       const appointmentSnap = await tx.get(appointmentRef);
@@ -1664,7 +1520,8 @@ exports.mutateAppointment = onCall(
           duplicate: true,
           appointmentId,
           revision: Number(before.revision) || 0,
-          lastAction: before.lastAction || null
+          lastAction: before.lastAction || null,
+          hasPrivateContact: before.hasPrivateContact === true
         };
       }
 
@@ -1683,6 +1540,13 @@ exports.mutateAppointment = onCall(
           { reason: "stale-revision", currentRevision }
         );
       }
+
+      const privateAppointmentSnap = before?.hasPrivateContact === true
+        ? await tx.get(privateAppointmentRef)
+        : null;
+      const beforePrivate = privateAppointmentSnap?.exists
+        ? privateAppointmentSnap.data() || {}
+        : null;
 
       let after = null;
       let lastAction = null;
@@ -1708,7 +1572,12 @@ exports.mutateAppointment = onCall(
 
         const safeForm = actor.role === "manager"
           ? form
-          : { ...form, groupTag: before.groupTag || null };
+          : {
+              ...form,
+              groupTag: before.groupTag || null,
+              phone: before.phone || null,
+              phoneLookup: before.phoneLookup || null
+            };
         after = { ...before, ...safeForm };
 
         if (isDeclinedOnlineRequest(before)) {
@@ -1729,7 +1598,12 @@ exports.mutateAppointment = onCall(
         }
         const safeForm = actor.role === "manager"
           ? form
-          : { ...form, groupTag: before.groupTag || null };
+          : {
+              ...form,
+              groupTag: before.groupTag || null,
+              phone: before.phone || null,
+              phoneLookup: before.phoneLookup || null
+            };
         after = {
           ...before,
           ...safeForm,
@@ -1751,7 +1625,12 @@ exports.mutateAppointment = onCall(
         }
         const safeForm = actor.role === "manager"
           ? form
-          : { ...form, groupTag: before.groupTag || null };
+          : {
+              ...form,
+              groupTag: before.groupTag || null,
+              phone: before.phone || null,
+              phoneLookup: before.phoneLookup || null
+            };
         after = {
           ...before,
           ...safeForm,
@@ -1769,17 +1648,90 @@ exports.mutateAppointment = onCall(
         lastAction = "delete";
       }
 
+      if (before?.hasPrivateContact === true && !beforePrivate) {
+        throw new HttpsError("failed-precondition", "Private appointment contact is unavailable.");
+      }
+
+      const managerSubmittedPhone = actor.role === "manager"
+        ? String(form?.phone || "").trim()
+        : "";
+      const normalizedManagerPhone = normalizePhone(managerSubmittedPhone);
+      const isPrivateSchemaAppointment = Number(before?.privacySchemaVersion) >= CLIENT_SCHEMA_VERSION;
+      const isLegacyOnlineActivation = Boolean(
+        after &&
+        !beforePrivate &&
+        !isPrivateSchemaAppointment &&
+        mode !== "delete" &&
+        (before?.source === "online_booking" || before?.type === "online_booking_request")
+      );
+      const legacyOnlineActivationPhone = isLegacyOnlineActivation
+        ? (actor.role === "manager" ? managerSubmittedPhone : String(before?.phone || ""))
+        : "";
+      const managerClearedPrivateContact = Boolean(
+        after && actor.role === "manager" && beforePrivate && !managerSubmittedPhone
+      );
+      if (after && actor.role === "manager" && managerSubmittedPhone && !normalizedManagerPhone) {
+        throw new HttpsError("invalid-argument", "Please enter a valid phone number.");
+      }
+      const shouldCreatePrivateContact = Boolean(
+        after &&
+        (
+          (
+            actor.role === "manager" &&
+            normalizedManagerPhone
+          ) ||
+          normalizePhone(legacyOnlineActivationPhone)
+        )
+      );
+      const shouldKeepPrivateContact = Boolean(beforePrivate && !managerClearedPrivateContact);
+      const effectivePrivatePhone = actor.role === "manager"
+        ? managerSubmittedPhone
+        : (beforePrivate?.phoneDisplay || beforePrivate?.phoneNormalized || legacyOnlineActivationPhone);
+      let clientIdentity = null;
+      if (after && (shouldCreatePrivateContact || shouldKeepPrivateContact)) {
+        clientIdentity = await planClientIdentityInTransaction({
+          transaction: tx,
+          db,
+          FieldValue,
+          pepper: getClientLookupPepper(),
+          phone: effectivePrivatePhone,
+          clientName: after.client,
+          allowCreate: true,
+          allowCloseNameMatch: true
+        });
+        if (!clientIdentity) {
+          throw new HttpsError("invalid-argument", "A valid phone number is required for this client.");
+        }
+        after = stripPrivateAppointmentFields({
+          ...after,
+          privacySchemaVersion: CLIENT_SCHEMA_VERSION,
+          hasPrivateContact: true
+        });
+      } else if (after && (mode === "create" || isPrivateSchemaAppointment || beforePrivate)) {
+        after = stripPrivateAppointmentFields({
+          ...after,
+          privacySchemaVersion: CLIENT_SCHEMA_VERSION,
+          hasPrivateContact: false
+        });
+      }
+
       const mustValidatePlacement = Boolean(
         appointmentUsesSchedule(after, ANYONE_ID) &&
         !hasSameScheduledPlacement(before, after)
       );
 
-      if (mustValidatePlacement) {
+      let targetStaffRecord = null;
+      if (after?.staffId && after.staffId !== ANYONE_ID && (mustValidatePlacement || clientIdentity)) {
         const targetStaffSnap = await tx.get(db.collection("staff").doc(after.staffId));
-        if (!targetStaffSnap.exists || targetStaffSnap.data()?.active === false) {
+        targetStaffRecord = targetStaffSnap.exists
+          ? { id: targetStaffSnap.id, ...targetStaffSnap.data() }
+          : null;
+        if (mustValidatePlacement && (!targetStaffRecord || targetStaffRecord.active === false)) {
           throw new HttpsError("failed-precondition", "Selected technician is not active.");
         }
+      }
 
+      if (mustValidatePlacement) {
         const offWorkSnap = await tx.get(db.collection("OffWork").where("date", "==", after.date));
         const weeklyOffSnap = await tx.get(db.collection("WeeklyOff").where("staffId", "==", after.staffId));
         const offWorkRecords = offWorkSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
@@ -1802,10 +1754,69 @@ exports.mutateAppointment = onCall(
 
       const scheduleStates = await loadAppointmentScheduleStates(tx, [before, after].filter(Boolean));
       updateAppointmentScheduleStates(scheduleStates, before, after, appointmentId);
+
+      if (after && clientIdentity) {
+        const excludeCurrentHistory = Boolean(
+          before && !isPendingOnlineRequest(before) && !isDeclinedOnlineRequest(before)
+        );
+        const cachedClientSummary = excludeCurrentHistory
+          ? null
+          : getCachedProfileSummary(clientIdentity.profileData);
+        const clientHistory = clientIdentity.clientProfileId && !cachedClientSummary
+          ? await loadClientHistoryInTransaction(tx, db, clientIdentity.clientProfileId)
+          : [];
+        const clientSummary = cachedClientSummary || (
+          clientHistory.length
+            ? summarizeClientHistory(clientHistory.filter(record => (
+                String(record.appointmentId || record.id || "") !== appointmentId
+              )))
+            : null
+        );
+        const serviceTextWasEdited = Boolean(
+          before && String(before.note || "") !== String(after.note || "")
+        );
+        if (serviceTextWasEdited) after.selectedServices = [];
+        const serviceInput = {
+          selectedServices: serviceTextWasEdited
+            ? []
+            : (Array.isArray(after.selectedServices) ? after.selectedServices : []),
+          serviceDetails: after.note || "",
+          requestedGroups: getRequestedServiceGroups({
+            selectedServices: Array.isArray(after.selectedServices) ? after.selectedServices : [],
+            serviceDetails: after.note || ""
+          })
+        };
+        const requestedServiceIntent = parseServiceIntent(serviceInput);
+        const durationDecision = targetStaffRecord
+          ? getBookingDurationDecision(serviceInput, targetStaffRecord, clientSummary)
+          : null;
+        const effectiveServiceIntent = durationDecision?.effectiveIntent ||
+          applyHistoryPreferences(requestedServiceIntent, clientSummary);
+        after.serviceIntent = effectiveServiceIntent;
+        after.serviceFingerprint = getServiceFingerprint(effectiveServiceIntent);
+        after.bookingStandardDuration = durationDecision?.standardDuration ||
+          Number(after.bookingStandardDuration) ||
+          Number(after.duration) ||
+          null;
+      }
+
       writeAppointmentScheduleStates(tx, scheduleStates);
+
+      if (
+        beforePrivate?.clientProfileId &&
+        String(beforePrivate.clientProfileId) !== String(clientIdentity?.clientProfileId || "")
+      ) {
+        invalidateClientProfileSummary(
+          tx,
+          db,
+          FieldValue,
+          beforePrivate.clientProfileId
+        );
+      }
 
       if (mode === "delete") {
         tx.delete(appointmentRef);
+        deleteClientAppointmentRecords(tx, db, appointmentId);
       } else {
         const nextRevision = currentRevision + 1;
         after.lastEditedBy = actor.label;
@@ -1814,7 +1825,19 @@ exports.mutateAppointment = onCall(
         after.lastMutationId = mutationId;
         after.lastMutationMode = mode;
         after.revision = nextRevision;
+        if (clientIdentity) applyClientIdentityPlan(tx, clientIdentity, FieldValue);
         tx.set(appointmentRef, after);
+        if (clientIdentity) {
+          writeClientAppointmentRecords(tx, {
+            db,
+            FieldValue,
+            appointmentId,
+            appointment: after,
+            identity: clientIdentity
+          });
+        } else if (beforePrivate) {
+          deleteClientAppointmentRecords(tx, db, appointmentId);
+        }
       }
 
       return {
@@ -1822,9 +1845,358 @@ exports.mutateAppointment = onCall(
         duplicate: false,
         appointmentId,
         revision: mode === "delete" ? currentRevision : currentRevision + 1,
-        lastAction
+        lastAction,
+        hasPrivateContact: mode !== "delete" && Boolean(clientIdentity)
       };
     });
+  }
+);
+
+exports.managerGetAppointmentContact = onCall(
+  {
+    region: "us-central1",
+    maxInstances: 10
+  },
+  async request => {
+    await requireManagerActor(request);
+    const appointmentId = assertAppointmentToken(
+      request.data?.appointmentId,
+      "appointmentId",
+      { min: 12, max: 100 }
+    );
+    const [privateSnapshot, appointmentSnapshot] = await Promise.all([
+      db.collection(APPOINTMENT_PRIVATE_COLLECTION).doc(appointmentId).get(),
+      db.collection("appointments").doc(appointmentId).get()
+    ]);
+    if (!appointmentSnapshot.exists) {
+      throw new HttpsError("not-found", "Appointment no longer exists.");
+    }
+    const privateData = privateSnapshot.exists ? privateSnapshot.data() || {} : {};
+    const legacyData = appointmentSnapshot.data() || {};
+    return {
+      ok: true,
+      appointmentId,
+      phone: String(privateData.phoneDisplay || privateData.phoneNormalized || legacyData.phone || ""),
+      hasPrivateContact: privateSnapshot.exists,
+      hasClientHistory: Boolean(privateData.clientProfileId)
+    };
+  }
+);
+
+function sortAppointmentsNewestFirst(left, right) {
+  return String(right?.date || "").localeCompare(String(left?.date || "")) ||
+    Number(right?.start || 0) - Number(left?.start || 0);
+}
+
+function serializeManagerLookupAppointment(appointment, phone) {
+  return {
+    ...stripPrivateAppointmentFields(appointment),
+    id: String(appointment?.id || ""),
+    phone: String(phone || "")
+  };
+}
+
+function buildManagerPhoneProfiles(phoneClient, historyRecords, legacyAppointments) {
+  const recordsByProfile = new Map();
+  historyRecords.forEach(record => {
+    const profileId = String(record?.clientProfileId || "");
+    if (!profileId) return;
+    if (!recordsByProfile.has(profileId)) recordsByProfile.set(profileId, []);
+    recordsByProfile.get(profileId).push(record);
+  });
+
+  const profiles = (phoneClient?.profiles || []).map(profile => {
+    const records = recordsByProfile.get(profile.id) || [];
+    const latest = [...records].sort(sortAppointmentsNewestFirst)[0] || null;
+    return {
+      displayName: String(profile.displayName || ""),
+      aliases: Array.isArray(profile.aliases) ? profile.aliases.map(String).slice(0, 12) : [],
+      appointmentCount: records.length || Math.max(0, Number(profile.historyRecordCount) || 0),
+      latestAppointment: latest ? buildManagerClientHistoryAppointment(latest) : null
+    };
+  });
+
+  const knownNames = new Set(profiles.flatMap(profile => [
+    normalizeClientName(profile.displayName),
+    ...profile.aliases.map(normalizeClientName)
+  ]).filter(Boolean));
+  const legacyByName = new Map();
+  legacyAppointments.forEach(appointment => {
+    const displayName = String(appointment?.client || "").trim();
+    const key = normalizeClientName(displayName);
+    if (!key || knownNames.has(key)) return;
+    const current = legacyByName.get(key) || { displayName, appointments: [] };
+    current.appointments.push(appointment);
+    legacyByName.set(key, current);
+  });
+  legacyByName.forEach(value => {
+    const latest = [...value.appointments].sort(sortAppointmentsNewestFirst)[0] || null;
+    profiles.push({
+      displayName: value.displayName,
+      aliases: [],
+      appointmentCount: value.appointments.length,
+      latestAppointment: latest ? buildManagerClientHistoryAppointment(latest) : null,
+      legacy: true
+    });
+  });
+
+  return profiles.sort((left, right) => (
+    Number(right.appointmentCount || 0) - Number(left.appointmentCount || 0) ||
+    String(left.displayName || "").localeCompare(String(right.displayName || ""))
+  ));
+}
+
+exports.managerLookupClientByPhone = onCall(
+  {
+    region: "us-central1",
+    maxInstances: 8,
+    secrets: [CLIENT_LOOKUP_PEPPER]
+  },
+  async request => {
+    await requireManagerActor(request);
+    const submittedPhone = assertString(request.data?.phone, "phone", { min: 7, max: 30 });
+    const phoneNormalized = normalizePhone(submittedPhone);
+    if (!phoneNormalized) {
+      throw new HttpsError("invalid-argument", "Please enter a complete phone number.");
+    }
+    const includeAppointments = request.data?.includeAppointments === true;
+    const phoneDigits = normalizePhoneDigits(phoneNormalized);
+    const phoneClient = await readPhoneClient({
+      db,
+      pepper: getClientLookupPepper(),
+      phone: phoneNormalized
+    });
+
+    const historySnapshot = phoneClient && includeAppointments
+      ? await db.collection(CLIENT_HISTORY_COLLECTION)
+          .where("clientId", "==", phoneClient.clientId)
+          .limit(120)
+          .get()
+      : null;
+    const historyRecords = historySnapshot
+      ? historySnapshot.docs.map(document => ({ id: document.id, ...document.data() }))
+      : [];
+
+    const legacyQueries = [];
+    const shouldReadLegacyAppointments = includeAppointments || !phoneClient;
+    if (shouldReadLegacyAppointments && phoneDigits) {
+      legacyQueries.push(
+        db.collection("appointments").where("phoneLookup", "==", phoneDigits).limit(120).get()
+      );
+    }
+    const phoneVariants = buildPhoneLookupVariants(submittedPhone).slice(0, 10);
+    if (shouldReadLegacyAppointments && phoneVariants.length) {
+      legacyQueries.push(
+        db.collection("appointments").where("phone", "in", phoneVariants).limit(120).get()
+      );
+    }
+    const legacySnapshots = await Promise.all(legacyQueries);
+    const legacyAppointmentsById = new Map();
+    legacySnapshots.forEach(snapshot => snapshot.docs.forEach(document => {
+      legacyAppointmentsById.set(document.id, { id: document.id, ...document.data() });
+    }));
+    const legacyAppointments = [...legacyAppointmentsById.values()];
+
+    let appointments = [];
+    if (includeAppointments) {
+      const appointmentIds = [...new Set([
+        ...historyRecords.map(record => record.appointmentId || record.id),
+        ...legacyAppointments.map(appointment => appointment.id)
+      ].map(String).filter(Boolean))].slice(0, 120);
+      const appointmentsById = new Map(legacyAppointments.map(appointment => [appointment.id, appointment]));
+      for (let index = 0; index < appointmentIds.length; index += 50) {
+        const missingIds = appointmentIds
+          .slice(index, index + 50)
+          .filter(id => !appointmentsById.has(id));
+        if (!missingIds.length) continue;
+        const snapshots = await db.getAll(
+          ...missingIds.map(id => db.collection("appointments").doc(id))
+        );
+        snapshots.forEach(snapshot => {
+          if (snapshot.exists) appointmentsById.set(snapshot.id, { id: snapshot.id, ...snapshot.data() });
+        });
+      }
+      const displayPhone = String(phoneClient?.client?.phoneDisplay || submittedPhone).trim();
+      appointments = [...appointmentsById.values()]
+        .sort(sortAppointmentsNewestFirst)
+        .slice(0, 120)
+        .map(appointment => serializeManagerLookupAppointment(
+          appointment,
+          appointment.hasPrivateContact === true ? displayPhone : (appointment.phone || displayPhone)
+        ));
+    }
+
+    const profiles = buildManagerPhoneProfiles(phoneClient, historyRecords, legacyAppointments);
+    return {
+      ok: true,
+      found: Boolean(phoneClient || legacyAppointments.length),
+      phone: String(phoneClient?.client?.phoneDisplay || submittedPhone).trim(),
+      hasPrivateClient: Boolean(phoneClient),
+      profiles,
+      appointments
+    };
+  }
+);
+
+exports.managerGetActivityLogContacts = onCall(
+  {
+    region: "us-central1",
+    maxInstances: 6
+  },
+  async request => {
+    await requireManagerActor(request);
+    const logDate = assertDate(request.data?.logDate);
+    const logSnapshot = await db.collection("activityLog")
+      .where("logDate", "==", logDate)
+      .limit(150)
+      .get();
+    const appointmentIds = [...new Set(logSnapshot.docs
+      .map(document => document.data() || {})
+      .filter(entry => entry.entityType === "appointment")
+      .map(entry => String(entry.entityId || ""))
+      .filter(id => /^[A-Za-z0-9_-]{12,100}$/.test(id))
+    )];
+    const contacts = [];
+    for (let index = 0; index < appointmentIds.length; index += 50) {
+      const ids = appointmentIds.slice(index, index + 50);
+      const snapshots = await db.getAll(
+        ...ids.map(id => db.collection(APPOINTMENT_PRIVATE_COLLECTION).doc(id))
+      );
+      snapshots.forEach(snapshot => {
+        if (!snapshot.exists) return;
+        const data = snapshot.data() || {};
+        contacts.push({
+          appointmentId: snapshot.id,
+          phone: String(data.phoneDisplay || data.phoneNormalized || "")
+        });
+      });
+    }
+    return { ok: true, logDate, contacts };
+  }
+);
+
+function buildManagerClientHistoryAppointment(appointment) {
+  const status = appointment.status === "declined"
+    ? "Declined"
+    : (appointment.noShow === true
+        ? "No-show"
+        : (appointment.canceled === true ? "Canceled" : ""));
+  return {
+    id: appointment.id,
+    date: String(appointment.date || ""),
+    start: Number(appointment.start) || 0,
+    duration: Number(appointment.duration) || 0,
+    staffId: String(appointment.staffId || ""),
+    client: String(appointment.client || ""),
+    note: String(appointment.note || ""),
+    status,
+    source: appointment.source === "online_booking" ? "online_booking" : "calendar"
+  };
+}
+
+exports.managerGetClientHistory = onCall(
+  {
+    region: "us-central1",
+    maxInstances: 8
+  },
+  async request => {
+    await requireManagerActor(request);
+    const appointmentId = assertAppointmentToken(
+      request.data?.appointmentId,
+      "appointmentId",
+      { min: 12, max: 100 }
+    );
+    const privateSnapshot = await db.collection(APPOINTMENT_PRIVATE_COLLECTION).doc(appointmentId).get();
+    if (!privateSnapshot.exists || !privateSnapshot.data()?.clientProfileId) {
+      return { ok: true, appointmentId, available: false, past: [], future: [], totalCount: 0 };
+    }
+    const privateData = privateSnapshot.data() || {};
+    const historySnapshot = await db.collection(CLIENT_HISTORY_COLLECTION)
+      .where("clientProfileId", "==", String(privateData.clientProfileId))
+      .limit(120)
+      .get();
+    const appointmentIds = historySnapshot.docs
+      .map(document => document.id)
+      .filter(id => id !== appointmentId);
+    const appointments = [];
+    for (let index = 0; index < appointmentIds.length; index += 50) {
+      const snapshots = await db.getAll(
+        ...appointmentIds.slice(index, index + 50).map(id => db.collection("appointments").doc(id))
+      );
+      snapshots.forEach(snapshot => {
+        if (snapshot.exists) appointments.push({ id: snapshot.id, ...snapshot.data() });
+      });
+    }
+    const today = getSalonNowParts().date;
+    const past = appointments
+      .filter(item => String(item.date || "") < today)
+      .sort((left, right) => String(right.date).localeCompare(String(left.date)) || Number(right.start) - Number(left.start));
+    const future = appointments
+      .filter(item => String(item.date || "") >= today)
+      .sort((left, right) => String(left.date).localeCompare(String(right.date)) || Number(left.start) - Number(right.start));
+    const summary = summarizeClientHistory(historySnapshot.docs.map(document => ({
+      id: document.id,
+      ...document.data()
+    })));
+    return {
+      ok: true,
+      appointmentId,
+      available: true,
+      phone: String(privateData.phoneDisplay || privateData.phoneNormalized || ""),
+      summary,
+      past: past.slice(0, 10).map(buildManagerClientHistoryAppointment),
+      future: future.slice(0, 10).map(buildManagerClientHistoryAppointment),
+      totalCount: appointments.length
+    };
+  }
+);
+
+exports.clientHistorySummaryUpdated = onDocumentWritten(
+  {
+    document: `${CLIENT_HISTORY_COLLECTION}/{appointmentId}`,
+    region: "us-central1",
+    maxInstances: 6
+  },
+  async event => {
+    const before = event.data?.before?.exists ? event.data.before.data() || {} : {};
+    const after = event.data?.after?.exists ? event.data.after.data() || {} : {};
+    const profileIds = [...new Set([
+      String(before.clientProfileId || ""),
+      String(after.clientProfileId || "")
+    ].filter(Boolean))];
+
+    const afterUpdateTime = event.data?.after?.updateTime;
+    const summaryEventMillis = afterUpdateTime?.toMillis
+      ? afterUpdateTime.toMillis()
+      : (Date.parse(String(event.time || "")) || Date.now());
+    await Promise.all(profileIds.map(async clientProfileId => {
+      const historySnapshot = await db.collection(CLIENT_HISTORY_COLLECTION)
+        .where("clientProfileId", "==", clientProfileId)
+        .limit(120)
+        .get();
+      const records = historySnapshot.docs.map(document => ({
+        id: document.id,
+        ...document.data()
+      }));
+      const profileRef = db.collection(CLIENT_PROFILE_COLLECTION).doc(clientProfileId);
+      const summary = summarizeClientHistory(records);
+      await db.runTransaction(async transaction => {
+        const profileSnapshot = await transaction.get(profileRef);
+        const previousEventMillis = Number(profileSnapshot.data()?.historySummaryEventMillis) || 0;
+        const dirtyAt = profileSnapshot.data()?.historySummaryDirtyAt;
+        const dirtyAtMillis = dirtyAt?.toMillis ? dirtyAt.toMillis() : 0;
+        if (previousEventMillis > summaryEventMillis || dirtyAtMillis > summaryEventMillis) return;
+        transaction.set(profileRef, {
+          historySummaryVersion: CLIENT_SUMMARY_VERSION,
+          historySummary: summary,
+          historyRecordCount: records.length,
+          historySummaryTruncated: historySnapshot.size >= 120,
+          historySummaryEventMillis: summaryEventMillis,
+          historySummaryDirtyAt: FieldValue.delete(),
+          historySummaryUpdatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+      });
+    }));
   }
 );
 
@@ -1936,7 +2308,19 @@ function maskBookingPhone(phoneDigits) {
   return `••• ••• ${String(phoneDigits || "").slice(-4) || "0000"}`;
 }
 
-async function loadUpcomingAppointmentsForClient({ phone, phoneDigits, clientName }) {
+function isUpcomingOnlineAppointmentRecord(appointment, salonNow) {
+  if (!appointment || appointment.canceled === true || appointment.noShow === true) return false;
+  if (!["request", "confirmed"].includes(String(appointment.status || ""))) return false;
+  if (appointment.source !== "online_booking" && appointment.type !== "online_booking_request") return false;
+  const date = String(appointment.date || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < salonNow.date) return false;
+  if (date > salonNow.date) return true;
+  const start = Number(appointment.start);
+  if (!Number.isFinite(start) || start < 0) return true;
+  return (8 * 60) + (start * 15) >= salonNow.minutes;
+}
+
+async function loadUpcomingAppointmentsForClient({ phone, phoneDigits, clientName, pepper = "", clientProfileId = "" }) {
   const phoneVariants = buildPhoneLookupVariants(phone || phoneDigits);
   const queries = [
     db.collection("appointments")
@@ -1955,20 +2339,52 @@ async function loadUpcomingAppointmentsForClient({ phone, phoneDigits, clientNam
 
   const snapshots = await Promise.all(queries);
   const candidates = new Map();
+  const privateIdentityAppointmentIds = new Set();
   snapshots.forEach(snapshot => {
     snapshot.docs.forEach(docSnap => {
       candidates.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
     });
   });
 
+  let resolvedProfileId = String(clientProfileId || "");
+  if (!resolvedProfileId && pepper) {
+    const identity = await readClientIdentity({
+      db,
+      pepper,
+      phone: phone || phoneDigits,
+      clientName,
+      allowCloseNameMatch: true
+    });
+    resolvedProfileId = String(identity?.profile?.id || "");
+  }
+  if (resolvedProfileId) {
+    const historySnapshot = await db.collection(CLIENT_HISTORY_COLLECTION)
+      .where("clientProfileId", "==", resolvedProfileId)
+      .limit(75)
+      .get();
+    const appointmentIds = historySnapshot.docs.map(document => document.id);
+    if (appointmentIds.length) {
+      const appointmentSnapshots = await db.getAll(
+        ...appointmentIds.map(id => db.collection("appointments").doc(id))
+      );
+      appointmentSnapshots.forEach(snapshot => {
+        if (!snapshot.exists) return;
+        privateIdentityAppointmentIds.add(snapshot.id);
+        candidates.set(snapshot.id, { id: snapshot.id, ...snapshot.data() });
+      });
+    }
+  }
+
   const salonNow = getSalonNowParts();
   return Array.from(candidates.values())
-    .filter(appointment => isUpcomingAppointmentForClient(appointment, {
-      phoneDigits,
-      clientName,
-      today: salonNow.date,
-      currentMinutes: salonNow.minutes
-    }))
+    .filter(appointment => privateIdentityAppointmentIds.has(appointment.id)
+      ? isUpcomingOnlineAppointmentRecord(appointment, salonNow)
+      : isUpcomingAppointmentForClient(appointment, {
+          phoneDigits,
+          clientName,
+          today: salonNow.date,
+          currentMinutes: salonNow.minutes
+        }))
     .sort((left, right) => {
       const dateComparison = String(left.date || "").localeCompare(String(right.date || ""));
       return dateComparison || (Number(left.start) || 0) - (Number(right.start) || 0);
@@ -1993,11 +2409,15 @@ function buildBookingManagementAppointment(appointment, staffRecords) {
 exports.checkUpcomingAppointments = onCall(
   {
     region: "us-central1",
-    maxInstances: 10
+    maxInstances: 10,
+    secrets: [CLIENT_LOOKUP_PEPPER]
   },
   async (request) => {
     const identity = getBookingManagementIdentity(request.data || {}, { requireConsent: true });
-    const appointments = await loadUpcomingAppointmentsForClient(identity);
+    const appointments = await loadUpcomingAppointmentsForClient({
+      ...identity,
+      pepper: getClientLookupPepper()
+    });
     return {
       ok: true,
       hasUpcomingAppointments: appointments.length > 0
@@ -2009,11 +2429,22 @@ exports.sendOnlineBookingVerificationCode = onCall(
   {
     region: "us-central1",
     maxInstances: 10,
-    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN]
+    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, CLIENT_LOOKUP_PEPPER]
   },
   async (request) => {
     const identity = getBookingManagementIdentity(request.data || {}, { requireConsent: true });
-    const appointments = await loadUpcomingAppointmentsForClient(identity);
+    const storedIdentity = await readClientIdentity({
+      db,
+      pepper: getClientLookupPepper(),
+      phone: identity.phone,
+      clientName: identity.clientName,
+      allowCloseNameMatch: true
+    });
+    const appointments = await loadUpcomingAppointmentsForClient({
+      ...identity,
+      pepper: getClientLookupPepper(),
+      clientProfileId: storedIdentity?.profile?.id || ""
+    });
     if (!appointments.length) {
       throw new HttpsError("not-found", "No upcoming online booking appointments were found.");
     }
@@ -2053,6 +2484,8 @@ exports.sendOnlineBookingVerificationCode = onCall(
       }, { merge: true });
       tx.set(challengeRef, {
         identityId,
+        clientId: storedIdentity?.clientId || null,
+        clientProfileId: storedIdentity?.profile?.id || null,
         phoneDigits: identity.phoneDigits,
         clientName: identity.clientName,
         codeHash,
@@ -2108,7 +2541,7 @@ exports.verifyOnlineBookingCode = onCall(
   {
     region: "us-central1",
     maxInstances: 10,
-    secrets: [TWILIO_AUTH_TOKEN]
+    secrets: [TWILIO_AUTH_TOKEN, CLIENT_LOOKUP_PEPPER]
   },
   async (request) => {
     const input = request.data || {};
@@ -2189,7 +2622,9 @@ exports.verifyOnlineBookingCode = onCall(
       return {
         ok: true,
         phoneDigits: String(challenge.phoneDigits || ""),
-        clientName: String(challenge.clientName || "")
+        clientName: String(challenge.clientName || ""),
+        clientId: String(challenge.clientId || ""),
+        clientProfileId: String(challenge.clientProfileId || "")
       };
     });
 
@@ -2207,7 +2642,9 @@ exports.verifyOnlineBookingCode = onCall(
     const appointments = await loadUpcomingAppointmentsForClient({
       phone: verification.phoneDigits,
       phoneDigits: verification.phoneDigits,
-      clientName: verification.clientName
+      clientName: verification.clientName,
+      clientProfileId: verification.clientProfileId || "",
+      pepper: getClientLookupPepper()
     });
     const staffSnap = await db.collection("staff").get();
     const staffRecords = staffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
@@ -2234,6 +2671,7 @@ exports.cancelOnlineBookingAppointment = onCall(
     const appointmentId = assertAppointmentToken(input.appointmentId, "appointmentId", { min: 12, max: 100 });
     const challengeRef = db.collection(BOOKING_VERIFICATION_COLLECTION).doc(challengeId);
     const appointmentRef = db.collection("appointments").doc(appointmentId);
+    const privateAppointmentRef = db.collection(APPOINTMENT_PRIVATE_COLLECTION).doc(appointmentId);
     const logRef = db.collection("activityLog").doc();
     const staffMessageRef = db.collection("staffMessages").doc();
     const sessionTokenHash = buildSessionTokenHash(sessionToken);
@@ -2262,6 +2700,12 @@ exports.cancelOnlineBookingAppointment = onCall(
         throw new HttpsError("not-found", "This appointment is no longer available.");
       }
       const before = appointmentSnap.data() || {};
+      const privateAppointmentSnap = before.hasPrivateContact === true
+        ? await tx.get(privateAppointmentRef)
+        : null;
+      const privateAppointment = privateAppointmentSnap?.exists
+        ? privateAppointmentSnap.data() || {}
+        : null;
       const previouslyManagedIds = Array.isArray(challenge.managedAppointmentIds)
         ? challenge.managedAppointmentIds
         : [];
@@ -2277,12 +2721,19 @@ exports.cancelOnlineBookingAppointment = onCall(
           comment: ONLINE_BOOKING_CLIENT_CANCEL_COMMENT
         };
       }
-      if (!isUpcomingAppointmentForClient(before, {
+      const linkedPrivateAppointment = Boolean(
+        privateAppointment?.clientProfileId &&
+        challenge.clientProfileId &&
+        String(privateAppointment.clientProfileId) === String(challenge.clientProfileId) &&
+        isUpcomingOnlineAppointmentRecord(before, salonNow)
+      );
+      const linkedLegacyAppointment = !privateAppointment && isUpcomingAppointmentForClient(before, {
         phoneDigits: String(challenge.phoneDigits || ""),
         clientName: String(challenge.clientName || ""),
         today: salonNow.date,
         currentMinutes: salonNow.minutes
-      })) {
+      });
+      if (!linkedPrivateAppointment && !linkedLegacyAppointment) {
         throw new HttpsError("failed-precondition", "This appointment is no longer available to manage.");
       }
 
@@ -2308,6 +2759,22 @@ exports.cancelOnlineBookingAppointment = onCall(
 
       writeAppointmentScheduleStates(tx, scheduleStates);
       tx.set(appointmentRef, after);
+      if (privateAppointment) {
+        writeClientAppointmentRecords(tx, {
+          db,
+          FieldValue,
+          appointmentId,
+          appointment: after,
+          identity: {
+            clientId: privateAppointment.clientId,
+            clientProfileId: privateAppointment.clientProfileId,
+            phoneNormalized: privateAppointment.phoneNormalized,
+            phoneDisplay: privateAppointment.phoneDisplay,
+            phoneLast4: privateAppointment.phoneLast4,
+            phoneKey: privateAppointment.phoneHash
+          }
+        });
+      }
       tx.set(logRef, {
         createdAt: FieldValue.serverTimestamp(),
         logDate: before.date,
@@ -2318,7 +2785,7 @@ exports.cancelOnlineBookingAppointment = onCall(
         entityType: "appointment",
         entityId: appointmentId,
         client: before.client,
-        phone: before.phone || null,
+        phone: before.hasPrivateContact === true ? null : (before.phone || null),
         service: before.note || "",
         details: `${buildAppointmentLogDetails(before, staffRecords)}; canceled; ${ONLINE_BOOKING_CLIENT_CANCEL_COMMENT}`,
         source: "online_booking"
@@ -2354,7 +2821,8 @@ exports.cancelOnlineBookingAppointment = onCall(
 exports.createOnlineBookingRequest = onCall(
   {
     region: "us-central1",
-    maxInstances: 5
+    maxInstances: 5,
+    secrets: [CLIENT_LOOKUP_PEPPER]
   },
   async (request) => {
     const input = request.data || {};
@@ -2366,6 +2834,9 @@ exports.createOnlineBookingRequest = onCall(
 
     const client = assertString(input.client, "client", { min: 2, max: 80 });
     const phone = assertString(input.phone, "phone", { min: 7, max: 30 });
+    if (!normalizePhone(phone)) {
+      throw new HttpsError("invalid-argument", "A valid phone number is required.");
+    }
     const email = normalizeOptionalEmail(input.email);
     const date = assertDate(input.date);
     const start = assertSlot(input.start);
@@ -2439,6 +2910,24 @@ exports.createOnlineBookingRequest = onCall(
         };
       }
 
+      const clientIdentity = await planClientIdentityInTransaction({
+        transaction: tx,
+        db,
+        FieldValue,
+        pepper: getClientLookupPepper(),
+        phone,
+        clientName: client,
+        allowCreate: true,
+        allowCloseNameMatch: true
+      });
+      const cachedClientSummary = getCachedProfileSummary(clientIdentity?.profileData);
+      const clientHistory = clientIdentity?.clientProfileId && !cachedClientSummary
+        ? await loadClientHistoryInTransaction(tx, db, clientIdentity.clientProfileId)
+        : [];
+      const clientSummary = cachedClientSummary || (
+        clientHistory.length ? summarizeClientHistory(clientHistory) : null
+      );
+
       const staffSnap = await tx.get(db.collection("staff"));
       const staffRecords = getActiveStaffRecords(staffSnap.docs.map(docSnap => ({
         id: docSnap.id,
@@ -2480,7 +2969,15 @@ exports.createOnlineBookingRequest = onCall(
         ...docSnap.data()
       }));
 
+      const requestedServiceIntent = parseServiceIntent({
+        selectedServices,
+        serviceDetails,
+        requestedGroups
+      });
+      let effectiveServiceIntent = applyHistoryPreferences(requestedServiceIntent, clientSummary);
+      let serviceFingerprint = getServiceFingerprint(effectiveServiceIntent);
       let duration = BOOKING_DURATION;
+      let standardDuration = BOOKING_DURATION;
       let onlineScheduleState = null;
       if (staffId === ANYONE_ID) {
         duration = ANYONE_DISPLAY_DURATION;
@@ -2494,18 +2991,24 @@ exports.createOnlineBookingRequest = onCall(
           staffRecords,
           offWorkRecords,
           weeklyOffRecords,
-          requestedGroups
+          requestedGroups,
+          durationInput: { selectedServices, serviceDetails },
+          clientSummary
         });
 
         if (remainingCapacity <= 0) {
           throw new HttpsError("failed-precondition", "This time is no longer available.");
         }
       } else {
-        duration = getRequestedBookingDurationSlots({
+        const durationDecision = getBookingDurationDecision({
           selectedServices,
           serviceDetails,
           requestedGroups
-        }, selectedStaff);
+        }, selectedStaff, clientSummary);
+        duration = durationDecision.duration;
+        standardDuration = durationDecision.standardDuration;
+        effectiveServiceIntent = durationDecision.effectiveIntent;
+        serviceFingerprint = durationDecision.serviceFingerprint;
         if (!isBookableOnlineStart({ date, start, duration })) {
           throw new HttpsError("failed-precondition", "This time is no longer available.");
         }
@@ -2549,14 +3052,21 @@ exports.createOnlineBookingRequest = onCall(
         }
       }
 
-      const appointmentData = {
+      const appointmentData = stripPrivateAppointmentFields({
         date,
         staffId,
         phone,
         phoneLookup: normalizePhoneDigits(phone),
+        clientId: clientIdentity?.clientId || null,
+        clientProfileId: clientIdentity?.clientProfileId || null,
+        privacySchemaVersion: CLIENT_SCHEMA_VERSION,
+        hasPrivateContact: true,
         emailProvided: Boolean(email),
         start,
         duration,
+        bookingStandardDuration: standardDuration,
+        serviceFingerprint,
+        serviceIntent: effectiveServiceIntent,
         client,
         note: buildRequestNote({ selectedServices, serviceDetails }),
         noShow: false,
@@ -2588,7 +3098,7 @@ exports.createOnlineBookingRequest = onCall(
         lastEditedBy: "Online Booking",
         lastAction: "online_request_created",
         lastActionAt: FieldValue.serverTimestamp()
-      };
+      });
 
       if (onlineScheduleState) {
         tx.set(onlineScheduleState.ref, {
@@ -2600,7 +3110,15 @@ exports.createOnlineBookingRequest = onCall(
         });
       }
 
+      applyClientIdentityPlan(tx, clientIdentity, FieldValue);
       tx.set(appointmentRef, appointmentData);
+      writeClientAppointmentRecords(tx, {
+        db,
+        FieldValue,
+        appointmentId: appointmentRef.id,
+        appointment: appointmentData,
+        identity: clientIdentity
+      });
       tx.set(submissionRef, {
         appointmentId: appointmentRef.id,
         emailProvided: Boolean(email),
@@ -2616,8 +3134,9 @@ exports.createOnlineBookingRequest = onCall(
         staffId,
         eventType: "online_request_created",
         entityType: "appointment",
+        entityId: appointmentRef.id,
         client,
-        phone,
+        hasPrivateContact: true,
         emailProvided: Boolean(email),
         service: appointmentData.note,
         details: buildAppointmentLogDetails(appointmentData, staffRecords)
@@ -2635,7 +3154,7 @@ exports.createOnlineBookingRequest = onCall(
         tx.set(emailRef, buildBookingEmailQueueDoc({
           eventType: "booking_request_received",
           appointmentId: appointmentRef.id,
-          appointmentData,
+          appointmentData: { ...appointmentData, phone },
           staffRecords,
           email
         }));
@@ -2726,6 +3245,7 @@ exports.emailQueueCreated = onDocumentCreated(
         providerMessageId: result?.providerMessageId || null,
         to: FieldValue.delete(),
         email: FieldValue.delete(),
+        phone: FieldValue.delete(),
         text: FieldValue.delete(),
         html: FieldValue.delete(),
         error: FieldValue.delete()
@@ -2873,18 +3393,27 @@ exports.appointmentStatusEmailUpdated = onDocumentUpdated(
 
     const eventType = getBookingStatusEmailEvent(after.status);
     const smsEventType = getBookingStatusSmsEvent(after.status);
+    if (!eventType && !smsEventType) return;
+    const privateContactSnapshot = after.hasPrivateContact === true
+      ? await db.collection(APPOINTMENT_PRIVATE_COLLECTION).doc(appointmentId).get()
+      : null;
+    const privateContact = privateContactSnapshot?.exists
+      ? privateContactSnapshot.data() || {}
+      : {};
+    const contactAppointment = {
+      ...after,
+      phone: privateContact.phoneDisplay || privateContact.phoneNormalized || after.phone || null
+    };
     console.info("Online booking status changed", {
       appointmentId,
       beforeStatus: before.status || null,
       afterStatus: after.status || null,
       eventType: eventType || null,
       smsEventType: smsEventType || null,
-      hasPhone: !!after.phone,
-      phoneLast4: getPhoneLast4(after.phone),
+      hasPhone: !!contactAppointment.phone,
+      phoneLast4: getPhoneLast4(contactAppointment.phone),
       smsConsent: after.smsConsent !== false
     });
-    if (!eventType && !smsEventType) return;
-
     const staffSnap = await db.collection("staff").get();
     const staffRecords = staffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
 
@@ -2900,7 +3429,7 @@ exports.appointmentStatusEmailUpdated = onDocumentUpdated(
         writes.push(emailRef.set(buildBookingEmailQueueDoc({
           eventType,
           appointmentId,
-          appointmentData: after,
+          appointmentData: contactAppointment,
           staffRecords,
           email: contact.email
         })));
@@ -2908,21 +3437,21 @@ exports.appointmentStatusEmailUpdated = onDocumentUpdated(
       writes.push(contactRef.delete().catch(() => null));
     }
 
-    if (smsEventType && after.smsConsent !== false && after.phone) {
+    if (smsEventType && after.smsConsent !== false && contactAppointment.phone) {
       const smsRef = db.collection(SMS_QUEUE_COLLECTION).doc();
       writes.push(smsRef.set(buildBookingSmsQueueDoc({
         eventType: smsEventType,
         appointmentId,
-        appointmentData: after,
+        appointmentData: contactAppointment,
         staffRecords
       })));
     } else if (smsEventType) {
       console.warn("SMS queue not created", {
         appointmentId,
         smsEventType,
-        reason: !after.phone ? "missing_phone" : "sms_consent_false",
-        hasPhone: !!after.phone,
-        phoneLast4: getPhoneLast4(after.phone),
+        reason: !contactAppointment.phone ? "missing_phone" : "sms_consent_false",
+        hasPhone: !!contactAppointment.phone,
+        phoneLast4: getPhoneLast4(contactAppointment.phone),
         smsConsent: after.smsConsent !== false
       });
     }
@@ -3511,7 +4040,8 @@ exports.cleanupExpiredOnlineBookingPhotos = onSchedule(
 exports.getOnlineBookingAvailability = onCall(
   {
     region: "us-central1",
-    maxInstances: 5
+    maxInstances: 5,
+    secrets: [CLIENT_LOOKUP_PEPPER]
   },
   async (request) => {
     const input = request.data || {};
@@ -3523,11 +4053,22 @@ exports.getOnlineBookingAvailability = onCall(
       throw new HttpsError("invalid-argument", "Invalid date.");
     }
 
-    const [staffSnap, appointmentsSnap, offWorkSnap, weeklyOffSnap] = await Promise.all([
+    const clientContextPromise = normalizePhone(input.phone) && normalizeClientName(input.client)
+      ? readClientContext({
+          db,
+          pepper: getClientLookupPepper(),
+          phone: input.phone,
+          clientName: input.client,
+          allowCloseNameMatch: true
+        })
+      : Promise.resolve(null);
+
+    const [staffSnap, appointmentsSnap, offWorkSnap, weeklyOffSnap, clientContext] = await Promise.all([
       db.collection("staff").get(),
       db.collection("appointments").where("date", "==", date).get(),
       db.collection("OffWork").where("date", "==", date).get(),
-      db.collection("WeeklyOff").get()
+      db.collection("WeeklyOff").get(),
+      clientContextPromise
     ]);
 
     const staffRecords = getActiveStaffRecords(staffSnap.docs.map(docSnap => ({
@@ -3557,7 +4098,8 @@ exports.getOnlineBookingAvailability = onCall(
       appointments,
       staffRecords,
       offWorkRecords,
-      weeklyOffRecords
+      weeklyOffRecords,
+      clientSummary: clientContext?.summary || null
     });
   }
 );
@@ -3638,18 +4180,3 @@ exports.createStaffAuthUser = onCall(
     };
   }
 );
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

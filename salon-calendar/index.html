@@ -4855,6 +4855,9 @@ const functions = getFunctions(app, "us-central1");
 const registerPushDevice = httpsCallable(functions, "registerPushDevice");
 const getStaffPushStatuses = httpsCallable(functions, "getStaffPushStatuses");
 const mutateAppointment = httpsCallable(functions, "mutateAppointment");
+const managerGetAppointmentContact = httpsCallable(functions, "managerGetAppointmentContact");
+const managerLookupClientByPhone = httpsCallable(functions, "managerLookupClientByPhone");
+const managerGetActivityLogContacts = httpsCallable(functions, "managerGetActivityLogContacts");
 const FCM_VAPID_KEY = "";
 // Operational pause: keep Telegram code and data intact while staffMessages
 // remains the active internal notification channel. Set to false to resume.
@@ -5172,11 +5175,13 @@ const logTableBody = document.getElementById('logTableBody');
 const logTableWrap = document.querySelector('.log-table-wrap');
 let archiveAppointments = [];
 let archiveLoaded = false;
+let archivePhoneLookupRunId = 0;
 const analyticsAppointmentRangeCache = new Map();
 let analyticsRenderRunId = 0;
 let analyticsDayRenderRunId = 0;
 let activityLogEntries = [];
 let activityLogUnsubscribe = null;
+let activityLogContactLoadRunId = 0;
 
 // Staff
 const staffList = document.getElementById('staffList');
@@ -5441,6 +5446,10 @@ const appointmentDeleteBtn = document.getElementById('appointmentDangerBtn');
 const deleteAppointmentConfirmBtn = document.getElementById('deleteAppointmentConfirmBtn');
 let appointmentActionInProgress = false;
 let calendarModalActionInProgress = false;
+const managerAppointmentContacts = new Map();
+const managerPhoneLookupCache = new Map();
+let managerPhoneInputLookupTimer = null;
+let managerPhoneInputLookupRunId = 0;
 
 function setScopedButtonsBusy(scopes, isBusy) {
   const roots = (Array.isArray(scopes) ? scopes : [scopes]).filter(Boolean);
@@ -5541,6 +5550,54 @@ async function submitAtomicAppointmentMutation(payload) {
     showToast(error?.message || 'Appointment could not be saved. Please try again.', 'error', 5000);
     return null;
   }
+}
+
+async function ensureManagerAppointmentContact(appointmentId, appointment = null) {
+  if (currentUserRole !== 'manager' || !appointmentId) return '';
+  if (managerAppointmentContacts.has(appointmentId)) {
+    return managerAppointmentContacts.get(appointmentId) || '';
+  }
+  if (appointment?.hasPrivateContact !== true) {
+    const legacyPhone = appointment?.phone || '';
+    managerAppointmentContacts.set(appointmentId, legacyPhone);
+    return legacyPhone;
+  }
+  try {
+    const response = await managerGetAppointmentContact({ appointmentId });
+    const phone = String(response?.data?.phone || '');
+    managerAppointmentContacts.set(appointmentId, phone);
+    return phone;
+  } catch (error) {
+    console.warn('Private appointment phone could not be loaded:', error);
+    showToast('Phone could not be loaded. Please try again.', 'warning', 4000);
+    return '';
+  }
+}
+
+function getCompletePhoneLookupValue(value) {
+  const raw = String(value || '').trim();
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 10) return raw;
+  if (digits.length === 11 && digits.startsWith('1')) return raw;
+  if (raw.startsWith('+') && digits.length >= 8 && digits.length <= 15) return raw;
+  return '';
+}
+
+function getPhoneLookupCacheKey(value, includeAppointments = false) {
+  const complete = getCompletePhoneLookupValue(value);
+  if (!complete) return '';
+  return `${complete.replace(/\D/g, '')}:${includeAppointments ? 'history' : 'profiles'}`;
+}
+
+async function lookupManagerClientByPhone(phone, { includeAppointments = false } = {}) {
+  if (currentUserRole !== 'manager') return null;
+  const cacheKey = getPhoneLookupCacheKey(phone, includeAppointments);
+  if (!cacheKey) return null;
+  if (managerPhoneLookupCache.has(cacheKey)) return managerPhoneLookupCache.get(cacheKey);
+  const response = await managerLookupClientByPhone({ phone, includeAppointments });
+  const result = response?.data || null;
+  managerPhoneLookupCache.set(cacheKey, result);
+  return result;
 }
 
 async function runModalActionWithGuard(scopes, action) {
@@ -5673,12 +5730,29 @@ if (aClient) {
 }
 aPhone.addEventListener('input', () => {
   const phone = aPhone.value.trim();
+  window.clearTimeout(managerPhoneInputLookupTimer);
+  const lookupRunId = ++managerPhoneInputLookupRunId;
   if (!phone) return;
 
   const match = appointments.find(a => a.phone === phone);
-  if (match && match.client) {
+  if (match && match.client && !aClient.value.trim()) {
     aClient.value = match.client;
   }
+
+  if (currentUserRole !== 'manager' || !getCompletePhoneLookupValue(phone)) return;
+  managerPhoneInputLookupTimer = window.setTimeout(async () => {
+    try {
+      const result = await lookupManagerClientByPhone(phone);
+      if (lookupRunId !== managerPhoneInputLookupRunId || aPhone.value.trim() !== phone) return;
+      const profiles = Array.isArray(result?.profiles) ? result.profiles : [];
+      if (profiles.length === 1 && profiles[0]?.displayName && !aClient.value.trim()) {
+        aClient.value = profiles[0].displayName;
+        updateAppointmentGroupControls();
+      }
+    } catch (error) {
+      console.warn('Client phone lookup could not be loaded:', error);
+    }
+  }, 350);
 });
 
 const calendar=document.getElementById('calendar');
@@ -6494,6 +6568,17 @@ function stopCalendarDataListeners({ clearData = false } = {}) {
   appointments = [];
   archiveAppointments = [];
   archiveLoaded = false;
+  archivePhoneLookupRunId += 1;
+  managerAppointmentContacts.clear();
+  managerPhoneLookupCache.clear();
+  managerPhoneInputLookupRunId += 1;
+  window.clearTimeout(managerPhoneInputLookupTimer);
+  if (activityLogUnsubscribe) {
+    activityLogUnsubscribe();
+    activityLogUnsubscribe = null;
+  }
+  activityLogEntries = [];
+  activityLogContactLoadRunId += 1;
   offWork = [];
   weeklyOff = [];
   analyticsAppointmentRangeCache.clear();
@@ -7775,7 +7860,14 @@ aDuration.value = a.staffId === ANYONE_ID
   : (a.duration ?? (isRequestAppointment ? 4 : ''));
 document.getElementById('durationError').style.display = 'none';      
 aClient.value=a.client;
-aPhone.value = a.phone || '';
+aPhone.value = currentUserRole === 'manager'
+  ? (managerAppointmentContacts.get(id) || a.phone || '')
+  : '';
+if (currentUserRole === 'manager' && a.hasPrivateContact === true && !managerAppointmentContacts.has(id)) {
+  ensureManagerAppointmentContact(id, a).then(phone => {
+    if (editId === id && !aPhone.value.trim()) aPhone.value = phone;
+  });
+}
 aNote.value = getAppointmentNote(a);
 aNoShow.checked = a.noShow === true;
 aCanceled.checked = a.canceled === true || isDeclinedRequest;
@@ -7941,6 +8033,18 @@ window.saveAppointment = async () => {
     ? appointments.find(a => a.id === editId)
     : null;
   const original = normalizeAppointment(originalRaw);
+
+  if (
+    editId &&
+    originalRaw?.hasPrivateContact === true &&
+    currentUserRole === 'manager' &&
+    !aPhone.value.trim() &&
+    !managerAppointmentContacts.has(editId)
+  ) {
+    const privatePhone = await ensureManagerAppointmentContact(editId, originalRaw);
+    if (privatePhone) aPhone.value = privatePhone;
+    if (!managerAppointmentContacts.has(editId)) return;
+  }
 
   const data = {
     date: aDate.value,
@@ -8109,23 +8213,38 @@ const conflictType = getAppointmentPlacementConflict({
 
   const mutationResult = await submitAtomicAppointmentMutation(mutationPayload);
   if (!mutationResult) return;
+  managerPhoneLookupCache.clear();
   data.lastAction = mutationResult.lastAction || data.lastAction;
   data.revision = mutationResult.revision;
+  const hasPrivateContact = mutationResult.hasPrivateContact === true;
+  if (hasPrivateContact && currentUserRole === 'manager') {
+    managerAppointmentContacts.set(appointmentId, aPhone.value.trim());
+  } else if (!hasPrivateContact) {
+    managerAppointmentContacts.delete(appointmentId);
+  }
+  const activityPhone = hasPrivateContact ? '' : normalizedData.phone;
+  const activityAppointment = hasPrivateContact
+    ? { ...normalizedData, phone: '' }
+    : normalizedData;
+  const activityOriginal = hasPrivateContact || originalRaw?.hasPrivateContact === true
+    ? { ...original, phone: '' }
+    : original;
 
   if (isEditingAppointment) {
     if (!mutationResult.duplicate) await writeActivityLogEntry({
       staffId: normalizedData.staffId,
       eventType: getAppointmentLogEventType(data.lastAction),
       entityType: 'appointment',
+      entityId: appointmentId,
       client: normalizedData.client,
-      phone: normalizedData.phone,
+      phone: activityPhone,
       service: getAppointmentNote(normalizedData),
-      details: buildAppointmentLogDetails(normalizedData, original),
+      details: buildAppointmentLogDetails(activityAppointment, activityOriginal),
       actorLabel: getCurrentActorLabel(),
       actorKey: getCurrentActorKey()
     });
     const appointmentEventType = getAppointmentLogEventType(data.lastAction);
-    const appointmentMessage = buildTelegramAppointmentMessage(normalizedData, original, data.lastAction);
+    const appointmentMessage = buildTelegramAppointmentMessage(activityAppointment, activityOriginal, data.lastAction);
     if (!mutationResult.duplicate) await queueTelegramMessage({
       message: appointmentMessage,
       eventType: appointmentEventType,
@@ -8156,15 +8275,16 @@ const conflictType = getAppointmentPlacementConflict({
       staffId: normalizedData.staffId,
       eventType: 'new_app',
       entityType: 'appointment',
+      entityId: appointmentId,
       client: normalizedData.client,
-      phone: normalizedData.phone,
+      phone: activityPhone,
       service: getAppointmentNote(normalizedData),
-      details: buildAppointmentLogDetails(normalizedData),
+      details: buildAppointmentLogDetails(activityAppointment),
       actorLabel: getCurrentActorLabel(),
       actorKey: getCurrentActorKey()
     });
     if (!mutationResult.duplicate) await queueTelegramMessage({
-      message: buildTelegramAppointmentMessage(normalizedData, null, 'create'),
+      message: buildTelegramAppointmentMessage(activityAppointment, null, 'create'),
       eventType: 'new_app',
       entityType: 'appointment',
       entityId: appointmentId,
@@ -8202,6 +8322,17 @@ async function updateOnlineBookingRequestStatus(nextStatus) {
   const originalRaw = appointments.find(a => a.id === editId);
   const original = normalizeAppointment(originalRaw);
   if (!original || !isPendingOnlineBookingRequest(original)) return;
+
+  if (
+    originalRaw?.hasPrivateContact === true &&
+    currentUserRole === 'manager' &&
+    !aPhone.value.trim() &&
+    !managerAppointmentContacts.has(editId)
+  ) {
+    const privatePhone = await ensureManagerAppointmentContact(editId, originalRaw);
+    if (privatePhone) aPhone.value = privatePhone;
+    if (!managerAppointmentContacts.has(editId)) return;
+  }
 
   if (aStaff.value !== ANYONE_ID && !aDuration.value) {
     document.getElementById('durationError').style.display = 'block';
@@ -8309,28 +8440,48 @@ async function updateOnlineBookingRequestStatus(nextStatus) {
     appointment: getAtomicAppointmentForm(data)
   });
   if (!mutationResult) return;
+  managerPhoneLookupCache.clear();
   data.revision = mutationResult.revision;
+  const hasPrivateContact = mutationResult.hasPrivateContact === true;
+  if (hasPrivateContact && currentUserRole === 'manager') {
+    managerAppointmentContacts.set(editId, aPhone.value.trim());
+  } else if (!hasPrivateContact) {
+    managerAppointmentContacts.delete(editId);
+  }
+  const activityAppointment = hasPrivateContact
+    ? { ...normalizedData, phone: '' }
+    : normalizedData;
+  const activityOriginal = hasPrivateContact || originalRaw?.hasPrivateContact === true
+    ? { ...original, phone: '' }
+    : original;
 
   if (!mutationResult.duplicate) await writeActivityLogEntry({
     staffId: normalizedData.staffId,
     eventType: action,
     entityType: 'appointment',
+    entityId: editId,
     client: normalizedData.client,
-    phone: normalizedData.phone,
+    phone: hasPrivateContact ? '' : normalizedData.phone,
     service: getAppointmentNote(normalizedData),
-    details: buildAppointmentLogDetails(normalizedData, original),
+    details: buildAppointmentLogDetails(activityAppointment, activityOriginal),
     actorLabel: getCurrentActorLabel(),
     actorKey: getCurrentActorKey()
   });
   if (!mutationResult.duplicate) await queueTelegramMessage({
-    message: buildTelegramAppointmentMessage(normalizedData, original, action),
+    message: buildTelegramAppointmentMessage(activityAppointment, activityOriginal, action),
     eventType: action,
     entityType: 'appointment',
     entityId: editId,
     staffId: normalizedData.staffId
   });
 
-  const updatedAppointment = { ...original, ...data, id: editId };
+  const updatedAppointment = {
+    ...original,
+    ...data,
+    id: editId,
+    hasPrivateContact,
+    phone: hasPrivateContact ? '' : (data.phone || '')
+  };
   appointments = appointments.map(a => a.id === editId ? updatedAppointment : a);
   archiveAppointments = archiveAppointments.map(a => a.id === editId ? updatedAppointment : a);
   refreshDeclinedOnlineTray();
@@ -8355,15 +8506,17 @@ window.deleteAppointment = async () => {
     expectedRevision: Number(deletedAppointment?.revision) || 0
   });
   if (!mutationResult) return;
+  managerPhoneLookupCache.clear();
   if (deletedAppointment) {
     await writeActivityLogEntry({
       staffId: deletedAppointment.staffId,
       eventType: 'deleted_app',
       entityType: 'appointment',
+      entityId: deletedAppointmentId,
       client: deletedAppointment.client,
-      phone: deletedAppointment.phone,
+      phone: deletedAppointment.hasPrivateContact === true ? '' : deletedAppointment.phone,
       service: getAppointmentNote(deletedAppointment),
-      details: buildAppointmentLogDetails(deletedAppointment),
+      details: buildAppointmentLogDetails({ ...deletedAppointment, lastAction: 'delete' }),
       actorLabel: getCurrentActorLabel(),
       actorKey: getCurrentActorKey()
     });
@@ -8377,6 +8530,7 @@ window.deleteAppointment = async () => {
   }
   appointments = appointments.filter(a => a.id !== deletedAppointmentId);
   archiveAppointments = archiveAppointments.filter(a => a.id !== deletedAppointmentId);
+  managerAppointmentContacts.delete(deletedAppointmentId);
   refreshDeclinedOnlineTray();
   editId = null;
   showToast("Appointment deleted", "success");
@@ -8553,10 +8707,36 @@ function renderArchiveResults() {
 
 async function loadArchiveAppointments() {
   const queryText = (searchInput?.value || '').trim();
+  const lookupRunId = ++archivePhoneLookupRunId;
 
   if (!queryText) {
     renderArchiveResults();
     return;
+  }
+
+  const completePhone = currentUserRole === 'manager'
+    ? getCompletePhoneLookupValue(queryText)
+    : '';
+  if (completePhone) {
+    searchResults.classList.add('has-results');
+    searchResults.innerHTML = '<div class="archive-loading">Searching phone...</div>';
+    try {
+      const result = await lookupManagerClientByPhone(completePhone, { includeAppointments: true });
+      if (lookupRunId !== archivePhoneLookupRunId) return;
+      const privateAppointments = normalizeAppointments(
+        Array.isArray(result?.appointments) ? result.appointments : []
+      );
+      const appointmentsById = new Map(archiveAppointments.map(appointment => [appointment.id, appointment]));
+      privateAppointments.forEach(appointment => {
+        appointmentsById.set(appointment.id, appointment);
+        managerAppointmentContacts.set(appointment.id, appointment.phone || result?.phone || '');
+      });
+      archiveAppointments = [...appointmentsById.values()];
+      renderArchiveResults();
+      return;
+    } catch (error) {
+      console.warn('Secure archive phone search was unavailable; using legacy records only:', error);
+    }
   }
 
   if (archiveLoaded) {
@@ -8696,7 +8876,18 @@ function buildAppointmentLogDetails(data, original = null) {
   const parts = [base];
   if (appointmentTime) parts.push(appointmentTime);
 
-  if (data.lastAction === 'cancel' && data.cancelComment) {
+  const restoredDeclinedOnlineBooking = Boolean(
+    original &&
+    isDeclinedOnlineBookingRequest(original) &&
+    data.source === 'online_booking' &&
+    data.status === 'restored_after_decline'
+  );
+
+  if (restoredDeclinedOnlineBooking) {
+    parts.push('declined online booking updated and saved to calendar');
+    const changes = buildAppointmentLogChanges(data, original);
+    if (changes) parts.push(changes);
+  } else if (data.lastAction === 'cancel' && data.cancelComment) {
     parts.push('canceled');
     parts.push(data.cancelComment);
   } else if (data.lastAction === 'cancel') {
@@ -8707,6 +8898,10 @@ function buildAppointmentLogDetails(data, original = null) {
     parts.push('marked no-show');
   } else if (data.lastAction === 'no_show_removed') {
     parts.push('no-show removed');
+  } else if (data.lastAction === 'delete') {
+    parts.push(isDeclinedOnlineBookingRequest(data)
+      ? 'declined online booking deleted'
+      : 'deleted');
   } else if (original && data.lastAction === 'edit') {
     const changes = buildAppointmentLogChanges(data, original);
     if (changes) parts.push(changes);
@@ -10499,6 +10694,12 @@ function buildTelegramAppointmentMessage(data, original = null, mode = null) {
   }
 
   if (action === 'cancel_removed') {
+    if (
+      data.source === 'online_booking' &&
+      (data.status === 'restored_after_decline' || isDeclinedOnlineBookingRequest(original))
+    ) {
+      return `DECLINED ONLINE BOOKING SAVED\n${clientName}'s declined online booking was updated and saved to the calendar.\n<b>${staffName}</b> - ${appointmentDate} at ${appointmentTime}. Duration: ${formatTelegramDuration(data.duration, staffName)}.${note ? '\n' + note : ''}${groupText}${editorLine}`;
+    }
     return `Cancellation was removed for ${clientName}'s appointment with ${staffName}.${groupText}${editorLine}`;
   }
 
@@ -10511,6 +10712,9 @@ function buildTelegramAppointmentMessage(data, original = null, mode = null) {
   }
 
   if (action === 'delete') {
+    if (isDeclinedOnlineBookingRequest(data)) {
+      return `DECLINED ONLINE BOOKING DELETED\nThe declined online booking for ${clientName} with <b>${staffName}</b> - ${appointmentDate} at ${appointmentTime} was deleted.${groupText}${editorLine}`;
+    }
     return `Appointment for <b>${staffName}</b> - ${appointmentDate} at ${appointmentTime} was deleted.${groupText}${editorLine}`;
   }
 
@@ -10642,7 +10846,9 @@ function formatActivityLogDateTime(value) {
 }
 
 function formatActivityLogPhone(phone) {
-  return String(phone || '').replace(/\D/g, '').slice(0, 10);
+  let digits = String(phone || '').replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1);
+  return digits.slice(0, 10);
 }
 
 function getActivityLogActionDate() {
@@ -10678,6 +10884,7 @@ async function writeActivityLogEntry(entry) {
       staffName: entry.staffName || getActivityLogStaffName(entry.staffId),
       eventType: entry.eventType,
       entityType: entry.entityType,
+      entityId: entry.entityId || '',
       client: entry.client || '',
       phone: entry.phone || '',
       service: entry.service || '',
@@ -10818,8 +11025,33 @@ document.addEventListener('click', event => {
 window.addEventListener('resize', hideLogDetailsPopover);
 logTableWrap?.addEventListener('scroll', hideLogDetailsPopover, { passive: true });
 
+async function hydrateManagerActivityLogContacts(logDate, loadRunId) {
+  if (currentUserRole !== 'manager' || !logDate) return;
+  try {
+    const response = await managerGetActivityLogContacts({ logDate });
+    if (loadRunId !== activityLogContactLoadRunId) return;
+    const contacts = new Map(
+      (Array.isArray(response?.data?.contacts) ? response.data.contacts : [])
+        .map(item => [String(item?.appointmentId || ''), String(item?.phone || '')])
+        .filter(([appointmentId, phone]) => appointmentId && phone)
+    );
+    let changed = false;
+    activityLogEntries.forEach(entry => {
+      if (entry.phone || entry.entityType !== 'appointment') return;
+      const phone = contacts.get(String(entry.entityId || ''));
+      if (!phone) return;
+      entry.phone = phone;
+      changed = true;
+    });
+    if (changed) renderActivityLog();
+  } catch (error) {
+    console.warn('Private activity log phones could not be loaded:', error);
+  }
+}
+
 function loadActivityLogForDate() {
   const dateStr = logDateInput?.value || calendarDate.value;
+  const loadRunId = ++activityLogContactLoadRunId;
 
   if (activityLogUnsubscribe) {
     activityLogUnsubscribe();
@@ -10844,6 +11076,7 @@ function loadActivityLogForDate() {
       activityLogEntries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       activityLogEntries.forEach(repairActivityLogDate);
       renderActivityLog();
+      hydrateManagerActivityLogContacts(dateStr, loadRunId);
     },
     err => {
       console.warn('Activity log was not loaded:', err);
@@ -14375,31 +14608,6 @@ document.addEventListener("click", function(e) {
 
 
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

@@ -2198,6 +2198,7 @@
     let availabilityError = '';
     let availabilityLoading = false;
     let availabilityRequestId = 0;
+    let clientAvailabilityRefreshTimer = 0;
     let activeChipGroup = '';
     let activeNestedChip = '';
     let activeChipSelections = [];
@@ -3110,6 +3111,15 @@
       state.managedAppointments = [];
       state.selectedAppointmentId = '';
       clearVerifiedAppointmentAccess();
+      window.clearTimeout(clientAvailabilityRefreshTimer);
+      if (
+        nameInput.value.trim() &&
+        isValidPhoneNumber(phoneInput.value) &&
+        dateInput.value &&
+        (serviceText.value.trim() || state.selectedServices.length)
+      ) {
+        clientAvailabilityRefreshTimer = window.setTimeout(refreshAvailability, 450);
+      }
     }));
     dateInput.addEventListener('input', updateButtons);
 
@@ -3592,11 +3602,12 @@
 
     function getSelectedServiceGroups() {
       const text = serviceText.value || '';
+      const recognitionText = text.replace(/\bparaffin(?:\s+wax)?\b|парафин/giu, ' ');
       const groups = [];
       const addGroup = group => {
         if (group && !groups.includes(group)) groups.push(group);
       };
-      const hasText = pattern => pattern.test(text);
+      const hasText = pattern => pattern.test(recognitionText);
       const selectedServiceParts = text
         .split(',')
         .map(item => item.trim().toLowerCase())
@@ -3604,10 +3615,11 @@
       const selectedBaseGroups = baseChips
         .filter(chip => selectedServiceParts.includes(chip.label.toLowerCase()) || activeChipGroup === chip.group)
         .map(chip => chip.group);
-      const hasAcrylicWork = hasText(/acrylic|acrylic powder/i);
-      const hasHardGelOrRefillWork = hasText(/hard gel|builder gel|gel overlay|nail extension|full set|new set|refill/i);
-      const hasPedicureWork = hasText(/pedicure|\bpedi\b|toe|toenail|paraffin/i) || selectedBaseGroups.includes('pedicure');
-      const hasManicureWork = hasText(/manicure|\bmani\b|nail|gel polish|shellac|regular polish|change color|french|design|shape/i) || selectedBaseGroups.includes('manicure') || hasHardGelOrRefillWork;
+      const hasAcrylicWork = hasText(/acrylic|acrylic powder|акрил/i);
+      const hasHardGelOrRefillWork = hasText(/hard gel|builder gel|gel overlay|nail extension|full set|new set|refill|fill|correction|\bf\b|\br\b|коррекц|наращ/i);
+      const hasPedicureWork = hasText(/pedicure|\bpedi\b|\bp\b|\bpm\b|\bmp\b|toe|toenail|педикюр/i) || selectedBaseGroups.includes('pedicure');
+      const hasManicureWork = hasText(/manicure|\bmani\b|\bm\b|\bpm\b|\bmp\b|nail|gel polish|shellac|regular polish|change color|french|design|shape|маникюр|ногт/i) || selectedBaseGroups.includes('manicure') || hasHardGelOrRefillWork;
+      const hasExplicitManicureWork = hasText(/manicure|\bmani\b|\bm\b|\bpm\b|\bmp\b|gel polish|shellac|regular polish|change color|french|design|shape|маникюр/i) || selectedBaseGroups.includes('manicure');
       const shouldInferCategoryFromText = !activeChipGroup && selectedBaseGroups.length === 0;
 
       selectedBaseGroups.forEach(group => {
@@ -3622,8 +3634,8 @@
       }
 
       if (hasPedicureWork) addGroup('pedicure');
-      if (!hasPedicureWork && hasAcrylicWork) addGroup('acrylics');
-      else if (hasManicureWork && !hasPedicureWork) addGroup('manicure');
+      if (hasAcrylicWork) addGroup('acrylics');
+      if (hasManicureWork && (!hasAcrylicWork || hasExplicitManicureWork)) addGroup('manicure');
 
       return groups.length ? groups : ['manicure', 'pedicure'];
     }
@@ -3641,6 +3653,8 @@
       try {
         const result = await getOnlineBookingAvailability({
           date: dateInput.value,
+          client: nameInput.value.trim(),
+          phone: phoneInput.value.trim(),
           serviceGroups: getSelectedServiceGroups(),
           selectedServices: serviceText.value
             .split(/[,;]/)
@@ -4221,11 +4235,6 @@
   </script>
 </body>
 </html>
-
-
-
-
-
 
 
 

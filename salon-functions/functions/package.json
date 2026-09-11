@@ -2,7 +2,7 @@
   "name": "functions",
   "description": "Cloud Functions for Firebase",
   "scripts": {
-    "test": "node --test appointment-schedule.test.js appointment-access.test.js booking-management.test.js push-notification.test.js",
+    "test": "node --test appointment-schedule.test.js appointment-access.test.js booking-management.test.js push-notification.test.js booking-duration.test.js client-history-core.test.js client-history-store.test.js firestore-rules-contract.test.js",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
     "start": "npm run shell",

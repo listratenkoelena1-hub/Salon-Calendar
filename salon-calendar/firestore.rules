@@ -27,6 +27,72 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Contacts and client-history indexes are server-only. Managers receive
+    // one operational result at a time through authenticated callable
+    // functions; no browser role can enumerate these collections directly.
+    match /appointmentPrivate/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /clientLookup/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /clientProfiles/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /clientPhoneIndex/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /clientAppointmentHistory/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Booking verification, delivery queues, contact retention, and customer
+    // photos are also implementation details of Cloud Functions.
+    match /onlineBookingVerificationChallenges/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /onlineBookingVerificationRateLimits/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /onlineBookingEmailContacts/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /onlineBookingSubmissions/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /onlineBookingPhotos/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /EmailQueue/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /SmsQueue/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Staff may create operational log entries, but only managers may read
+    // the log. Non-managers cannot put a phone into an otherwise public log.
+    match /activityLog/{logId} {
+      allow read, update, delete: if hasRole('manager');
+      allow create: if signedIn()
+        && (
+          hasRole('manager')
+          || !request.resource.data.keys().hasAny(['phone'])
+          || request.resource.data.phone == null
+          || request.resource.data.phone == ''
+        );
+    }
+
     // Roles are server-managed. A user may never promote themselves by writing
     // their own profile from the browser.
     match /users/{userId} {
@@ -52,6 +118,19 @@ service cloud.firestore {
       allow read, write: if signedIn()
         && collection != 'appointments'
         && collection != 'appointmentSchedules'
+        && collection != 'appointmentPrivate'
+        && collection != 'clientLookup'
+        && collection != 'clientProfiles'
+        && collection != 'clientPhoneIndex'
+        && collection != 'clientAppointmentHistory'
+        && collection != 'onlineBookingVerificationChallenges'
+        && collection != 'onlineBookingVerificationRateLimits'
+        && collection != 'onlineBookingEmailContacts'
+        && collection != 'onlineBookingSubmissions'
+        && collection != 'onlineBookingPhotos'
+        && collection != 'EmailQueue'
+        && collection != 'SmsQueue'
+        && collection != 'activityLog'
         && collection != 'users'
         && collection != 'staff';
     }
