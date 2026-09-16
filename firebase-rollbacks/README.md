@@ -19,11 +19,13 @@ The exact archived rules are safe only before any private client-history documen
 
 After the new backend has been enabled even briefly, use `firestore.rules.safe-rollback-client-history.rules`. It restores the old calendar permissions, including the old `activityLog` behavior, but permanently keeps the private and internal collections closed.
 
-Firestore Rules do not have a one-click release rollback. To restore the selected snapshot, first copy its exact contents over the configured `salon-calendar/firestore.rules`, verify the chosen file, run the Rules emulator tests, and then publish only Rules:
+The Firebase console keeps prior rulesets and can restore a previous release. Do not use that shortcut after private client-history data exists, because the prior current-main ruleset contains the unsafe legacy fallback described above.
+
+For this project, restore the selected safe source deliberately: copy its exact contents over the configured `salon-calendar/firestore.rules`, verify the chosen file, run the Rules emulator tests, and then publish only Rules:
 
 `firebase deploy --only firestore:rules --project rosesnails-calendar`
 
-Restoring the file creates a new Rules release. It does not undo data written while another ruleset was active. Always verify the active project and preserve the failed ruleset before restoring.
+Publishing the saved file creates a new Rules release. Restoring through the console or CLI does not undo data written while another ruleset was active. Always verify the active project and preserve the failed ruleset before restoring.
 
 The safe rollback was verified in the Firestore Emulator with:
 
