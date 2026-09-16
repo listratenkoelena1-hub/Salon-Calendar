@@ -8,11 +8,11 @@
 
 | Показатель | Количество |
 |---|---:|
-| Все appointments | 5 022 |
+| Все appointments | 5 026 |
 | С корректным телефоном, кандидаты | 25 |
 | Из них online booking | 23 |
 | С телефоном без booking-признака | 2 |
-| Без телефона | 4 997 |
+| Без телефона | 5 001 |
 | Уникальные нормализованные телефоны | 18 |
 | Пары «телефон + точное имя» | 19 |
 | Некорректные телефоны / отсутствующие имена / уже новая схема | 0 / 0 / 0 |
@@ -41,13 +41,17 @@ Declined online requests сохраняются в истории, но не о�
 
 ## Проверка в эмуляторе
 
-Запуск из `salon-calendar` с доступной Java 21:
+Запуск из корня этой рабочей копии с Java 21 в `PATH`:
 
-`firebase emulators:exec --only firestore --project demo-booking-client-backfill "npm --prefix ../salon-functions/functions run test:emulator"`
+`firebase emulators:exec --config firebase.backfill-emulator.json --only firestore --project demo-booking-client-backfill "npm --prefix salon-functions/functions run test:emulator"`
 
-Эмулятор загружает подготовленный локальный `firestore.rules` и создаёт собственную базу вымышленных appointments. Он не подключает к тесту 5 022 production-записи и не публикует Rules в настоящем Firebase.
+Для связанного теста Auth + Firestore + Functions нужен также Node 22 в `PATH` и локальный `salon-functions/functions/.secret.local` с **только синтетическими** значениями из `salon-functions/functions/emulator-secret-example.txt`. Файл `.secret.local` игнорируется Git и не должен попадать в публикацию:
 
-Проверены обе менеджерские роли, staff и анонимный клиент: old phone-free и new public appointments читаются авторизованными пользователями; `appointmentPrivate`, `clientLookup`, `clientPhoneIndex`, `clientProfiles` и `clientAppointmentHistory` запрещены всем браузерным ролям. Серверная транзакция переносит вымышленные online/declined/manual appointments, повторный запуск не дублирует данные, phone-free запись остаётся прежней. Полный Auth/Functions/Hosting end-to-end на настоящих менеджерских аккаунтах ещё не выполнен.
+`firebase emulators:exec --config firebase.backfill-emulator.json --only auth,firestore,functions --project demo-booking-client-backfill "npm --prefix salon-functions/functions run test:integration"`
+
+Эмулятор загружает подготовленный локальный `firestore.rules` и создаёт собственную базу вымышленных appointments. Он не подключает к тесту 5 026 production-записей и не публикует Rules в настоящем Firebase.
+
+Проверены две вымышленные менеджерские учётные записи, staff и анонимный клиент: old phone-free и new public appointments читаются авторизованными пользователями; `appointmentPrivate`, `clientLookup`, `clientPhoneIndex`, `clientProfiles` и `clientAppointmentHistory` запрещены всем браузерным ролям. Серверная транзакция переносит вымышленные online/declined/manual appointments, повторный запуск не дублирует данные, phone-free запись остаётся прежней. Полный тест с Auth и Functions проверяет точный поиск, ограниченную историю, отказ staff, новую ручную запись с телефоном, онлайн-запрос и его подтверждение; исходный online-booking признак и увеличенная длительность сохраняются. Настоящие аккаунты и Hosting в этот локальный тест не подключаются. Прогон успешно повторён на официальной Node 22.23.2, совпадающей с заданной основной версией runtime.
 
 ## Условия перед настоящим переносом
 

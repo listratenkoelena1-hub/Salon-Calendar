@@ -5,6 +5,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 
 const admin = require("firebase-admin");
+const { FieldValue, Timestamp } = require("firebase-admin/firestore");
 const fetch = require("node-fetch");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
@@ -63,7 +64,6 @@ const {
 
 admin.initializeApp();
 const db = admin.firestore();
-const FieldValue = admin.firestore.FieldValue;
 
 const ANYONE_ID = "anyone";
 const APPOINTMENT_SCHEDULE_COLLECTION = "appointmentSchedules";
@@ -288,7 +288,7 @@ return {
   requestId,
   status: "active",
   createdAt: FieldValue.serverTimestamp(),
-  expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + BOOKING_EMAIL_TTL_MS)),
+  expiresAt: Timestamp.fromDate(new Date(Date.now() + BOOKING_EMAIL_TTL_MS)),
   purpose: "appointment_email_notifications_only"
 };
 }
@@ -1171,7 +1171,7 @@ function buildStaffNotificationDoc({
     photoReviewUrl,
     readBy: {},
     createdAt: FieldValue.serverTimestamp(),
-    expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + STAFF_NOTIFICATION_TTL_MS)),
+    expiresAt: Timestamp.fromDate(new Date(Date.now() + STAFF_NOTIFICATION_TTL_MS)),
     source,
     messageGroupId
   };
@@ -1321,7 +1321,7 @@ exports.telegramQueueCreated = onDocumentCreated(
       await ref.set(
         {
           status: "skipped",
-          skippedAt: admin.firestore.FieldValue.serverTimestamp(),
+          skippedAt: FieldValue.serverTimestamp(),
           error: "Missing message"
         },
         { merge: true }
@@ -1335,8 +1335,8 @@ exports.telegramQueueCreated = onDocumentCreated(
       await ref.set(
         {
           status: "sent",
-          sentAt: admin.firestore.FieldValue.serverTimestamp(),
-          error: admin.firestore.FieldValue.delete()
+          sentAt: FieldValue.serverTimestamp(),
+          error: FieldValue.delete()
         },
         { merge: true }
       );
@@ -1347,7 +1347,7 @@ exports.telegramQueueCreated = onDocumentCreated(
         {
           status: "error",
           error: error && error.message ? error.message : String(error),
-          failedAt: admin.firestore.FieldValue.serverTimestamp()
+          failedAt: FieldValue.serverTimestamp()
         },
         { merge: true }
       );
@@ -2475,12 +2475,12 @@ exports.sendOnlineBookingVerificationCode = onCall(
 
       tx.set(rateRef, {
         sendCount: decision.sendCount,
-        windowStartedAt: admin.firestore.Timestamp.fromMillis(decision.windowStartedAtMs),
+        windowStartedAt: Timestamp.fromMillis(decision.windowStartedAtMs),
         dailySendCount: decision.dailySendCount,
-        dailyWindowStartedAt: admin.firestore.Timestamp.fromMillis(decision.dailyWindowStartedAtMs),
-        lastSentAt: admin.firestore.Timestamp.fromMillis(decision.lastSentAtMs),
+        dailyWindowStartedAt: Timestamp.fromMillis(decision.dailyWindowStartedAtMs),
+        lastSentAt: Timestamp.fromMillis(decision.lastSentAtMs),
         latestChallengeId: challengeRef.id,
-        cleanupAt: admin.firestore.Timestamp.fromMillis(cleanupAtMs)
+        cleanupAt: Timestamp.fromMillis(cleanupAtMs)
       }, { merge: true });
       tx.set(challengeRef, {
         identityId,
@@ -2492,8 +2492,8 @@ exports.sendOnlineBookingVerificationCode = onCall(
         attempts: 0,
         status: "sending",
         createdAt: FieldValue.serverTimestamp(),
-        expiresAt: admin.firestore.Timestamp.fromMillis(expiresAtMs),
-        cleanupAt: admin.firestore.Timestamp.fromMillis(cleanupAtMs)
+        expiresAt: Timestamp.fromMillis(expiresAtMs),
+        cleanupAt: Timestamp.fromMillis(cleanupAtMs)
       });
     });
     challengeReserved = true;
@@ -2615,8 +2615,8 @@ exports.verifyOnlineBookingCode = onCall(
         verifiedAt: FieldValue.serverTimestamp(),
         codeHash: FieldValue.delete(),
         sessionTokenHash,
-        sessionExpiresAt: admin.firestore.Timestamp.fromMillis(sessionExpiresAtMs),
-        cleanupAt: admin.firestore.Timestamp.fromMillis(sessionExpiresAtMs + BOOKING_VERIFICATION_CLEANUP_TTL_MS)
+        sessionExpiresAt: Timestamp.fromMillis(sessionExpiresAtMs),
+        cleanupAt: Timestamp.fromMillis(sessionExpiresAtMs + BOOKING_VERIFICATION_CLEANUP_TTL_MS)
       }, { merge: true });
 
       return {
@@ -3485,7 +3485,7 @@ exports.appointmentPhotoRetentionUpdated = onDocumentUpdated(
       retentionPolicyVersion: 3,
       decisionStatus: after.status,
       retentionStartedAt: retentionStartedAt || FieldValue.serverTimestamp(),
-      expiresAt: admin.firestore.Timestamp.fromMillis(deadlineMs)
+      expiresAt: Timestamp.fromMillis(deadlineMs)
     }, { merge: true });
   }
 );
@@ -3619,13 +3619,13 @@ exports.cleanupExpiredOnlineBookingPrivateData = onSchedule(
     timeZone: "America/Edmonton"
   },
   async () => {
-    const now = admin.firestore.Timestamp.now();
+    const now = Timestamp.now();
     const expiredContacts = await db.collection(BOOKING_EMAIL_CONTACT_COLLECTION)
       .where("expiresAt", "<=", now)
       .limit(100)
       .get();
 
-    const emailQueueCutoff = admin.firestore.Timestamp.fromDate(new Date(Date.now() - BOOKING_EMAIL_TTL_MS));
+    const emailQueueCutoff = Timestamp.fromDate(new Date(Date.now() - BOOKING_EMAIL_TTL_MS));
     const oldEmailQueue = await db.collection(EMAIL_QUEUE_COLLECTION)
       .where("createdAt", "<=", emailQueueCutoff)
       .limit(100)
@@ -3730,7 +3730,7 @@ exports.registerPushDevice = onCall(
       enabled: true,
       userAgent,
       updatedAt: FieldValue.serverTimestamp(),
-      expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + PUSH_DEVICE_TTL_MS))
+      expiresAt: Timestamp.fromDate(new Date(Date.now() + PUSH_DEVICE_TTL_MS))
     }, { merge: true });
 
     return { ok: true };
@@ -3912,16 +3912,16 @@ exports.cleanupExpiredStaffNotifications = onSchedule(
   },
   async () => {
     const snap = await db.collection("staffNotifications")
-      .where("expiresAt", "<=", admin.firestore.Timestamp.now())
+      .where("expiresAt", "<=", Timestamp.now())
       .limit(200)
       .get();
     const canonicalSnap = await db.collection("staffMessages")
-      .where("expiresAt", "<=", admin.firestore.Timestamp.now())
+      .where("expiresAt", "<=", Timestamp.now())
       .limit(200)
       .get();
 
     const expiredDevices = await db.collection("staffPushDevices")
-      .where("expiresAt", "<=", admin.firestore.Timestamp.now())
+      .where("expiresAt", "<=", Timestamp.now())
       .limit(200)
       .get();
 
@@ -3940,7 +3940,7 @@ exports.cleanupExpiredOnlineBookingVerificationData = onSchedule(
     timeZone: "America/Edmonton"
   },
   async () => {
-    const now = admin.firestore.Timestamp.now();
+    const now = Timestamp.now();
     const [challengeSnap, rateSnap] = await Promise.all([
       db.collection(BOOKING_VERIFICATION_COLLECTION)
         .where("cleanupAt", "<=", now)
@@ -3968,7 +3968,7 @@ exports.cleanupExpiredOnlineBookingPhotos = onSchedule(
   async () => {
     const nowMs = Date.now();
     const snap = await db.collection(PHOTO_COLLECTION)
-      .where("expiresAt", "<=", admin.firestore.Timestamp.now())
+      .where("expiresAt", "<=", Timestamp.now())
       .limit(50)
       .get();
 
@@ -4009,7 +4009,7 @@ exports.cleanupExpiredOnlineBookingPhotos = onSchedule(
             retentionPolicyVersion: 3,
             decisionStatus: appointment.status,
             retentionStartedAt: retentionStartedAt || FieldValue.serverTimestamp(),
-            expiresAt: admin.firestore.Timestamp.fromMillis(decisionDeadlineMs)
+            expiresAt: Timestamp.fromMillis(decisionDeadlineMs)
           }, { merge: true });
           return;
         }
