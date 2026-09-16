@@ -1,0 +1,59 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function currentUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(role) {
+      return signedIn() && currentUser().role == role;
+    }
+
+    // Appointment writes must pass through mutateAppointment so the schedule
+    // document and the appointment are committed in the same transaction.
+    match /appointments/{document=**} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+    }
+
+    // This collection is an internal transaction lock. Admin SDK functions
+    // bypass rules; browsers must never be able to forge or remove a lock.
+    match /appointmentSchedules/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Roles are server-managed. A user may never promote themselves by writing
+    // their own profile from the browser.
+    match /users/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || hasRole('manager'));
+      allow write: if false;
+    }
+
+    match /staff/{staffId} {
+      allow read: if signedIn();
+      allow create, delete: if hasRole('manager');
+      allow update: if hasRole('manager')
+        || (
+          hasRole('staff')
+          && currentUser().staffId == staffId
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['color', 'bookingDurations'])
+        );
+    }
+
+    // Preserve the calendar's current authenticated client operations for the
+    // remaining collections while removing the previous anonymous public access.
+    match /{collection}/{document=**} {
+      allow read, write: if signedIn()
+        && collection != 'appointments'
+        && collection != 'appointmentSchedules'
+        && collection != 'users'
+        && collection != 'staff';
+    }
+  }
+}
