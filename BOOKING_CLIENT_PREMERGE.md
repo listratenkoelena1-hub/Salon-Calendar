@@ -12,6 +12,7 @@
 - Телефон отсутствует в публичном appointment и остаётся в закрытых коллекциях.
 - Повторный исторический перенос сохраняет прежние случайные `clientId`/`clientProfileId` и не дублирует историю.
 - Старый appointment без телефона остаётся доступным и не изменяется.
+- Локальный Hosting Emulator для target `booking` отдаёт `/`, `/booking` и `/online-booking.html` с HTTP 200.
 - `npm audit --omit=dev`: 0 critical, 0 high, 8 moderate. Оставшиеся замечания находятся в Firebase Admin / Google Cloud цепочке и требуют отдельной миграции Firebase Admin 14.
 
 Все интеграционные данные синтетические. Реальные appointments, Rules, Functions, Auth-пользователи и Hosting не изменялись.
