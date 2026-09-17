@@ -3,9 +3,12 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  buildClientCancellationRecordComment,
+  buildClientCancellationStaffMessage,
   buildSessionTokenHash,
   buildVerificationCodeHash,
   buildPhoneLookupVariants,
+  getClientCancellationEligibility,
   getClientCancellationRecordState,
   getPhotoRetentionDeadlineMs,
   getVerificationRateDecision,
@@ -78,6 +81,57 @@ test("client cancellation closes pending requests without changing confirmed his
     status: "confirmed",
     canceled: true
   });
+});
+
+test("online cancellation stays available through the exact three-hour boundary", () => {
+  const appointment = { date: "2026-09-17", start: 32 }; // 4:00 PM
+  assert.deepEqual(getClientCancellationEligibility(appointment, {
+    today: "2026-09-17",
+    currentMinutes: 13 * 60,
+    minimumNoticeMinutes: 180
+  }), {
+    allowed: true,
+    minutesUntilAppointment: 180
+  });
+  assert.deepEqual(getClientCancellationEligibility(appointment, {
+    today: "2026-09-17",
+    currentMinutes: (13 * 60) + 1,
+    minimumNoticeMinutes: 180
+  }), {
+    allowed: false,
+    minutesUntilAppointment: 179
+  });
+  assert.equal(getClientCancellationEligibility({ date: "2026-09-18", start: 8 }, {
+    today: "2026-09-17",
+    currentMinutes: 19 * 60,
+    minimumNoticeMinutes: 180
+  }).allowed, true);
+  assert.deepEqual(getClientCancellationEligibility({ date: "invalid", start: 8 }, {
+    today: "2026-09-17",
+    currentMinutes: 12 * 60
+  }), {
+    allowed: false,
+    minutesUntilAppointment: null
+  });
+});
+
+test("client cancellation comments remain optional and appear on a separate message line", () => {
+  assert.equal(
+    buildClientCancellationRecordComment(""),
+    "Client cancelled appointment through online booking."
+  );
+  assert.equal(
+    buildClientCancellationRecordComment("  Family emergency  "),
+    "Client cancelled appointment through online booking.\nClient comment: Family emergency"
+  );
+  assert.equal(
+    buildClientCancellationStaffMessage({
+      client: "Naomi",
+      staffName: "Natalia",
+      clientComment: "Family emergency"
+    }),
+    "Online appointment for Naomi with Natalia was cancelled by the client.\nClient comment: Family emergency"
+  );
 });
 
 test("starts the photo deletion clock 24 hours after confirmation or decline", () => {

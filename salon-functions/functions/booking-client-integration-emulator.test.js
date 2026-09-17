@@ -13,6 +13,7 @@ const {
 const { getFirestore, connectFirestoreEmulator, doc, getDoc } = require("firebase/firestore");
 const { getFunctions, connectFunctionsEmulator, httpsCallable } = require("firebase/functions");
 const { runApply } = require("./client-history-backfill-cli");
+const { buildSessionTokenHash } = require("./booking-management");
 
 if (!process.env.FIRESTORE_EMULATOR_HOST || !process.env.FIREBASE_AUTH_EMULATOR_HOST) {
   throw new Error("Integration tests require local Firestore and Auth emulators.");
@@ -277,6 +278,52 @@ test("two real emulator managers get private contacts while staff sees only publ
     assert.equal(confirmedHistory.data().source, "online_booking");
     assert.equal(confirmedHistory.data().duration, confirmForm.duration + 2);
     assert.equal(confirmedHistory.data().historyEligible, true);
+
+    const cancellationChallengeId = "synthetic-cancel-challenge";
+    const cancellationSessionToken = "synthetic-cancel-session-token-1234567890";
+    await db.collection("onlineBookingVerificationChallenges")
+      .doc(cancellationChallengeId)
+      .set({
+        status: "verified",
+        sessionTokenHash: buildSessionTokenHash(cancellationSessionToken),
+        sessionExpiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 20 * 60 * 1000),
+        phoneDigits: phone,
+        clientName: "naomi",
+        clientId: confirmedPrivate.data().clientId,
+        clientProfileId: confirmedPrivate.data().clientProfileId,
+        managedAppointmentIds: []
+      });
+    const cancellation = (await httpsCallable(
+      booking.functions,
+      "cancelOnlineBookingAppointment"
+    )({
+      challengeId: cancellationChallengeId,
+      sessionToken: cancellationSessionToken,
+      appointmentId: publicBookingResult.appointmentId,
+      comment: "Family emergency"
+    })).data;
+    assert.equal(cancellation.ok, true);
+    const [cancelledOnline, cancelledHistory] = await db.getAll(onlineRef, onlineHistoryRef);
+    assert.equal(cancelledOnline.data().canceled, true);
+    assert.equal(cancelledOnline.data().lastMutationMode, "online_client_cancel");
+    assert.equal(cancelledOnline.data().clientCancellationComment, "Family emergency");
+    assert.match(cancelledOnline.data().cancelComment, /Client comment: Family emergency/);
+    assert.equal(cancelledHistory.data().canceled, true);
+    const cancellationLogs = await db.collection("activityLog")
+      .where("entityId", "==", publicBookingResult.appointmentId)
+      .where("eventType", "==", "canceled")
+      .get();
+    assert.equal(cancellationLogs.size, 1);
+    assert.match(cancellationLogs.docs[0].data().details, /Client comment: Family emergency/);
+    const cancellationMessages = await db.collection("staffMessages")
+      .where("messageGroupId", "==", `online-booking-cancel-${publicBookingResult.appointmentId}`)
+      .get();
+    assert.equal(cancellationMessages.size, 1);
+    assert.equal(
+      cancellationMessages.docs[0].data().body,
+      "Online appointment for Naomi with Synthetic Tech was cancelled by the client.\n" +
+        "Client comment: Family emergency"
+    );
     await new Promise(resolve => setTimeout(resolve, 500));
     assert.equal((await db.collection("EmailQueue").get()).size, 0);
     assert.equal((await db.collection("SmsQueue").get()).size, 0);

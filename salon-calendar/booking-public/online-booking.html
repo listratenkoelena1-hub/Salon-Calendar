@@ -1384,6 +1384,22 @@
       background: rgba(255, 228, 236, 0.48);
     }
 
+    .cancellation-comment-field {
+      display: grid;
+      gap: 7px;
+      width: min(100%, 620px);
+    }
+
+    .cancellation-comment-field textarea {
+      min-height: 92px;
+    }
+
+    .security-copy.warning {
+      color: #7a401f;
+      background: rgba(255, 236, 218, 0.78);
+      border-color: rgba(201, 72, 50, 0.28);
+    }
+
     .actions {
       display: flex;
       align-items: center;
@@ -1874,6 +1890,7 @@
             </header>
             <div class="content">
               <div class="note">If you do not hear from us soon, please <a class="salon-phone-link" href="tel:+17804066767">call salon</a>.</div>
+              <div class="security-copy"><strong>Need to cancel?</strong><br>Confirmed and pending online appointments can be cancelled until 3 hours before the appointment. Return to the start screen and select “Already have an appointment?” To change the date or time, cancel the existing appointment and submit a new request.</div>
             </div>
             <nav class="actions">
               <button class="btn" id="startOver" type="button">Start Over</button>
@@ -1884,9 +1901,10 @@
           <section class="screen" data-screen="appointment-choice">
             <header>
               <h2>Upcoming appointment found</h2>
-              <p class="lead">We found one or more upcoming appointments requested through this online booking page. Would you like to manage them or request a new appointment?</p>
+              <p class="lead">We found one or more upcoming appointments requested through this online booking page. You can review or cancel them, or request a new appointment.</p>
             </header>
             <div class="content decision-content">
+              <div class="security-copy"><strong>Online changes</strong><br>Appointments cannot be rescheduled online. To change the date or time, cancel the existing appointment and submit a new request.<br><br>Online cancellation is available until 3 hours before the appointment.</div>
               <div class="security-copy">For privacy, appointment details remain hidden until your phone number is verified.</div>
               <button class="btn choice-button" id="requestNewFromChoice" type="button">Request a new appointment</button>
             </div>
@@ -1965,6 +1983,7 @@
             </header>
             <div class="content decision-content">
               <div class="review" id="appointmentDetails"></div>
+              <div class="security-copy" id="appointmentCancellationPolicy"></div>
               <button class="btn choice-button" id="requestNewFromDetails" type="button">Request a new appointment</button>
             </div>
             <nav class="actions">
@@ -1980,6 +1999,11 @@
             </header>
             <div class="content">
               <div class="appointment-cancel-summary" id="cancelAppointmentSummary"></div>
+              <div class="cancellation-comment-field">
+                <label for="cancellationComment">Cancellation comment (optional)</label>
+                <textarea id="cancellationComment" maxlength="500" placeholder="Write your comment here" aria-describedby="cancellationCommentHelp"></textarea>
+                <div class="note" id="cancellationCommentHelp">If you would like, leave a short comment for the salon about your cancellation.</div>
+              </div>
               <div class="security-copy">The salon and the assigned technician will be notified when an appointment is cancelled.</div>
               <div class="lookup-error" id="cancellationError" role="alert"></div>
             </div>
@@ -1992,7 +2016,7 @@
           <section class="screen" data-screen="cancellation-complete">
             <header>
               <h2>Appointment cancelled</h2>
-              <p class="lead">Your appointment has been cancelled. The salon and your technician have been notified.</p>
+              <p class="lead" id="cancellationCompleteMessage">Your appointment has been cancelled. The salon and your technician have been notified.</p>
             </header>
             <div class="content"></div>
             <nav class="actions">
@@ -2619,6 +2643,7 @@
     const appointmentLookupError = document.getElementById('appointmentLookupError');
     const verificationCodeInput = document.getElementById('verificationCode');
     const continueVerificationButton = document.getElementById('continueVerification');
+    const cancellationCommentInput = document.getElementById('cancellationComment');
     const bookingScreenNames = ['contact', 'services', 'schedule', 'review', 'success'];
     const screenElements = Array.from(document.querySelectorAll('[data-screen]'));
     const screenIndexes = new Map(screenElements.map((screen, index) => [screen.dataset.screen, index]));
@@ -2823,7 +2848,9 @@
           date: getPreviewIsoDate(3),
           time: '2:30 PM',
           technician: 'Olga',
-          service: 'Gel polish manicure'
+          service: 'Gel polish manicure',
+          canCancel: true,
+          cancellationMinimumNoticeMinutes: 180
         },
         {
           id: 'preview-awaiting',
@@ -2831,7 +2858,9 @@
           date: getPreviewIsoDate(8),
           time: '11:00 AM',
           technician: 'Anyone',
-          service: 'Pedicure'
+          service: 'Pedicure',
+          canCancel: true,
+          cancellationMinimumNoticeMinutes: 180
         }
       ];
     }
@@ -3017,13 +3046,22 @@
           <div class="review-value">${escapeHtml(value)}</div>
         </div>
       `).join('');
+      const canCancel = appointment.canCancel !== false;
+      const cancelButton = document.getElementById('cancelAppointment');
+      const policy = document.getElementById('appointmentCancellationPolicy');
+      cancelButton.disabled = !canCancel;
+      policy.classList.toggle('warning', !canCancel);
+      policy.textContent = canCancel
+        ? 'Online cancellation is available until 3 hours before the appointment.'
+        : 'This appointment starts in less than 3 hours. Online cancellation is no longer available. Please call the salon at 780-406-6767.';
       return true;
     }
 
     function renderCancellationSummary() {
       const appointment = getSelectedManagedAppointment();
-      if (!appointment) return false;
+      if (!appointment || appointment.canCancel === false) return false;
       document.getElementById('cancellationError').classList.remove('visible');
+      cancellationCommentInput.value = '';
       document.getElementById('cancelAppointmentSummary').innerHTML = `
         <strong>${escapeHtml(formatManagedAppointmentDate(appointment.date))} at ${escapeHtml(appointment.time)}</strong>
         <span>${escapeHtml(appointment.technician)} · ${escapeHtml(appointment.service)}</span>
@@ -3227,11 +3265,17 @@
           await cancelOnlineBookingAppointment({
             challengeId: state.verificationChallengeId,
             sessionToken: state.appointmentSessionToken,
-            appointmentId: appointment.id
+            appointmentId: appointment.id,
+            comment: cancellationCommentInput.value.trim()
           });
         }
+        const includedComment = Boolean(cancellationCommentInput.value.trim());
         state.managedAppointments = state.managedAppointments.filter(item => item.id !== appointment.id);
         state.selectedAppointmentId = '';
+        document.getElementById('cancellationCompleteMessage').textContent = includedComment
+          ? 'Your appointment has been cancelled. The salon and your technician have been notified, and your comment was included.'
+          : 'Your appointment has been cancelled. The salon and your technician have been notified.';
+        cancellationCommentInput.value = '';
         showScreen('cancellation-complete');
       } catch (cancellationRequestError) {
         error.textContent = getCallableErrorMessage(

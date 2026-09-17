@@ -103,6 +103,72 @@ function getClientCancellationRecordState(appointment = {}) {
   };
 }
 
+function getLocalDateDayNumber(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return Math.floor(parsed.getTime() / 86400000);
+}
+
+function getClientCancellationEligibility(appointment, {
+  today,
+  currentMinutes,
+  minimumNoticeMinutes = 180
+} = {}) {
+  const appointmentDay = getLocalDateDayNumber(appointment?.date);
+  const todayDay = getLocalDateDayNumber(today);
+  const start = Number(appointment?.start);
+  const safeCurrentMinutes = Number(currentMinutes);
+  const safeMinimumNoticeMinutes = Number(minimumNoticeMinutes);
+  if (
+    appointmentDay === null ||
+    todayDay === null ||
+    !Number.isInteger(start) ||
+    start < 0 ||
+    !Number.isFinite(safeCurrentMinutes) ||
+    !Number.isFinite(safeMinimumNoticeMinutes) ||
+    safeMinimumNoticeMinutes < 0
+  ) {
+    return { allowed: false, minutesUntilAppointment: null };
+  }
+
+  const appointmentMinutes = appointmentDay * 1440 + (8 * 60) + (start * 15);
+  const nowMinutes = todayDay * 1440 + safeCurrentMinutes;
+  const minutesUntilAppointment = appointmentMinutes - nowMinutes;
+  return {
+    allowed: minutesUntilAppointment >= safeMinimumNoticeMinutes,
+    minutesUntilAppointment
+  };
+}
+
+function normalizeClientCancellationComment(value, maxLength = 500) {
+  return String(value || "").trim().slice(0, maxLength);
+}
+
+function buildClientCancellationRecordComment(clientComment) {
+  const base = "Client cancelled appointment through online booking.";
+  const comment = normalizeClientCancellationComment(clientComment);
+  return comment ? `${base}\nClient comment: ${comment}` : base;
+}
+
+function buildClientCancellationStaffMessage({ client, staffName, clientComment } = {}) {
+  const safeClient = String(client || "Client").trim() || "Client";
+  const safeStaffName = String(staffName || "Staff").trim() || "Staff";
+  const comment = normalizeClientCancellationComment(clientComment);
+  const base = `Online appointment for ${safeClient} with ${safeStaffName} was cancelled by the client.`;
+  return comment ? `${base}\nClient comment: ${comment}` : base;
+}
+
 function buildVerificationCodeHash({ challengeId, code, secret }) {
   const safeChallengeId = String(challengeId || "");
   const safeCode = String(code || "");
@@ -182,13 +248,17 @@ function getVerificationRateDecision(rateData, nowMs, {
 }
 
 module.exports = {
+  buildClientCancellationRecordComment,
+  buildClientCancellationStaffMessage,
   buildSessionTokenHash,
   buildVerificationCodeHash,
   buildPhoneLookupVariants,
+  getClientCancellationEligibility,
   getClientCancellationRecordState,
   getPhotoRetentionDeadlineMs,
   getVerificationRateDecision,
   isUpcomingAppointmentForClient,
+  normalizeClientCancellationComment,
   normalizeClientName,
   normalizePhoneDigits,
   secureHashesEqual,

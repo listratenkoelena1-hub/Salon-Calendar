@@ -12,9 +12,12 @@ const nodemailer = require("nodemailer");
 const { canMutateAnyAppointment } = require("./appointment-access");
 const { shouldProcessStaffPush } = require("./push-notification");
 const {
+  buildClientCancellationRecordComment,
+  buildClientCancellationStaffMessage,
   buildSessionTokenHash,
   buildVerificationCodeHash,
   buildPhoneLookupVariants,
+  getClientCancellationEligibility,
   getClientCancellationRecordState,
   getPhotoRetentionDeadlineMs,
   getVerificationRateDecision,
@@ -99,7 +102,8 @@ const BOOKING_VERIFICATION_CODE_TTL_MS = 10 * 60 * 1000;
 const BOOKING_VERIFICATION_SESSION_TTL_MS = 20 * 60 * 1000;
 const BOOKING_VERIFICATION_CLEANUP_TTL_MS = 24 * 60 * 60 * 1000;
 const BOOKING_VERIFICATION_MAX_ATTEMPTS = 5;
-const ONLINE_BOOKING_CLIENT_CANCEL_COMMENT = "Client cancelled appointment through online booking.";
+const CLIENT_CANCELLATION_MIN_NOTICE_MINUTES = 3 * 60;
+const MAX_CLIENT_CANCELLATION_COMMENT = 500;
 const SALON_PHONE_E164 = "+17804066767";
 const SALON_PHONE_DISPLAY = "+1 780-406-6767";
 const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER || "+15876060462";
@@ -2415,18 +2419,25 @@ async function loadUpcomingAppointmentsForClient({ phone, phoneDigits, clientNam
     });
 }
 
-function buildBookingManagementAppointment(appointment, staffRecords) {
+function buildBookingManagementAppointment(appointment, staffRecords, salonNow = getSalonNowParts()) {
   const selectedServiceText = Array.isArray(appointment.selectedServices)
     ? appointment.selectedServices.map(item => String(item || "").trim()).filter(Boolean).join(", ")
     : "";
   const start = Number(appointment.start);
+  const cancellationEligibility = getClientCancellationEligibility(appointment, {
+    today: salonNow.date,
+    currentMinutes: salonNow.minutes,
+    minimumNoticeMinutes: CLIENT_CANCELLATION_MIN_NOTICE_MINUTES
+  });
   return {
     id: appointment.id,
     status: appointment.status === "confirmed" ? "confirmed" : "request",
     date: String(appointment.date || ""),
     time: Number.isFinite(start) && start >= 0 ? slotToTime(start) : "Morning",
     technician: getStaffName(staffRecords, appointment.staffId),
-    service: String(appointment.note || selectedServiceText || "Service details not provided").trim().slice(0, 600)
+    service: String(appointment.note || selectedServiceText || "Service details not provided").trim().slice(0, 600),
+    canCancel: cancellationEligibility.allowed,
+    cancellationMinimumNoticeMinutes: CLIENT_CANCELLATION_MIN_NOTICE_MINUTES
   };
 }
 
@@ -2672,13 +2683,16 @@ exports.verifyOnlineBookingCode = onCall(
     });
     const staffSnap = await db.collection("staff").get();
     const staffRecords = staffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+    const salonNow = getSalonNowParts();
 
     return {
       ok: true,
       challengeId,
       sessionToken,
       sessionExpiresAt: new Date(sessionExpiresAtMs).toISOString(),
-      appointments: appointments.map(appointment => buildBookingManagementAppointment(appointment, staffRecords))
+      appointments: appointments.map(appointment => (
+        buildBookingManagementAppointment(appointment, staffRecords, salonNow)
+      ))
     };
   }
 );
@@ -2693,6 +2707,11 @@ exports.cancelOnlineBookingAppointment = onCall(
     const challengeId = assertAppointmentToken(input.challengeId, "challengeId", { min: 12, max: 100 });
     const sessionToken = assertAppointmentToken(input.sessionToken, "sessionToken", { min: 32, max: 200 });
     const appointmentId = assertAppointmentToken(input.appointmentId, "appointmentId", { min: 12, max: 100 });
+    const clientComment = normalizeOptionalText(
+      input.comment,
+      "comment",
+      MAX_CLIENT_CANCELLATION_COMMENT
+    ) || "";
     const challengeRef = db.collection(BOOKING_VERIFICATION_COLLECTION).doc(challengeId);
     const appointmentRef = db.collection("appointments").doc(appointmentId);
     const privateAppointmentRef = db.collection(APPOINTMENT_PRIVATE_COLLECTION).doc(appointmentId);
@@ -2735,14 +2754,14 @@ exports.cancelOnlineBookingAppointment = onCall(
         : [];
       if (
         before.canceled === true &&
-        before.cancelComment === ONLINE_BOOKING_CLIENT_CANCEL_COMMENT &&
+        before.lastMutationMode === "online_client_cancel" &&
         previouslyManagedIds.includes(appointmentId)
       ) {
         return {
           ok: true,
           duplicate: true,
           appointmentId,
-          comment: ONLINE_BOOKING_CLIENT_CANCEL_COMMENT
+          comment: before.cancelComment || buildClientCancellationRecordComment("")
         };
       }
       const linkedPrivateAppointment = Boolean(
@@ -2761,13 +2780,27 @@ exports.cancelOnlineBookingAppointment = onCall(
         throw new HttpsError("failed-precondition", "This appointment is no longer available to manage.");
       }
 
+      const cancellationEligibility = getClientCancellationEligibility(before, {
+        today: salonNow.date,
+        currentMinutes: salonNow.minutes,
+        minimumNoticeMinutes: CLIENT_CANCELLATION_MIN_NOTICE_MINUTES
+      });
+      if (!cancellationEligibility.allowed) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Online cancellation is available until 3 hours before the appointment. Please call the salon at 780-406-6767."
+        );
+      }
+
       const staffSnap = await tx.get(db.collection("staff"));
       const staffRecords = staffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
       const cancellationState = getClientCancellationRecordState(before);
+      const cancellationComment = buildClientCancellationRecordComment(clientComment);
       const after = {
         ...before,
         ...cancellationState,
-        cancelComment: ONLINE_BOOKING_CLIENT_CANCEL_COMMENT,
+        cancelComment: cancellationComment,
+        clientCancellationComment: clientComment || null,
         canceledAt: FieldValue.serverTimestamp(),
         canceledBy: "Online Booking Client",
         lastEditedBy: "Online Booking Client",
@@ -2811,12 +2844,16 @@ exports.cancelOnlineBookingAppointment = onCall(
         client: before.client,
         phone: before.hasPrivateContact === true ? null : (before.phone || null),
         service: before.note || "",
-        details: `${buildAppointmentLogDetails(before, staffRecords)}; canceled; ${ONLINE_BOOKING_CLIENT_CANCEL_COMMENT}`,
+        details: `${buildAppointmentLogDetails(before, staffRecords)}; canceled; ${cancellationComment}`,
         source: "online_booking"
       });
 
       const staffName = getStaffName(staffRecords, before.staffId);
-      const message = `Appointment for ${before.client || "Client"} with ${staffName} was canceled. ${ONLINE_BOOKING_CLIENT_CANCEL_COMMENT}`;
+      const message = buildClientCancellationStaffMessage({
+        client: before.client,
+        staffName,
+        clientComment
+      });
       tx.set(staffMessageRef, buildCanonicalStaffMessageDoc({
         message,
         eventType: "canceled",
@@ -2836,7 +2873,7 @@ exports.cancelOnlineBookingAppointment = onCall(
       return {
         ok: true,
         appointmentId,
-        comment: ONLINE_BOOKING_CLIENT_CANCEL_COMMENT
+        comment: cancellationComment
       };
     });
   }

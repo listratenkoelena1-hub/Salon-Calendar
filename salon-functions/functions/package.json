@@ -2,7 +2,7 @@
   "name": "functions",
   "description": "Cloud Functions for Firebase",
   "scripts": {
-    "test": "node --test appointment-schedule.test.js appointment-access.test.js booking-management.test.js push-notification.test.js booking-duration.test.js client-history-core.test.js client-history-store.test.js client-history-backfill-core.test.js client-history-backfill-cli.test.js activity-log-access.test.js firestore-rules-contract.test.js",
+    "test": "node --test appointment-schedule.test.js appointment-access.test.js booking-management.test.js booking-cancellation-ui.test.js push-notification.test.js booking-duration.test.js client-history-core.test.js client-history-store.test.js client-history-backfill-core.test.js client-history-backfill-cli.test.js activity-log-access.test.js firestore-rules-contract.test.js",
     "test:emulator": "node --test --test-concurrency=1 firestore-rules-emulator.test.js client-history-backfill-emulator.test.js",
     "test:integration": "node --test booking-client-integration-emulator.test.js",
     "test:main-rules-compat": "node --test current-main-rules-compat-emulator.test.js",
