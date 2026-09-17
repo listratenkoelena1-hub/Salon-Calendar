@@ -77,6 +77,22 @@ test("two real emulator managers get private contacts while staff sees only publ
       db.collection("appointments").doc(noPhoneId).set({
         date: "2026-09-01", start: 40, duration: 4, staffId: "tech-one",
         client: "Synthetic Client", note: "pedicure"
+      }),
+      db.collection("activityLog").doc("staff-visible-log").set({
+        createdAt: new Date("2026-10-15T18:00:00Z"),
+        logDate: "2026-10-15",
+        actorLabel: "Manager",
+        actorKey: "manager",
+        staffId: "tech-one",
+        staffName: "Synthetic Tech",
+        eventType: "updated_app",
+        entityType: "appointment",
+        entityId: appointmentId,
+        client: "Naomi",
+        phone,
+        service: "hard gel refill",
+        details: `Naomi; changed: phone ${phone} -> -; duration 2 hr`,
+        source: "online_booking"
       })
     ]);
     const migrated = await runApply({
@@ -139,6 +155,28 @@ test("two real emulator managers get private contacts while staff sees only publ
     await assert.rejects(httpsCallable(clients[2].functions, "managerGetClientHistory")({
       appointmentId
     }), /Manager access is required/);
+
+    await assert.rejects(getDoc(doc(clients[2].firestore,
+      "activityLog", "staff-visible-log")));
+    const staffLog = (await httpsCallable(clients[2].functions, "getStaffActivityLog")({
+      logDate: "2026-10-15"
+    })).data;
+    assert.equal(staffLog.ok, true);
+    assert.equal(staffLog.truncated, false);
+    assert.equal(staffLog.entries.length, 1);
+    assert.equal(staffLog.entries[0].id, "staff-visible-log");
+    assert.equal(staffLog.entries[0].phone, undefined);
+    assert.equal(staffLog.entries[0].email, undefined);
+    assert.equal(staffLog.entries[0].details.includes(phone), false);
+    assert.match(staffLog.entries[0].details, /phone \[hidden\]/);
+    assert.equal(typeof staffLog.entries[0].createdAtMillis, "number");
+    const managerLogContacts = (await httpsCallable(clients[0].functions,
+      "managerGetActivityLogContacts")({ logDate: "2026-10-15" })).data;
+    assert.equal(managerLogContacts.contacts.length, 1);
+    assert.equal(managerLogContacts.contacts[0].phone, phone);
+    await assert.rejects(httpsCallable(booking.functions, "getStaffActivityLog")({
+      logDate: "2026-10-15"
+    }), /You must be signed in/);
 
     const newAppointmentId = "synthetic-new-manual-one";
     const mutation = (await httpsCallable(clients[0].functions, "mutateAppointment")({

@@ -59,6 +59,10 @@ const {
   writeClientAppointmentRecords
 } = require("./client-history-store");
 const {
+  ACTIVITY_LOG_PAGE_LIMIT,
+  serializeStaffActivityLogEntry
+} = require("./activity-log-access");
+const {
   getBookingDurationDecision
 } = require("./booking-duration");
 
@@ -2072,6 +2076,26 @@ exports.managerGetActivityLogContacts = onCall(
       });
     }
     return { ok: true, logDate, contacts };
+  }
+);
+
+exports.getStaffActivityLog = onCall(
+  {
+    region: "us-central1",
+    maxInstances: 8
+  },
+  async request => {
+    await getAuthorizedCalendarActor(request);
+    const logDate = assertDate(request.data?.logDate);
+    const logSnapshot = await db.collection("activityLog")
+      .where("logDate", "==", logDate)
+      .limit(ACTIVITY_LOG_PAGE_LIMIT + 1)
+      .get();
+    const truncated = logSnapshot.size > ACTIVITY_LOG_PAGE_LIMIT;
+    const entries = logSnapshot.docs
+      .slice(0, ACTIVITY_LOG_PAGE_LIMIT)
+      .map(serializeStaffActivityLogEntry);
+    return { ok: true, logDate, entries, truncated };
   }
 );
 

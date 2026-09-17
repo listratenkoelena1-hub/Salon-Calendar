@@ -4858,6 +4858,7 @@ const mutateAppointment = httpsCallable(functions, "mutateAppointment");
 const managerGetAppointmentContact = httpsCallable(functions, "managerGetAppointmentContact");
 const managerLookupClientByPhone = httpsCallable(functions, "managerLookupClientByPhone");
 const managerGetActivityLogContacts = httpsCallable(functions, "managerGetActivityLogContacts");
+const getStaffActivityLog = httpsCallable(functions, "getStaffActivityLog");
 const FCM_VAPID_KEY = "";
 // Operational pause: keep Telegram code and data intact while staffMessages
 // remains the active internal notification channel. Set to false to resume.
@@ -11049,6 +11050,32 @@ async function hydrateManagerActivityLogContacts(logDate, loadRunId) {
   }
 }
 
+async function loadSanitizedStaffActivityLog(logDate, loadRunId) {
+  try {
+    const response = await getStaffActivityLog({ logDate });
+    if (loadRunId !== activityLogContactLoadRunId) return;
+    const result = response?.data || {};
+    activityLogEntries = (Array.isArray(result.entries) ? result.entries : []).map(entry => {
+      const createdAtMillis = Number(entry?.createdAtMillis);
+      const hasCreatedAt = entry?.createdAtMillis !== null && entry?.createdAtMillis !== undefined;
+      return {
+        ...entry,
+        phone: '',
+        createdAt: hasCreatedAt && Number.isFinite(createdAtMillis) ? new Date(createdAtMillis) : null
+      };
+    });
+    renderActivityLog();
+    if (result.truncated === true) {
+      console.warn('Activity log reached the safe daily display limit.');
+    }
+  } catch (error) {
+    if (loadRunId !== activityLogContactLoadRunId) return;
+    console.warn('Sanitized activity log was not loaded:', error);
+    activityLogEntries = [];
+    renderActivityLog();
+  }
+}
+
 function loadActivityLogForDate() {
   const dateStr = logDateInput?.value || calendarDate.value;
   const loadRunId = ++activityLogContactLoadRunId;
@@ -11066,6 +11093,11 @@ function loadActivityLogForDate() {
 
   activityLogEntries = [];
   renderActivityLog();
+
+  if (currentUserRole !== 'manager') {
+    loadSanitizedStaffActivityLog(dateStr, loadRunId);
+    return;
+  }
 
   activityLogUnsubscribe = onSnapshot(
     query(
@@ -12532,6 +12564,7 @@ window.closeSearch=()=>{
     activityLogUnsubscribe();
     activityLogUnsubscribe = null;
   }
+  activityLogContactLoadRunId += 1;
   searchModal.classList.add('hidden');
 };
 

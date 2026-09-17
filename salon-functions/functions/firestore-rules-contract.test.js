@@ -44,7 +44,7 @@ test("calendar appointments remain readable but browser writes stay server-media
   assert.match(rules, /match \/appointments\/\{document=\*\*\}[\s\S]*?allow read: if signedIn\(\);[\s\S]*?allow create, update, delete: if false;/);
 });
 
-test("only managers can read activity log contacts", () => {
+test("raw activity logs stay manager-only while staff uses a server-sanitized projection", () => {
   assert.match(rules, /match \/activityLog\/\{logId\}[\s\S]*?allow read, update, delete: if hasRole\('manager'\);/);
   assert.match(rules, /collection != 'activityLog'/);
 });
