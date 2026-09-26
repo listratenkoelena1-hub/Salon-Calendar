@@ -22,7 +22,14 @@ const serverOnlyCollections = [
   "onlineBookingSubmissions",
   "onlineBookingPhotos",
   "EmailQueue",
-  "SmsQueue"
+  "SmsQueue",
+  "dashSyncQueue",
+  "dashSyncLinks",
+  "dashIncomingReceipts",
+  "dashSyncRuns",
+  "dashSyncConfig",
+  "dashStaffMappings",
+  "dashSyncIssues"
 ];
 
 test("private client and delivery collections are denied to every browser role", () => {

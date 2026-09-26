@@ -68,6 +68,15 @@ const {
 const {
   getBookingDurationDecision
 } = require("./booking-duration");
+const {
+  enqueueDashReconciliation,
+  enqueueDashSource,
+  getDashPollingWindow,
+  loadDashConfig,
+  makeWeeklyOccurrence,
+  weeklyRuleActiveOnDate,
+  runDashSyncCycle
+} = require("./dash-sync-runner");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -120,6 +129,8 @@ const GMAIL_APP_PASSWORD = defineSecret("GMAIL_APP_PASSWORD");
 const TWILIO_ACCOUNT_SID = defineSecret("TWILIO_ACCOUNT_SID");
 const TWILIO_AUTH_TOKEN = defineSecret("TWILIO_AUTH_TOKEN");
 const CLIENT_LOOKUP_PEPPER = defineSecret("CLIENT_LOOKUP_PEPPER");
+const DASH_BOOKING_EMAIL = defineSecret("DASH_BOOKING_EMAIL");
+const DASH_BOOKING_PASSWORD = defineSecret("DASH_BOOKING_PASSWORD");
 
 function getClientLookupPepper() {
   const value = String(CLIENT_LOOKUP_PEPPER.value() || "").trim();
@@ -802,6 +813,20 @@ function isPendingOnlineRequest(appointment) {
     appointment.status === "request" &&
     appointment.canceled !== true
   );
+}
+
+function isPendingDashRequest(appointment) {
+  return Boolean(
+    appointment &&
+    appointment.type === "dash_booking_request" &&
+    appointment.source === "dash_booking" &&
+    appointment.status === "request" &&
+    appointment.canceled !== true
+  );
+}
+
+function isPendingAppointmentRequest(appointment) {
+  return isPendingOnlineRequest(appointment) || isPendingDashRequest(appointment);
 }
 
 function isDeclinedOnlineRequest(appointment) {
@@ -1574,8 +1599,13 @@ exports.mutateAppointment = onCall(
         };
         lastAction = "create";
       } else if (mode === "update") {
-        if (isPendingOnlineRequest(before)) {
-          throw new HttpsError("failed-precondition", "Use Confirm or Decline for this online request.");
+        if (isPendingAppointmentRequest(before)) {
+          throw new HttpsError(
+            "failed-precondition",
+            isPendingDashRequest(before)
+              ? "Use Confirm for this Dash Booking request."
+              : "Use Confirm or Decline for this online request."
+          );
         }
 
         const safeForm = actor.role === "manager"
@@ -1601,7 +1631,8 @@ exports.mutateAppointment = onCall(
         }
         lastAction = getAppointmentSaveAction(before, after);
       } else if (mode === "confirm") {
-        if (!isPendingOnlineRequest(before)) {
+        const confirmingDashRequest = isPendingDashRequest(before);
+        if (!isPendingOnlineRequest(before) && !confirmingDashRequest) {
           throw new HttpsError("failed-precondition", "This online request is no longer pending.");
         }
         const safeForm = actor.role === "manager"
@@ -1619,14 +1650,16 @@ exports.mutateAppointment = onCall(
           canceled: false,
           cancelComment: null,
           type: "appointment",
-          source: "online_booking",
+          source: confirmingDashRequest ? "dash_booking" : "online_booking",
           status: "confirmed",
           confirmedAt: FieldValue.serverTimestamp(),
           confirmedBy: actor.label,
           declinedAt: null,
           declinedBy: null
         };
-        lastAction = "online_request_confirmed";
+        lastAction = confirmingDashRequest
+          ? "dash_request_confirmed"
+          : "online_request_confirmed";
       } else if (mode === "decline") {
         if (!isPendingOnlineRequest(before)) {
           throw new HttpsError("failed-precondition", "This online request is no longer pending.");
@@ -4161,6 +4194,178 @@ exports.getOnlineBookingAvailability = onCall(
       offWorkRecords,
       weeklyOffRecords,
       clientSummary: clientContext?.summary || null
+    });
+  }
+);
+
+exports.dashAppointmentWritten = onDocumentWritten(
+  {
+    document: "appointments/{appointmentId}",
+    region: "us-central1",
+    maxInstances: 4
+  },
+  async event => {
+    const config = await loadDashConfig(db);
+    if (!config.enabled) return { skipped: true, reason: "disabled" };
+    const before = event.data?.before?.exists ? event.data.before.data() || {} : null;
+    const after = event.data?.after?.exists ? event.data.after.data() || {} : null;
+    return enqueueDashSource({
+      db,
+      FieldValue,
+      sourceType: "appointment",
+      sourceId: event.params.appointmentId,
+      before,
+      after
+    });
+  }
+);
+
+exports.dashOffWorkWritten = onDocumentWritten(
+  {
+    document: "OffWork/{offWorkId}",
+    region: "us-central1",
+    maxInstances: 4
+  },
+  async event => {
+    const config = await loadDashConfig(db);
+    if (!config.enabled) return { skipped: true, reason: "disabled" };
+    const before = event.data?.before?.exists ? event.data.before.data() || {} : null;
+    const after = event.data?.after?.exists ? event.data.after.data() || {} : null;
+    const effective = after || before || {};
+    if (effective.weeklyException === true && effective.weeklyId && effective.date) {
+      const weeklyRuleSnap = await db.collection("WeeklyOff").doc(String(effective.weeklyId)).get();
+      const weeklyRule = weeklyRuleSnap.exists
+        ? { id: weeklyRuleSnap.id, ...weeklyRuleSnap.data() }
+        : null;
+      const occurrenceId = `weekly_${String(effective.weeklyId)}_${String(effective.date)}`;
+      const fallbackOccurrence = {
+        id: occurrenceId,
+        date: effective.date,
+        staffId: effective.staffId,
+        allDay: true,
+        start: null,
+        end: null,
+        weeklyRuleId: effective.weeklyId
+      };
+      const restoredOccurrence = !after && weeklyRule && weeklyRuleActiveOnDate(weeklyRule, effective.date)
+        ? makeWeeklyOccurrence(weeklyRule, effective.date)
+        : null;
+      return enqueueDashSource({
+        db,
+        FieldValue,
+        sourceType: "off_work",
+        sourceId: occurrenceId,
+        before: fallbackOccurrence,
+        after: restoredOccurrence
+      });
+    }
+    return enqueueDashSource({
+      db,
+      FieldValue,
+      sourceType: "off_work",
+      sourceId: event.params.offWorkId,
+      before,
+      after
+    });
+  }
+);
+
+exports.dashWeeklyOffWritten = onDocumentWritten(
+  {
+    document: "WeeklyOff/{weeklyOffId}",
+    region: "us-central1",
+    maxInstances: 1,
+    timeoutSeconds: 300
+  },
+  async () => {
+    const config = await loadDashConfig(db);
+    if (!config.enabled) return { skipped: true, reason: "disabled" };
+    return enqueueDashReconciliation({
+      db,
+      FieldValue,
+      horizonDays: config.horizonDays
+    });
+  }
+);
+
+exports.dashStaffMappingWritten = onDocumentWritten(
+  {
+    document: "dashStaffMappings/{mappingId}",
+    region: "us-central1",
+    maxInstances: 1,
+    timeoutSeconds: 300
+  },
+  async () => {
+    const config = await loadDashConfig(db);
+    if (!config.enabled) return { skipped: true, reason: "disabled" };
+    return enqueueDashReconciliation({
+      db,
+      FieldValue,
+      horizonDays: config.horizonDays
+    });
+  }
+);
+
+exports.dashSyncConfigWritten = onDocumentWritten(
+  {
+    document: "dashSyncConfig/runtime",
+    region: "us-central1",
+    maxInstances: 1,
+    timeoutSeconds: 300
+  },
+  async event => {
+    const before = event.data?.before?.exists ? event.data.before.data() || {} : {};
+    const after = event.data?.after?.exists ? event.data.after.data() || {} : {};
+    if (after.enabled !== true) return { skipped: true, reason: "disabled" };
+    const needsFullQueue = before.enabled !== true ||
+      before.writeEnabled !== after.writeEnabled ||
+      Number(before.horizonDays || 60) !== Number(after.horizonDays || 60);
+    if (!needsFullQueue) return { skipped: true, reason: "no-reconciliation-change" };
+    const config = await loadDashConfig(db);
+    return enqueueDashReconciliation({
+      db,
+      FieldValue,
+      horizonDays: config.horizonDays
+    });
+  }
+);
+
+exports.dashSyncEveryFifteenMinutes = onSchedule(
+  {
+    region: "us-central1",
+    schedule: "every 15 minutes",
+    timeZone: SALON_TIME_ZONE,
+    memory: "1GiB",
+    timeoutSeconds: 300,
+    maxInstances: 1,
+    concurrency: 1,
+    secrets: [DASH_BOOKING_EMAIL, DASH_BOOKING_PASSWORD]
+  },
+  async () => {
+    const pollingWindow = getDashPollingWindow(new Date(), SALON_TIME_ZONE);
+    if (!pollingWindow.shouldRun) {
+      return {
+        skipped: true,
+        reason: "outside_active_hours",
+        phase: pollingWindow.phase
+      };
+    }
+    const config = await loadDashConfig(db);
+    if (!config.enabled) return { skipped: true, reason: "disabled" };
+    if (pollingWindow.morningReconciliation && config.dailyReconciliationEnabled) {
+      // At 6:00 AM, rebuild today's queue before the same cycle opens Dash.
+      // Direct appointment/off-work triggers keep future changes queued overnight.
+      await enqueueDashReconciliation({ db, FieldValue, horizonDays: 0 });
+    }
+    const email = String(DASH_BOOKING_EMAIL.value() || "").trim();
+    const password = String(DASH_BOOKING_PASSWORD.value() || "");
+    return runDashSyncCycle({
+      db,
+      FieldValue,
+      Timestamp,
+      email,
+      password,
+      config
     });
   }
 );

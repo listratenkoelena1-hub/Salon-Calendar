@@ -53,6 +53,12 @@ test("old phone-free appointments stay readable while private client records are
       await setDoc(doc(db, "activityLog", "synthetic-log"), { action: "created", phone: "780-555-0100" });
       await setDoc(doc(db, "staff", "tech-one"), { name: "Tech One", color: "#abcdef" });
       await setDoc(doc(db, "operationalSettings", "synthetic-setting"), { enabled: true });
+      for (const collectionName of [
+        "dashSyncQueue", "dashSyncLinks", "dashIncomingReceipts", "dashSyncRuns",
+        "dashSyncConfig", "dashStaffMappings", "dashSyncIssues"
+      ]) {
+        await setDoc(doc(db, collectionName, "synthetic-dash-record"), { serverOnly: true });
+      }
     });
 
     const managerOne = environment.authenticatedContext("manager-one").firestore();
@@ -70,13 +76,17 @@ test("old phone-free appointments stay readable while private client records are
       await assertSucceeds(getDoc(doc(db, "operationalSettings", "synthetic-setting")));
       for (const privateCollection of [
         "appointmentPrivate", "clientLookup", "clientPhoneIndex",
-        "clientProfiles", "clientAppointmentHistory"
+        "clientProfiles", "clientAppointmentHistory", "dashSyncQueue",
+        "dashSyncLinks", "dashIncomingReceipts", "dashSyncRuns",
+        "dashSyncConfig", "dashStaffMappings", "dashSyncIssues"
       ]) {
-        await assertFails(getDoc(doc(db, privateCollection,
-          privateCollection === "appointmentPrivate" || privateCollection === "clientAppointmentHistory"
+        const documentId = privateCollection.startsWith("dash")
+          ? "synthetic-dash-record"
+          : privateCollection === "appointmentPrivate" || privateCollection === "clientAppointmentHistory"
             ? "new-private" : privateCollection === "clientPhoneIndex"
               ? "synthetic-hash" : privateCollection === "clientProfiles"
-                ? "synthetic-profile" : "synthetic-client-id")));
+                ? "synthetic-profile" : "synthetic-client-id";
+        await assertFails(getDoc(doc(db, privateCollection, documentId)));
         await assertFails(getDocs(collection(db, privateCollection)));
       }
       await assertFails(setDoc(doc(db, "appointments", "forged"), { client: "Synthetic" }));

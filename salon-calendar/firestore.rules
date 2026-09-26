@@ -80,6 +80,36 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Dash Booking browser automation, receipts, mappings, and runtime state
+    // are server-only. No calendar browser role may enumerate or modify them.
+    match /dashSyncQueue/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /dashSyncLinks/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /dashIncomingReceipts/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /dashSyncRuns/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /dashSyncConfig/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /dashStaffMappings/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /dashSyncIssues/{document=**} {
+      allow read, write: if false;
+    }
+
     // Staff may create operational log entries, but only managers may read
     // the log. Non-managers cannot put a phone into an otherwise public log.
     match /activityLog/{logId} {
@@ -130,6 +160,13 @@ service cloud.firestore {
         && collection != 'onlineBookingPhotos'
         && collection != 'EmailQueue'
         && collection != 'SmsQueue'
+        && collection != 'dashSyncQueue'
+        && collection != 'dashSyncLinks'
+        && collection != 'dashIncomingReceipts'
+        && collection != 'dashSyncRuns'
+        && collection != 'dashSyncConfig'
+        && collection != 'dashStaffMappings'
+        && collection != 'dashSyncIssues'
         && collection != 'activityLog'
         && collection != 'users'
         && collection != 'staff';

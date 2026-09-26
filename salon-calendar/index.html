@@ -448,6 +448,19 @@ th.time {
   color: #1f2524;
 }
 
+.anyone-cell.has-dash-request {
+  background: linear-gradient(135deg, #d9f3ff 0%, #bfe7ff 48%, #dcecff 100%) !important;
+  box-shadow: inset 0 0 0 2px rgba(23, 105, 151, 0.58);
+  animation: dash-request-pulse 2.4s ease-in-out infinite;
+}
+
+.anyone-cell.has-dash-request .anyone-item,
+.anyone-cell.has-dash-request .anyone-index,
+.anyone-cell.has-dash-request .anyone-more,
+.anyone-cell.has-dash-request .anyone-add {
+  color: #123b52;
+}
+
 .anyone-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 16px;
@@ -655,6 +668,48 @@ th.time {
   color: #1f2524;
 }
 
+.app-overlay.dash-request {
+  --appt-color: linear-gradient(135deg, #d9f3ff 0%, #bfe7ff 48%, #dcecff 100%);
+  border: 2px dashed rgba(23, 105, 151, 0.78);
+  box-shadow: 0 2px 9px rgba(23, 105, 151, 0.30);
+  color: #123b52;
+  animation: dash-request-pulse 2.4s ease-in-out infinite;
+}
+
+.app-overlay.dash-request .request-badge {
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: 2px;
+  padding: 1px 5px;
+  border-radius: 7px;
+  background: #65bff0;
+  border: 1px solid rgba(17, 88, 128, 0.34);
+  color: #082f47;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.app-overlay.dash-request .app-client,
+.app-overlay.dash-request .app-service,
+.app-overlay.dash-request .app-time {
+  color: #123b52;
+}
+
+@keyframes dash-request-pulse {
+  0%, 100% { filter: saturate(0.96); box-shadow: 0 2px 7px rgba(23, 105, 151, 0.24); }
+  50% { filter: saturate(1.18); box-shadow: 0 2px 13px rgba(23, 105, 151, 0.48); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-overlay.dash-request,
+  .anyone-cell.has-dash-request {
+    animation: none;
+  }
+}
+
 #appointmentModal.online-request-mode .modal-content {
   background:
     linear-gradient(135deg, rgba(255,212,220,0.56), rgba(255,253,255,0.82) 34%, rgba(204,236,255,0.52)),
@@ -693,6 +748,30 @@ th.time {
   background: #ffe5e5;
   border-color: #ff9e9e;
   color: #5b1717;
+  font-weight: 800;
+}
+
+#appointmentModal.dash-request-mode .modal-content {
+  background:
+    linear-gradient(135deg, rgba(217,243,255,0.78), rgba(255,255,255,0.92) 48%, rgba(220,236,255,0.70)),
+    #fff;
+  border: 2px dashed rgba(23, 105, 151, 0.40);
+}
+
+#appointmentModal.dash-request-mode #appointmentStatusBlock {
+  display: none !important;
+}
+
+#appointmentModal.dash-request-mode .online-request-notice {
+  display: block;
+  border-color: rgba(23, 105, 151, 0.26);
+  color: #123b52;
+}
+
+#appointmentModal.dash-request-mode .btn-primary {
+  background: #d9f3ff;
+  border-color: #65bff0;
+  color: #08334d;
   font-weight: 800;
 }
 
@@ -1600,6 +1679,22 @@ padding:10px 14px;
   font-weight: 760;
   color: #8a8a8a;
   text-transform: uppercase;
+}
+
+.staff-notification-dash-action {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid #65bff0;
+  border-radius: 10px;
+  background: #d9f3ff;
+  color: #08334d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.staff-notification-dash-action:disabled {
+  opacity: 0.65;
 }
 
 .staff-notification-kind.key {
@@ -4435,6 +4530,7 @@ stroke-linejoin="round">
         <option value="">All</option>
         <option value="calendar">Calendar</option>
         <option value="online_booking">Online booking</option>
+        <option value="dash_booking">Dash Booking</option>
         <option value="canceled">Canceled</option>
         <option value="no_show">No-show</option>
       </select>
@@ -4863,9 +4959,20 @@ const FCM_VAPID_KEY = "";
 // Operational pause: keep Telegram code and data intact while staffMessages
 // remains the active internal notification channel. Set to false to resume.
 const TELEGRAM_NOTIFICATIONS_PAUSED = true;
-  let currentUserRole = null;
+let currentUserRole = null;
 let currentUserStaffId = null;
 let currentUserEmail = '';
+const DASH_PREVIEW_DEMO_ID = '__dash_preview_request__';
+const DASH_PREVIEW_DEMO_NOTIFICATION_ID = '__dash_preview_notification__';
+const DASH_PREVIEW_DEMO_ENABLED = (() => {
+  const host = String(window.location.hostname || '').toLowerCase();
+  const isFirebasePreview = host.startsWith('rosesnails-calendar--') &&
+    (host.endsWith('.web.app') || host.endsWith('.firebaseapp.com'));
+  return isFirebasePreview && new URLSearchParams(window.location.search).get('dashDemo') === '1';
+})();
+const DASH_PREVIEW_DEMO_CREATED_AT = new Date();
+let dashPreviewDemoConfirmed = false;
+let dashPreviewDemoRead = false;
 let staffNotifications = [];
 let staffNotificationsUnsubscribe = null;
 let staffPinnedUnsubscribe = null;
@@ -5648,6 +5755,7 @@ const staffDeleteModal = document.getElementById('staffDeleteModal');
 
 
 let staff=[], allStaff=[], appointments=[], editId=null, staffToDelete=null;
+let sourceAppointments = [];
 let pendingCreateAppointmentId = null;
 let pendingCreateMutationId = null;
 
@@ -5686,6 +5794,89 @@ function getCurrentStaffId() {
 
 function getActiveStaffList({ includeAnyone = true } = {}) {
   return staff.filter(s => includeAnyone || s.id !== ANYONE_ID);
+}
+
+function getDashPreviewDemoPlacement(realAppointments, date) {
+  const activeStaff = getActiveStaffList({ includeAnyone: false });
+  const staffCandidates = activeStaff.length ? activeStaff : [{ id: ANYONE_ID }];
+  const duration = 6;
+
+  for (const staffRecord of staffCandidates) {
+    for (let start = 8; start <= 40; start += 2) {
+      const hasConflict = realAppointments.some(appointment =>
+        appointment.staffId === staffRecord.id &&
+        appointment.date === date &&
+        appointment.canceled !== true &&
+        appointment.noShow !== true &&
+        rangesOverlap(start, start + duration, appointment.start, appointment.start + appointment.duration)
+      );
+      if (!hasConflict) return { staffId: staffRecord.id, start, duration };
+    }
+  }
+
+  return { staffId: staffCandidates[0].id, start: 32, duration };
+}
+
+function buildDashPreviewDemoAppointment(realAppointments = []) {
+  const date = toInputDate(new Date());
+  const placement = getDashPreviewDemoPlacement(realAppointments, date);
+  return normalizeAppointment({
+    id: DASH_PREVIEW_DEMO_ID,
+    isDashPreviewDemo: true,
+    date,
+    staffId: placement.staffId,
+    start: placement.start,
+    duration: placement.duration,
+    client: 'Dash Preview Client',
+    phone: '',
+    note: 'Hard gel refill with design',
+    type: dashPreviewDemoConfirmed ? 'appointment' : 'dash_booking_request',
+    source: 'dash_booking',
+    status: dashPreviewDemoConfirmed ? 'confirmed' : 'request',
+    canceled: false,
+    noShow: false,
+    dashBookingId: 'preview-only',
+    lastAction: dashPreviewDemoConfirmed ? 'dash_request_confirmed' : 'dash_request_created'
+  });
+}
+
+function applyDashPreviewDemo(realAppointments = sourceAppointments) {
+  const cleanAppointments = normalizeAppointments(realAppointments)
+    .filter(appointment => appointment.id !== DASH_PREVIEW_DEMO_ID);
+  appointments = DASH_PREVIEW_DEMO_ENABLED
+    ? [...cleanAppointments, buildDashPreviewDemoAppointment(cleanAppointments)]
+    : cleanAppointments;
+  if (DASH_PREVIEW_DEMO_ENABLED && ['manager', 'staff'].includes(currentUserRole)) {
+    mergeStaffMessageSources();
+    updateStaffNotificationsBadge();
+    if (!staffMessagesLoading) renderStaffNotifications();
+  }
+}
+
+function ensureDashPreviewDemoBanner() {
+  if (!DASH_PREVIEW_DEMO_ENABLED || document.getElementById('dashPreviewDemoBanner')) return;
+  const banner = document.createElement('div');
+  banner.id = 'dashPreviewDemoBanner';
+  banner.textContent = 'DASH PREVIEW · DEMO ONLY · NOTHING IS SAVED';
+  banner.style.cssText = [
+    'position:fixed',
+    'z-index:20050',
+    'top:max(6px, env(safe-area-inset-top))',
+    'left:50%',
+    'transform:translateX(-50%)',
+    'max-width:calc(100vw - 24px)',
+    'padding:6px 11px',
+    'border:1px solid rgba(34,126,178,.38)',
+    'border-radius:999px',
+    'background:rgba(226,246,255,.96)',
+    'box-shadow:0 4px 14px rgba(0,0,0,.14)',
+    'color:#176c9b',
+    'font:800 10px/1.2 Arial,sans-serif',
+    'letter-spacing:.04em',
+    'white-space:nowrap',
+    'pointer-events:none'
+  ].join(';');
+  document.body.appendChild(banner);
 }
 
 function getHistoricalStaffList({ includeAnyone = true } = {}) {
@@ -5762,6 +5953,7 @@ const calendarDate = document.getElementById('calendarDate');
 
 const today = new Date();
 calendarDate.value = toInputDate(today);
+ensureDashPreviewDemoBanner();
 
 
 const anyonePopup = document.getElementById('anyonePopup');
@@ -6566,6 +6758,7 @@ function stopCalendarDataListeners({ clearData = false } = {}) {
 
   staff = [];
   allStaff = [];
+  sourceAppointments = [];
   appointments = [];
   archiveAppointments = [];
   archiveLoaded = false;
@@ -6614,6 +6807,7 @@ function startCalendarDataListeners() {
         anyoneStaff,
         ...realStaff.filter(isActiveStaffRecord)
       ];
+      applyDashPreviewDemo();
 
       renderStaff();
       populateLogFilters();
@@ -6630,7 +6824,8 @@ function startCalendarDataListeners() {
       where("date", ">=", getArchiveCutoffDateString())
     ),
     s => {
-      appointments = normalizeAppointments(s.docs.map(d => ({ id: d.id, ...d.data() })));
+      sourceAppointments = normalizeAppointments(s.docs.map(d => ({ id: d.id, ...d.data() })));
+      applyDashPreviewDemo(sourceAppointments);
       archiveLoaded = false;
       archiveAppointments = [];
       analyticsAppointmentRangeCache.clear();
@@ -6957,11 +7152,24 @@ function renderWeekCalendar() {
   });
 }      
 function isOnlineBookingRequest(a) {
-  return a?.type === 'online_booking_request' || a?.status === 'request' || a?.status === 'declined';
+  return a?.type === 'online_booking_request' || (
+    a?.source === 'online_booking' && ['request', 'confirmed', 'declined', 'restored_after_decline'].includes(a?.status)
+  );
 }
 
 function isPendingOnlineBookingRequest(a) {
   return isOnlineBookingRequest(a) && (a?.status || 'request') === 'request';
+}
+
+function isPendingDashBookingRequest(a) {
+  return a?.type === 'dash_booking_request' &&
+    a?.source === 'dash_booking' &&
+    (a?.status || 'request') === 'request' &&
+    a?.canceled !== true;
+}
+
+function isPendingBookingRequest(a) {
+  return isPendingOnlineBookingRequest(a) || isPendingDashBookingRequest(a);
 }
 
 function isDeclinedOnlineBookingRequest(a) {
@@ -6969,12 +7177,16 @@ function isDeclinedOnlineBookingRequest(a) {
 }
 
 function getAppointmentRenderColor(a, fallbackColor) {
+  if (isPendingDashBookingRequest(a)) {
+    return 'linear-gradient(135deg, #d9f3ff 0%, #bfe7ff 48%, #dcecff 100%)';
+  }
   return isPendingOnlineBookingRequest(a)
     ? 'linear-gradient(135deg, #ffd4dc 0%, #ffe79a 23%, #d7f2e3 48%, #ccecff 72%, #ddd8ff 100%)'
     : fallbackColor;
 }
 
 function getRequestStatusLabel(a) {
+  if (isPendingDashBookingRequest(a)) return 'Dash Booking';
   if (a?.status === 'declined') return 'Declined request';
   if (a?.status === 'confirmed') return 'Confirmed request';
   return 'Online request';
@@ -7148,13 +7360,19 @@ function updateAppointmentGroupControls() {
 }
 function buildAppointmentOverlay(a, color, pixelHeight = null, options = {}) {
   const slots = Math.max(a.duration || 1, 1);
-  const isRequest = isPendingOnlineBookingRequest(a);
+  const isOnlineRequest = isPendingOnlineBookingRequest(a);
+  const isDashRequest = isPendingDashBookingRequest(a);
+  const isRequest = isOnlineRequest || isDashRequest;
   const startSlot = options.startSlot ?? a.start;
   const endSlot = options.endSlot ?? (a.start + slots);
 
   const startText = timeLabel(startSlot);
   const endText = timeLabel(endSlot);
-  const extraClass = [options.extraClass, isRequest ? 'online-request' : ''].filter(Boolean).join(' ');
+  const extraClass = [
+    options.extraClass,
+    isOnlineRequest ? 'online-request' : '',
+    isDashRequest ? 'dash-request' : ''
+  ].filter(Boolean).join(' ');
   const classAttr = extraClass ? ' ' + extraClass : '';
   const timeHtml = options.hideTime ? '' : `<div class="app-time">${startText} - ${endText}</div>`;
   const requestBadge = isRequest ? `<div class="request-badge">${getRequestStatusLabel(a)}</div>` : '';
@@ -7280,7 +7498,7 @@ function drawAppointments(){
 document.querySelectorAll('.slot').forEach(c => {
   c.innerHTML = '';
   c.style.background = '';
-  c.classList.remove('busy', 'block-start', 'block-middle', 'block-end', 'continues-from-morning', 'anyone-cell', 'has-online-request');
+  c.classList.remove('busy', 'block-start', 'block-middle', 'block-end', 'continues-from-morning', 'anyone-cell', 'has-online-request', 'has-dash-request');
   delete c.dataset.weeklyOff;
 delete c.dataset.weeklyId;
 delete c.dataset.weeklyStaffId;
@@ -7345,7 +7563,8 @@ Object.entries(anyoneGroups).forEach(([start, group]) => {
   cell.style.background = '';
   cell.classList.remove('busy', 'block-start', 'block-middle', 'block-end');
   cell.classList.add('anyone-cell');
-  cell.classList.toggle('has-online-request', group.some(isOnlineBookingRequest));
+  cell.classList.toggle('has-online-request', group.some(isPendingOnlineBookingRequest));
+  cell.classList.toggle('has-dash-request', group.some(isPendingDashBookingRequest));
   cell.onclick = null;
 
   cell.innerHTML = buildAnyoneCellHtml(group);
@@ -7528,7 +7747,7 @@ function drawAppointmentsWeek() {
   document.querySelectorAll('.slot').forEach(c => {
     c.innerHTML = '';
     c.style.background = '';
-    c.classList.remove('busy', 'block-start', 'block-middle', 'block-end', 'continues-from-morning', 'anyone-cell', 'has-online-request');
+    c.classList.remove('busy', 'block-start', 'block-middle', 'block-end', 'continues-from-morning', 'anyone-cell', 'has-online-request', 'has-dash-request');
     delete c.dataset.weeklyOff;
     delete c.dataset.weeklyId;
     delete c.dataset.weeklyStaffId;
@@ -7825,10 +8044,28 @@ function clearAppointmentEditorMeta() {
   setAppointmentEditorMeta('', null);
 }
 
-function setOnlineRequestModalMode(enabled) {
-  appointmentModal.classList.toggle('online-request-mode', enabled);
+function setOnlineRequestModalMode(requestOrEnabled) {
+  const request = requestOrEnabled && typeof requestOrEnabled === 'object'
+    ? requestOrEnabled
+    : null;
+  const dashRequest = request ? isPendingDashBookingRequest(request) : false;
+  const onlineRequest = request
+    ? isPendingOnlineBookingRequest(request)
+    : requestOrEnabled === true;
+  const enabled = dashRequest || onlineRequest;
+
+  appointmentModal.classList.toggle('online-request-mode', onlineRequest);
+  appointmentModal.classList.toggle('dash-request-mode', dashRequest);
   if (appointmentSaveBtn) appointmentSaveBtn.textContent = enabled ? 'Confirm' : 'Save';
-  if (appointmentDeleteBtn) appointmentDeleteBtn.textContent = enabled ? 'Decline' : 'Delete';
+  if (appointmentDeleteBtn) {
+    appointmentDeleteBtn.textContent = onlineRequest ? 'Decline' : 'Delete';
+    appointmentDeleteBtn.classList.toggle('hidden', dashRequest);
+  }
+  if (onlineRequestNotice) {
+    onlineRequestNotice.textContent = dashRequest
+      ? 'Dash Booking appointment. Review the date, technician, time, duration, and service, then confirm it in the calendar.'
+      : 'Online booking request. Review date, staff, time, and duration before confirming or declining.';
+  }
   if (appointmentStatusBlock) appointmentStatusBlock.style.display = enabled ? 'none' : 'block';
 }
 
@@ -7844,9 +8081,10 @@ if (appointmentStatusBlock) appointmentStatusBlock.style.display = 'block';
 document.getElementById('durationError').style.display = 'none';
 appointmentModal.classList.remove('hidden');
 document.getElementById('appointmentStatusBlock').style.display = 'block';
-const isRequestAppointment = isPendingOnlineBookingRequest(a);
+const isRequestAppointment = isPendingBookingRequest(a);
+const isDashRequestAppointment = isPendingDashBookingRequest(a);
 const isDeclinedRequest = isDeclinedOnlineBookingRequest(a);
-setOnlineRequestModalMode(isRequestAppointment);
+setOnlineRequestModalMode(isRequestAppointment ? a : false);
 fillSelects();
 ensureStaffSelectOption(aStaff, a.staffId);
 // ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ - ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ staff ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢
@@ -7884,7 +8122,7 @@ if (isRequestAppointment) {
     aDuration.value = a.duration ?? 4;
     aDuration.disabled = false;
   }
-  setAppointmentModalTintSolid('#ffe6ef');
+  setAppointmentModalTintSolid(isDashRequestAppointment ? '#dff3ff' : '#ffe6ef');
 } else {
   applyAppointmentTintNow();
 }
@@ -8299,6 +8537,10 @@ const conflictType = getAppointmentPlacementConflict({
 
 window.handleAppointmentPrimaryAction = () => runAppointmentActionWithGuard(async () => {
   const current = editId ? appointments.find(a => a.id === editId) : null;
+  if (current && isPendingDashBookingRequest(current)) {
+    await confirmDashBookingRequest();
+    return;
+  }
   if (current && isPendingOnlineBookingRequest(current)) {
     await confirmOnlineBookingRequest();
     return;
@@ -8309,6 +8551,10 @@ window.handleAppointmentPrimaryAction = () => runAppointmentActionWithGuard(asyn
 window.handleAppointmentDangerAction = () => {
   if (appointmentActionInProgress) return;
   const current = editId ? appointments.find(a => a.id === editId) : null;
+  if (current && isPendingDashBookingRequest(current)) {
+    showToast('Dash Booking requests can be confirmed here, not declined.', 'warning');
+    return;
+  }
   if (current && isPendingOnlineBookingRequest(current)) {
     runAppointmentActionWithGuard(() => declineOnlineBookingRequest());
     return;
@@ -8318,11 +8564,53 @@ window.handleAppointmentDangerAction = () => {
 
 window.confirmDelete=()=>{ if(editId) deleteModal.classList.remove('hidden'); };
 
-async function updateOnlineBookingRequestStatus(nextStatus) {
+function confirmDashPreviewDemoRequest(originalRaw) {
+  dashPreviewDemoConfirmed = true;
+  dashPreviewDemoRead = true;
+  const updatedAppointment = normalizeAppointment({
+    ...originalRaw,
+    date: aDate.value || originalRaw.date,
+    staffId: aStaff.value || originalRaw.staffId,
+    start: Number(aTime.value),
+    duration: Number(aDuration.value || originalRaw.duration || 4),
+    client: aClient.value || originalRaw.client,
+    note: aNote.value || originalRaw.note,
+    type: 'appointment',
+    source: 'dash_booking',
+    status: 'confirmed',
+    canceled: false,
+    noShow: false,
+    confirmedAt: new Date(),
+    confirmedBy: getCurrentActorLabel(),
+    lastAction: 'dash_request_confirmed'
+  });
+  appointments = appointments.map(appointment =>
+    appointment.id === DASH_PREVIEW_DEMO_ID ? updatedAppointment : appointment
+  );
+  staffNotifications = staffNotifications.filter(item => item.id !== DASH_PREVIEW_DEMO_NOTIFICATION_ID);
+  mergeStaffMessageSources();
+  updateStaffNotificationsBadge();
+  renderStaffNotifications();
+  renderCalendar();
+  showToast('Preview confirmed — demo only. Nothing was saved.', 'success', 5000);
+  closeAppointment();
+}
+
+async function updateBookingRequestStatus(nextStatus) {
   if (!editId) return;
   const originalRaw = appointments.find(a => a.id === editId);
   const original = normalizeAppointment(originalRaw);
-  if (!original || !isPendingOnlineBookingRequest(original)) return;
+  const dashRequest = isPendingDashBookingRequest(original);
+  const onlineRequest = isPendingOnlineBookingRequest(original);
+  if (!original || (!onlineRequest && !dashRequest)) return;
+  if (dashRequest && nextStatus !== 'confirmed') {
+    showToast('Dash Booking requests can only be confirmed in the calendar.', 'warning');
+    return;
+  }
+  if (originalRaw?.isDashPreviewDemo === true) {
+    confirmDashPreviewDemoRequest(originalRaw);
+    return;
+  }
 
   if (
     originalRaw?.hasPrivateContact === true &&
@@ -8342,7 +8630,7 @@ async function updateOnlineBookingRequestStatus(nextStatus) {
 
   const editorLabel = getCurrentActorLabel();
   const action = nextStatus === 'confirmed'
-    ? 'online_request_confirmed'
+    ? (dashRequest ? 'dash_request_confirmed' : 'online_request_confirmed')
     : 'online_request_declined';
 
   const data = {
@@ -8360,7 +8648,7 @@ async function updateOnlineBookingRequestStatus(nextStatus) {
     canceled: nextStatus === 'declined',
     cancelComment: nextStatus === 'declined' ? 'Online booking request declined' : null,
     type: 'appointment',
-    source: 'online_booking',
+    source: dashRequest ? 'dash_booking' : 'online_booking',
     status: nextStatus,
     lastEditedBy: editorLabel,
     lastAction: action
@@ -8443,6 +8731,7 @@ async function updateOnlineBookingRequestStatus(nextStatus) {
   if (!mutationResult) return;
   managerPhoneLookupCache.clear();
   data.revision = mutationResult.revision;
+  data.lastAction = mutationResult.lastAction || action;
   const hasPrivateContact = mutationResult.hasPrivateContact === true;
   if (hasPrivateContact && currentUserRole === 'manager') {
     managerAppointmentContacts.set(editId, aPhone.value.trim());
@@ -8487,12 +8776,18 @@ async function updateOnlineBookingRequestStatus(nextStatus) {
   archiveAppointments = archiveAppointments.map(a => a.id === editId ? updatedAppointment : a);
   refreshDeclinedOnlineTray();
 
-  showToast(nextStatus === 'confirmed' ? 'Online request confirmed' : 'Online request declined', 'success');
+  showToast(
+    nextStatus === 'confirmed'
+      ? (dashRequest ? 'Dash Booking appointment confirmed' : 'Online request confirmed')
+      : 'Online request declined',
+    'success'
+  );
   closeAppointment();
 }
 
-window.confirmOnlineBookingRequest = () => updateOnlineBookingRequestStatus('confirmed');
-window.declineOnlineBookingRequest = () => updateOnlineBookingRequestStatus('declined');
+window.confirmOnlineBookingRequest = () => updateBookingRequestStatus('confirmed');
+window.confirmDashBookingRequest = () => updateBookingRequestStatus('confirmed');
+window.declineOnlineBookingRequest = () => updateBookingRequestStatus('declined');
 
 window.deleteAppointment = async () => {
   if (appointmentActionInProgress) return;
@@ -8620,12 +8915,13 @@ function populateArchiveTechnicianFilter() {
 }
 
 function getArchiveAppointmentSource(a) {
+  if (a?.source === 'dash_booking' || a?.type === 'dash_booking_request') return 'dash_booking';
   return a?.source === 'online_booking' || isOnlineBookingRequest(a) ? 'online_booking' : 'calendar';
 }
 
 function matchesArchiveTypeFilter(a, selectedType) {
   if (!selectedType) return true;
-  if (selectedType === 'calendar' || selectedType === 'online_booking') {
+  if (selectedType === 'calendar' || selectedType === 'online_booking' || selectedType === 'dash_booking') {
     return getArchiveAppointmentSource(a) === selectedType;
   }
   if (selectedType === 'no_show') return a?.noShow === true;
@@ -8686,7 +8982,10 @@ function renderArchiveResults() {
 
   searchResults.innerHTML = results.map(a => {
     const staffName = getArchiveStaffName(a.staffId);
-    const sourceLabel = getArchiveAppointmentSource(a) === 'online_booking' ? 'Online booking' : 'Calendar';
+    const source = getArchiveAppointmentSource(a);
+    const sourceLabel = source === 'online_booking'
+      ? 'Online booking'
+      : (source === 'dash_booking' ? 'Dash Booking' : 'Calendar');
     const status = getArchiveStatus(a);
     const phoneHtml = currentUserRole === 'manager' && a.phone
       ? '<span class="archive-phone">' + escapeHtml(a.phone) + '</span>'
@@ -8776,6 +9075,7 @@ function formatActorLabel(label) {
   const cleanValue = value.replace(/^@+/, '');
   if (!cleanValue) return '-';
   if (cleanValue.toLowerCase() === 'online booking') return 'Online booking';
+  if (cleanValue.toLowerCase() === 'dash booking') return 'Dash Booking';
   return '@' + cleanValue;
 }
 
@@ -8915,6 +9215,7 @@ function getAppointmentLogEventType(lastAction) {
   if (lastAction === 'online_request_created') return 'online_request_created';
   if (lastAction === 'online_request_confirmed') return 'online_request_confirmed';
   if (lastAction === 'online_request_declined') return 'online_request_declined';
+  if (lastAction === 'dash_request_confirmed') return 'dash_request_confirmed';
   if (lastAction === 'move') return 'moved';
   if (lastAction === 'cancel') return 'canceled';
   if (lastAction === 'no_show') return 'no_show';
@@ -8992,6 +9293,9 @@ const STAFF_NOTIFICATION_KEY_EVENTS = new Set([
   'online_request_created',
   'online_request_confirmed',
   'online_request_declined',
+  'dash_request_created',
+  'dash_request_conflict',
+  'dash_request_confirmed',
   'new_app',
   'moved',
   'canceled',
@@ -9312,6 +9616,9 @@ function buildStaffNotificationTitle(eventType) {
     online_request_created: 'Online booking request',
     online_request_confirmed: 'Online request confirmed',
     online_request_declined: 'Online request declined',
+    dash_request_created: 'Dash Booking appointment',
+    dash_request_conflict: 'Dash Booking conflict',
+    dash_request_confirmed: 'Dash Booking confirmed',
     new_app: 'New appointment',
     moved: 'Appointment moved',
     updated_app: 'Appointment updated',
@@ -9510,12 +9817,54 @@ function stopStaffNotificationsListener() {
   renderStaffNotifications();
 }
 
+function getDashPreviewDemoNotifications() {
+  if (!DASH_PREVIEW_DEMO_ENABLED || dashPreviewDemoConfirmed) return [];
+  const appointment = appointments.find(item => item.id === DASH_PREVIEW_DEMO_ID);
+  if (!appointment) return [];
+  const readKey = getNotificationReadKey();
+  const staffName = getStaffDisplayName(appointment.staffId);
+  const dateLabel = getLocalDateFromInput(appointment.date).toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric'
+  });
+  return [{
+    id: DASH_PREVIEW_DEMO_NOTIFICATION_ID,
+    isDashPreviewDemo: true,
+    title: 'Dash Booking appointment',
+    body: `Dash Booking appointment\n${appointment.client}\n${dateLabel}, ${timeLabel(appointment.start)}\n${staffName}\n${appointment.note}`,
+    eventType: 'dash_request_created',
+    entityType: 'appointment',
+    entityId: DASH_PREVIEW_DEMO_ID,
+    staffId: appointment.staffId,
+    staffName,
+    source: 'dash_booking',
+    priority: 'key',
+    visibleToManager: true,
+    visibleToAllStaff: true,
+    audienceVersion: 2,
+    audienceStaffIds: getActiveStaffList({ includeAnyone: false }).map(item => item.id),
+    importantStaffIds: appointment.staffId === ANYONE_ID ? [] : [appointment.staffId],
+    managerPriority: 'key',
+    staffDefaultPriority: 'secondary',
+    messageGroupId: 'dash-booking-preview-only',
+    readBy: dashPreviewDemoRead ? { [readKey]: true } : {},
+    createdAt: {
+      toDate: () => DASH_PREVIEW_DEMO_CREATED_AT,
+      toMillis: () => DASH_PREVIEW_DEMO_CREATED_AT.getTime()
+    },
+    _sourceKey: 'preview',
+    _collection: '__preview__'
+  }];
+}
+
 function mergeStaffMessageSources(extraItems = []) {
   const candidates = [
     ...staffNotifications.filter(item => item._olderPage === true),
     ...staffMessageLatestPages.legacy,
     ...staffMessageLatestPages.canonical,
-    ...extraItems
+    ...extraItems,
+    ...getDashPreviewDemoNotifications()
   ];
   const merged = new Map();
   candidates.forEach(item => {
@@ -10109,15 +10458,25 @@ function renderStaffNotifications() {
     const replyQuote = item.replyTo?.preview
       ? `<div class="staff-notification-reply-quote"><span class="staff-notification-reply-arrow">↩</span>${item.replyTo.senderLabel ? '<strong>' + escapeHtml(item.replyTo.senderLabel) + '</strong> · ' : ''}${escapeHtml(item.replyTo.preview)}</div>`
       : '';
+    const linkedAppointment = item.entityType === 'appointment'
+      ? findNotificationAppointment(item.entityId)
+      : null;
+    const dashConfirmAction = item.eventType === 'dash_request_created' && isPendingDashBookingRequest(linkedAppointment)
+      ? `<button type="button" class="staff-notification-dash-action" data-dash-confirm-id="${escapeHtml(item.entityId)}" data-dash-notification-id="${escapeHtml(item.id)}">Confirm</button>`
+      : '';
+    const cardActions = item.isDashPreviewDemo === true
+      ? ''
+      : `<button type="button" class="staff-notification-pin-action" data-pin-notification-id="${escapeHtml(item.id)}" aria-label="${isPinned ? 'Unpin message' : 'Pin message'}">${buildStaffPinIconSvg()}</button>
+        <button type="button" class="staff-notification-reply-action" data-reply-notification-id="${escapeHtml(item.id)}" aria-label="Reply to message">${buildStaffReplyIconSvg()}</button>`;
     htmlParts.push(`
       <div class="staff-notification-card ${priority} ${unread ? 'unread' : ''} ${isPinned ? 'pinned' : ''}" style="${getStaffChatCardStyle(item)}" data-notification-id="${escapeHtml(item.id)}">
-        <button type="button" class="staff-notification-pin-action" data-pin-notification-id="${escapeHtml(item.id)}" aria-label="${isPinned ? 'Unpin message' : 'Pin message'}">${buildStaffPinIconSvg()}</button>
-        <button type="button" class="staff-notification-reply-action" data-reply-notification-id="${escapeHtml(item.id)}" aria-label="Reply to message">${buildStaffReplyIconSvg()}</button>
+        ${cardActions}
         ${kindLabel}
         ${replyQuote}
         <div class="staff-notification-body">${item.senderLabel ? '<strong>' + escapeHtml(item.senderLabel) + '</strong>\n' : ''}${escapeHtml(getStaffNotificationDisplayBody(item))}</div>
         ${buildStaffMessageMedia(item)}
         ${photo}
+        ${dashConfirmAction}
         <div class="staff-notification-footer">${escapeHtml(formatNotificationCreatedAt(item))}</div>
       </div>
     `);
@@ -10128,6 +10487,7 @@ function renderStaffNotifications() {
     attachStaffNotificationSwipe(card);
     card.addEventListener('click', event => {
       if (event.target.closest('[data-pin-notification-id]')) return;
+      if (event.target.closest('[data-dash-confirm-id]')) return;
       if (card.dataset.swipeHandled === 'true') {
         card.dataset.swipeHandled = 'false';
         return;
@@ -10151,6 +10511,21 @@ function renderStaffNotifications() {
       button.closest('.staff-notification-card')?.classList.remove('swipe-reply-hint');
     });
   });
+  list.querySelectorAll('[data-dash-confirm-id]').forEach(button => {
+    button.addEventListener('click', async event => {
+      event.preventDefault();
+      event.stopPropagation();
+      button.disabled = true;
+      try {
+        await confirmDashBookingRequestFromMessage(
+          button.dataset.dashConfirmId,
+          button.dataset.dashNotificationId
+        );
+      } finally {
+        if (button.isConnected) button.disabled = false;
+      }
+    });
+  });
   const mediaHydration = hydrateStaffMessageMedia();
   if (keepLatest) {
     scrollStaffNotificationsToBottom();
@@ -10166,6 +10541,12 @@ function renderStaffNotifications() {
 async function markStaffNotificationRead(item) {
   if (!item?.id || !isStaffNotificationUnread(item)) return;
   const readKey = getNotificationReadKey();
+  if (item.isDashPreviewDemo === true) {
+    dashPreviewDemoRead = true;
+    item.readBy = { ...(item.readBy || {}), [readKey]: true };
+    updateStaffNotificationsBadge();
+    return;
+  }
   try {
     await updateDoc(doc(db, item._collection || 'staffNotifications', item.id), {
       ['readBy.' + readKey]: true,
@@ -10602,6 +10983,21 @@ function findNotificationAppointment(entityId) {
   return archiveAppointments.find(x => x.id === entityId) || appointments.find(x => x.id === entityId) || null;
 }
 
+async function confirmDashBookingRequestFromMessage(appointmentId, notificationId) {
+  const appointment = findNotificationAppointment(appointmentId);
+  if (!isPendingDashBookingRequest(appointment)) {
+    showToast('This Dash Booking request is no longer pending.', 'warning');
+    renderStaffNotifications();
+    return;
+  }
+
+  const notification = staffNotifications.find(item => item.id === notificationId);
+  if (notification) await markStaffNotificationRead(notification);
+  closeStaffNotifications();
+  window.openEdit(appointmentId);
+  await runAppointmentActionWithGuard(() => updateBookingRequestStatus('confirmed'));
+}
+
 async function openStaffNotificationItem(notificationId) {
   const item = staffNotifications.find(entry => entry.id === notificationId);
   if (!item) return;
@@ -10666,6 +11062,10 @@ function buildTelegramAppointmentMessage(data, original = null, mode = null) {
 
   if (action === 'online_request_confirmed') {
     return `ONLINE BOOKING CONFIRMED\n${clientName} with <b>${staffName}</b> - ${appointmentDate} at ${appointmentTime}. Duration: ${formatTelegramDuration(data.duration, staffName)}.${note ? '\n' + note : ''}${groupText}${editorLine}`;
+  }
+
+  if (action === 'dash_request_confirmed') {
+    return `DASH BOOKING CONFIRMED\n${clientName} with <b>${staffName}</b> - ${appointmentDate} at ${appointmentTime}. Duration: ${formatTelegramDuration(data.duration, staffName)}.${note ? '\n' + note : ''}${groupText}${editorLine}`;
   }
 
   if (action === 'online_request_declined') {
@@ -10824,6 +11224,9 @@ function getActivityLogEventLabel(eventType) {
     online_request_created: 'Online request',
     online_request_confirmed: 'Online request confirmed',
     online_request_declined: 'Online request declined',
+    dash_request_created: 'Dash Booking request',
+    dash_request_conflict: 'Dash Booking conflict',
+    dash_request_confirmed: 'Dash Booking confirmed',
     off_created: 'New off work',
     off_updated: 'Off work updated',
     off_deleted: 'Off work deleted'

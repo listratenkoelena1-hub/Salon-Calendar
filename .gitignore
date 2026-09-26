@@ -1,4 +1,5 @@
 node_modules/
 .firebase/
+.firebase-preview-config/
 .DS_Store
 *.log
