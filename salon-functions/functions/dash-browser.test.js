@@ -8,6 +8,7 @@ const {
   buildCreateBlockUrl,
   buildEditBlockUrl,
   buildNotificationCandidates,
+  formatSafeDashPageState,
   getDashBlockIdFromUrl,
   getDashStaffIdFromUrl,
   getStaticNotificationTime,
@@ -61,4 +62,24 @@ test("keeps identical same-minute notifications as separate candidates", () => {
   assert.equal(candidates[0].occurrence, 0);
   assert.equal(candidates[1].occurrence, 1);
   assert.notEqual(candidates[0].notificationKey, candidates[1].notificationKey);
+});
+
+test("formats login diagnostics without page text or customer data", () => {
+  const diagnostic = formatSafeDashPageState({
+    host: "www.partnersdash.com",
+    path: "/appointments",
+    readyState: "complete",
+    hasEmailField: false,
+    hasPasswordField: false,
+    hasDashboardMarker: true,
+    iframeCount: 0,
+    challengeDetected: false,
+    customerName: "Must never be included"
+  });
+
+  assert.equal(
+    diagnostic,
+    "host=www.partnersdash.com;path=/appointments;ready=complete;email=0;password=0;dashboard=1;iframes=0;challenge=0"
+  );
+  assert.doesNotMatch(diagnostic, /customer|must never/i);
 });

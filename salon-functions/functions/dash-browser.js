@@ -12,6 +12,28 @@ const {
 const DASH_BASE_URL = "https://www.partnersdash.com";
 const DASH_APPOINTMENTS_URL = `${DASH_BASE_URL}/appointments`;
 const DEFAULT_TIMEOUT_MS = 30000;
+const DASH_LOGIN_TIMEOUT_MS = 90000;
+const DASH_EMAIL_SELECTORS = [
+  'input[type="email"]',
+  'input[name="email"]',
+  'input[id*="email" i]',
+  'input[autocomplete="username"]',
+  'input[autocomplete="email"]',
+  'input[placeholder*="email" i]'
+];
+const DASH_PASSWORD_SELECTORS = [
+  'input[type="password"]',
+  'input[name="password"]',
+  'input[id*="password" i]',
+  'input[autocomplete="current-password"]',
+  'input[placeholder*="password" i]'
+];
+const DASH_READY_SELECTORS = [
+  '[aria-label="bell"]',
+  'button[aria-label="plus"]',
+  'input[placeholder="Select date"]',
+  '.react-grid-layout'
+];
 
 function toTwelveHour(value) {
   const match = String(value || "").match(/^(\d{2}):(\d{2})$/);
@@ -131,47 +153,122 @@ async function clickButtonByText(page, labels) {
   if (!clicked) throw new Error(`Dash button was not found: ${labels.join(" / ")}`);
 }
 
+function joinSelectors(selectors) {
+  return selectors.join(",");
+}
+
+async function getSafeDashPageState(page) {
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(page.url());
+  } catch (_error) {
+    parsedUrl = null;
+  }
+  const state = await page.evaluate(({ emailSelectors, passwordSelectors, readySelectors }) => {
+    const bodyText = String(document.body?.innerText || "").toLowerCase();
+    const title = String(document.title || "").toLowerCase();
+    const hasAny = selectors => selectors.some(selector => Boolean(document.querySelector(selector)));
+    return {
+      readyState: String(document.readyState || "unknown"),
+      hasEmailField: hasAny(emailSelectors),
+      hasPasswordField: hasAny(passwordSelectors),
+      hasDashboardMarker: hasAny(readySelectors),
+      iframeCount: document.querySelectorAll("iframe").length,
+      challengeDetected: /just a moment|checking your browser|verify you are human|access denied/.test(`${title} ${bodyText}`)
+    };
+  }, {
+    emailSelectors: DASH_EMAIL_SELECTORS,
+    passwordSelectors: DASH_PASSWORD_SELECTORS,
+    readySelectors: DASH_READY_SELECTORS
+  });
+  return {
+    host: parsedUrl?.hostname || "unknown",
+    path: parsedUrl?.pathname || "unknown",
+    ...state
+  };
+}
+
+function formatSafeDashPageState(state) {
+  return [
+    `host=${state.host}`,
+    `path=${state.path}`,
+    `ready=${state.readyState}`,
+    `email=${state.hasEmailField ? 1 : 0}`,
+    `password=${state.hasPasswordField ? 1 : 0}`,
+    `dashboard=${state.hasDashboardMarker ? 1 : 0}`,
+    `iframes=${Number(state.iframeCount || 0)}`,
+    `challenge=${state.challengeDetected ? 1 : 0}`
+  ].join(";");
+}
+
+async function throwDashPageStateError(page, stage, originalError) {
+  let state = null;
+  try {
+    state = await getSafeDashPageState(page);
+  } catch (_stateError) {
+    // Preserve the original stage when the page itself can no longer be read.
+  }
+  const suffix = state ? `;${formatSafeDashPageState(state)}` : "";
+  const error = new Error(`Dash page was not ready;stage=${stage}${suffix}`);
+  error.code = state?.challengeDetected ? "DASH_BROWSER_CHALLENGE" : "DASH_PAGE_NOT_READY";
+  error.cause = originalError;
+  throw error;
+}
+
 async function ensureDashLogin(page, { email, password }) {
-  await page.goto(DASH_APPOINTMENTS_URL, { waitUntil: "domcontentloaded", timeout: DEFAULT_TIMEOUT_MS });
-  await page.waitForFunction(() => Boolean(
-    document.querySelector('[aria-label="bell"]') ||
-    document.querySelector('button[aria-label="plus"]') ||
-    document.querySelector('input[type="email"]') ||
-    document.querySelector('input[name="email"]') ||
-    document.querySelector('input[placeholder*="email" i]')
-  ), { timeout: DEFAULT_TIMEOUT_MS });
-  const emailInput = await firstVisible(page, [
-    'input[type="email"]',
-    'input[name="email"]',
-    'input[placeholder*="email" i]'
-  ]);
-  if (!emailInput) {
-    await page.waitForSelector('[aria-label="bell"], button[aria-label="plus"]', {
-      timeout: DEFAULT_TIMEOUT_MS
+  await page.setUserAgent(
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
+    "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+  );
+  await page.setExtraHTTPHeaders({ "Accept-Language": "en-CA,en;q=0.9" });
+  try {
+    await page.goto(DASH_APPOINTMENTS_URL, {
+      waitUntil: "domcontentloaded",
+      timeout: DASH_LOGIN_TIMEOUT_MS
     });
+    await page.waitForFunction(
+      ({ emailSelectors, readySelectors }) => (
+        emailSelectors.some(selector => Boolean(document.querySelector(selector))) ||
+        readySelectors.some(selector => Boolean(document.querySelector(selector)))
+      ),
+      { timeout: DASH_LOGIN_TIMEOUT_MS },
+      { emailSelectors: DASH_EMAIL_SELECTORS, readySelectors: DASH_READY_SELECTORS }
+    );
+  } catch (error) {
+    await throwDashPageStateError(page, "landing", error);
+  }
+  const emailInput = await firstVisible(page, DASH_EMAIL_SELECTORS);
+  if (!emailInput) {
+    try {
+      await page.waitForSelector(joinSelectors(DASH_READY_SELECTORS), {
+        timeout: DASH_LOGIN_TIMEOUT_MS
+      });
+    } catch (error) {
+      await throwDashPageStateError(page, "existing-session", error);
+    }
     return;
   }
 
-  const passwordInput = await firstVisible(page, [
-    'input[type="password"]',
-    'input[name="password"]',
-    'input[placeholder*="password" i]'
-  ]);
-  if (!passwordInput) throw new Error("Dash password field was not found.");
+  const passwordInput = await firstVisible(page, DASH_PASSWORD_SELECTORS);
+  if (!passwordInput) await throwDashPageStateError(page, "password-field");
   await emailInput.click({ clickCount: 3 });
   await page.keyboard.press("Backspace");
   await emailInput.type(String(email || ""));
   await passwordInput.click({ clickCount: 3 });
   await page.keyboard.press("Backspace");
   await passwordInput.type(String(password || ""));
-  await clickButtonByText(page, ["log in", "login", "sign in"]);
-  await page.waitForFunction(
-    () => location.pathname.startsWith("/appointments"),
-    { timeout: DEFAULT_TIMEOUT_MS }
-  );
-  await page.waitForSelector('[aria-label="bell"], button[aria-label="plus"]', {
-    timeout: DEFAULT_TIMEOUT_MS
-  });
+  try {
+    await clickButtonByText(page, ["log in", "login", "sign in"]);
+    await page.waitForFunction(
+      () => location.pathname.startsWith("/appointments"),
+      { timeout: DASH_LOGIN_TIMEOUT_MS }
+    );
+    await page.waitForSelector(joinSelectors(DASH_READY_SELECTORS), {
+      timeout: DASH_LOGIN_TIMEOUT_MS
+    });
+  } catch (error) {
+    await throwDashPageStateError(page, "sign-in", error);
+  }
 }
 
 async function selectAntValue(page, selector, label, rawValue = "") {
@@ -713,6 +810,8 @@ module.exports = {
   createDashBrowserClient,
   deleteBlock,
   ensureDashLogin,
+  formatSafeDashPageState,
+  getSafeDashPageState,
   getDashBlockIdFromUrl,
   getDashStaffIdFromUrl,
   getStaticNotificationTime,
