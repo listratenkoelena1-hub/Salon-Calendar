@@ -127,6 +127,14 @@ async function launchDashBrowser({ executablePath = "" } = {}) {
   });
 }
 
+async function prepareDashPage(page) {
+  await page.setUserAgent(
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
+    "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+  );
+  await page.setExtraHTTPHeaders({ "Accept-Language": "en-CA,en;q=0.9" });
+}
+
 async function firstVisible(page, selectors) {
   for (const selector of selectors) {
     const handle = await page.$(selector);
@@ -151,10 +159,6 @@ async function clickButtonByText(page, labels) {
     return true;
   }, wanted);
   if (!clicked) throw new Error(`Dash button was not found: ${labels.join(" / ")}`);
-}
-
-function joinSelectors(selectors) {
-  return selectors.join(",");
 }
 
 async function getSafeDashPageState(page) {
@@ -215,12 +219,39 @@ async function throwDashPageStateError(page, stage, originalError) {
   throw error;
 }
 
-async function ensureDashLogin(page, { email, password }) {
-  await page.setUserAgent(
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
-    "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+async function waitForDashDashboardReady(page) {
+  await page.waitForFunction(
+    ({ emailSelectors, passwordSelectors, readySelectors }) => {
+      const isVisible = element => {
+        if (!element) return false;
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
+      };
+      const anyVisible = selectors => selectors.some(selector => isVisible(document.querySelector(selector)));
+      return (
+        anyVisible(readySelectors) &&
+        !anyVisible(emailSelectors) &&
+        !anyVisible(passwordSelectors)
+      );
+    },
+    { timeout: DASH_LOGIN_TIMEOUT_MS },
+    {
+      emailSelectors: DASH_EMAIL_SELECTORS,
+      passwordSelectors: DASH_PASSWORD_SELECTORS,
+      readySelectors: DASH_READY_SELECTORS
+    }
   );
-  await page.setExtraHTTPHeaders({ "Accept-Language": "en-CA,en;q=0.9" });
+  try {
+    await page.waitForNetworkIdle({ idleTime: 750, timeout: 10000 });
+  } catch (_error) {
+    // Dash keeps background requests open; the visible stable dashboard is enough.
+  }
+  await new Promise(resolve => setTimeout(resolve, 500));
+}
+
+async function ensureDashLogin(page, { email, password }) {
+  await prepareDashPage(page);
   try {
     await page.goto(DASH_APPOINTMENTS_URL, {
       waitUntil: "domcontentloaded",
@@ -240,9 +271,7 @@ async function ensureDashLogin(page, { email, password }) {
   const emailInput = await firstVisible(page, DASH_EMAIL_SELECTORS);
   if (!emailInput) {
     try {
-      await page.waitForSelector(joinSelectors(DASH_READY_SELECTORS), {
-        timeout: DASH_LOGIN_TIMEOUT_MS
-      });
+      await waitForDashDashboardReady(page);
     } catch (error) {
       await throwDashPageStateError(page, "existing-session", error);
     }
@@ -259,16 +288,42 @@ async function ensureDashLogin(page, { email, password }) {
   await passwordInput.type(String(password || ""));
   try {
     await clickButtonByText(page, ["log in", "login", "sign in"]);
-    await page.waitForFunction(
-      () => location.pathname.startsWith("/appointments"),
-      { timeout: DASH_LOGIN_TIMEOUT_MS }
-    );
-    await page.waitForSelector(joinSelectors(DASH_READY_SELECTORS), {
-      timeout: DASH_LOGIN_TIMEOUT_MS
-    });
+    await waitForDashDashboardReady(page);
   } catch (error) {
     await throwDashPageStateError(page, "sign-in", error);
   }
+}
+
+async function createAuthenticatedDashPage(browser, credentials) {
+  const authPage = await browser.newPage();
+  try {
+    await ensureDashLogin(authPage, credentials);
+    const workPage = await browser.newPage();
+    await prepareDashPage(workPage);
+    await authPage.close();
+    return workPage;
+  } catch (error) {
+    if (!authPage.isClosed()) await authPage.close().catch(() => {});
+    throw error;
+  }
+}
+
+function isDetachedFrameError(error) {
+  return /detached frame/i.test(String(error?.message || error || ""));
+}
+
+async function navigateDashPage(page, url, timeout = DEFAULT_TIMEOUT_MS) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await page.goto(url, { waitUntil: "domcontentloaded", timeout });
+    } catch (error) {
+      lastError = error;
+      if (!isDetachedFrameError(error) || page.isClosed() || attempt === 2) throw error;
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+  throw lastError;
 }
 
 async function selectAntValue(page, selector, label, rawValue = "") {
@@ -671,10 +726,7 @@ async function waitForDashCalendar(page) {
 }
 
 async function readDashCalendarCards(page, date) {
-  await page.goto(buildAppointmentsDateUrl(date), {
-    waitUntil: "domcontentloaded",
-    timeout: DEFAULT_TIMEOUT_MS
-  });
+  await navigateDashPage(page, buildAppointmentsDateUrl(date));
   await waitForDashCalendar(page);
   return page.evaluate(currentDate => {
     const staffHeadings = Array.from(document.querySelectorAll("h4"))
@@ -807,6 +859,7 @@ module.exports = {
   buildEditBlockUrl,
   buildAppointmentsDateUrl,
   createBlock,
+  createAuthenticatedDashPage,
   createDashBrowserClient,
   deleteBlock,
   ensureDashLogin,
@@ -815,7 +868,10 @@ module.exports = {
   getDashBlockIdFromUrl,
   getDashStaffIdFromUrl,
   getStaticNotificationTime,
+  isDetachedFrameError,
   launchDashBrowser,
+  navigateDashPage,
+  prepareDashPage,
   readDashCalendarCards,
   readDashCalendarDay,
   readDashCalendarRange,

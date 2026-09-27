@@ -12,6 +12,7 @@ const {
   getDashBlockIdFromUrl,
   getDashStaffIdFromUrl,
   getStaticNotificationTime,
+  isDetachedFrameError,
   toTwelveHour
 } = require("./dash-browser");
 
@@ -82,4 +83,9 @@ test("formats login diagnostics without page text or customer data", () => {
     "host=www.partnersdash.com;path=/appointments;ready=complete;email=0;password=0;dashboard=1;iframes=0;challenge=0"
   );
   assert.doesNotMatch(diagnostic, /customer|must never/i);
+});
+
+test("retries only Chromium detached-frame navigation failures", () => {
+  assert.equal(isDetachedFrameError(new Error("Attempted to use detached Frame 'abc'")), true);
+  assert.equal(isDetachedFrameError(new Error("Navigation timeout exceeded")), false);
 });

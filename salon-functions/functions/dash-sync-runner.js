@@ -21,8 +21,8 @@ const {
   reserveAppointmentSlots
 } = require("./appointment-schedule");
 const {
+  createAuthenticatedDashPage,
   createDashBrowserClient,
-  ensureDashLogin,
   launchDashBrowser
 } = require("./dash-browser");
 
@@ -569,8 +569,7 @@ async function runDashAuditWithBrowser({
   }
   const browser = await launchDashBrowser({ executablePath });
   try {
-    const page = await browser.newPage();
-    await ensureDashLogin(page, { email, password });
+    const page = await createAuthenticatedDashPage(browser, { email, password });
     const client = createDashBrowserClient(page, { dryRun: true });
     return runDashAudit({
       db,
@@ -1554,8 +1553,7 @@ async function runDashSyncCycle({
   }
   const browser = await launchDashBrowser({ executablePath });
   try {
-    const page = await browser.newPage();
-    await ensureDashLogin(page, { email, password });
+    const page = await createAuthenticatedDashPage(browser, { email, password });
     const client = createDashBrowserClient(page, { dryRun: !config.writeEnabled });
     const mappings = await loadDashMappings(db);
     const incoming = config.inboundEnabled
