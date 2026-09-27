@@ -4217,10 +4217,10 @@ exports.managerRunDashBookingAudit = onCall(
     if (startDate < today) {
       throw new HttpsError("invalid-argument", "Dash audit cannot begin in the past.");
     }
-    const requestedHorizon = input.horizonDays === undefined ? 30 : Number(input.horizonDays);
-    if (!Number.isInteger(requestedHorizon) || requestedHorizon < 1 || requestedHorizon > 30) {
-      throw new HttpsError("invalid-argument", "Dash audit horizon must be between 1 and 30 days.");
-    }
+    // Keep the experimental audit deliberately limited to today while the
+    // browser bridge is being verified. Ignore older preview pages that still
+    // submit horizonDays: 30.
+    const requestedHorizon = 1;
     try {
       return await runDashAuditWithBrowser({
         db,
