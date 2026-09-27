@@ -1,5 +1,7 @@
 "use strict";
 
+const crypto = require("node:crypto");
+
 const {
   chooseProfileMatch,
   getPhoneLast4,
@@ -46,6 +48,103 @@ function buildNewProfileData(clientId, displayName, FieldValue) {
     aliases: [],
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp()
+  };
+}
+
+function hashExternalIdentity(provider, externalId) {
+  const cleanProvider = String(provider || "").trim().toLowerCase();
+  const cleanId = String(externalId || "").trim();
+  if (!cleanProvider || !cleanId) return "";
+  return crypto.createHash("sha256")
+    .update(`${cleanProvider}|${cleanId}`)
+    .digest("hex");
+}
+
+async function planExternalClientIdentityInTransaction({
+  transaction,
+  db,
+  FieldValue,
+  provider,
+  externalId,
+  clientName
+}) {
+  const externalIdentityHash = hashExternalIdentity(provider, externalId);
+  const cleanProvider = String(provider || "").trim().toLowerCase();
+  const normalizedName = normalizeClientName(clientName);
+  if (!externalIdentityHash || !normalizedName) return null;
+
+  // The opaque provider ID makes the parent client deterministic and
+  // idempotent without exposing the raw Dash cid in Firestore document paths
+  // or public records. Profiles remain separate name branches so a shared
+  // Dash identity can safely represent more than one family member.
+  const clientRef = db.collection(CLIENT_COLLECTION)
+    .doc(`external_${externalIdentityHash.slice(0, 40)}`);
+  const clientSnapshot = await transaction.get(clientRef);
+  const createdClient = !clientSnapshot.exists;
+  const clientData = clientSnapshot.exists ? clientSnapshot.data() || {} : {};
+  const profiles = createdClient
+    ? []
+    : await readProfiles(transaction, db, clientData.profileIds);
+  const choice = chooseProfileMatch(normalizedName, profiles, { allowClose: true });
+  let profileData = choice?.profile || null;
+  let profileRef = profileData?.id
+    ? db.collection(CLIENT_PROFILE_COLLECTION).doc(profileData.id)
+    : null;
+  let createdProfile = false;
+  if (!profileRef) {
+    profileRef = db.collection(CLIENT_PROFILE_COLLECTION).doc();
+    profileData = {
+      id: profileRef.id,
+      ...buildNewProfileData(clientRef.id, clientName, FieldValue)
+    };
+    createdProfile = true;
+  }
+  const alias = !createdProfile && normalizedName !== normalizeClientName(profileData.displayName) &&
+    !(Array.isArray(profileData.aliases) && profileData.aliases.some(value => (
+      normalizeClientName(value) === normalizedName
+    )))
+      ? String(clientName || "").trim()
+      : "";
+
+  return {
+    identityType: "external",
+    externalProvider: cleanProvider,
+    externalIdentityHash,
+    phoneNormalized: "",
+    phoneDisplay: "",
+    phoneLast4: "",
+    phoneKey: "",
+    phoneIndexRef: null,
+    clientRef,
+    clientData,
+    clientId: clientRef.id,
+    profileRef,
+    profileData,
+    clientProfileId: profileRef.id,
+    createdClient,
+    createdProfile,
+    alias,
+    matchType: createdProfile
+      ? "external_new"
+      : `external_${choice?.match?.type || "exact"}`
+  };
+}
+
+function identityFromPrivateData(privateData) {
+  if (!privateData?.clientId || !privateData?.clientProfileId) return null;
+  return {
+    identityType: String(privateData.identityType || (privateData.phoneHash ? "phone" : "external")),
+    externalProvider: String(privateData.externalProvider || ""),
+    externalIdentityHash: String(privateData.externalIdentityHash || ""),
+    phoneNormalized: String(privateData.phoneNormalized || ""),
+    phoneDisplay: String(privateData.phoneDisplay || ""),
+    phoneLast4: String(privateData.phoneLast4 || ""),
+    phoneKey: String(privateData.phoneHash || ""),
+    clientId: String(privateData.clientId),
+    clientProfileId: String(privateData.clientProfileId),
+    createdClient: false,
+    createdProfile: false,
+    alias: ""
   };
 }
 
@@ -147,22 +246,31 @@ function applyClientIdentityPlan(transaction, plan, FieldValue) {
   const now = FieldValue.serverTimestamp();
 
   if (plan.createdClient) {
-    transaction.set(plan.phoneIndexRef, {
+    if (plan.phoneIndexRef) {
+      transaction.set(plan.phoneIndexRef, {
+        schemaVersion: CLIENT_SCHEMA_VERSION,
+        clientId: plan.clientId,
+        createdAt: now,
+        updatedAt: now
+      });
+    }
+    const clientDocument = {
       schemaVersion: CLIENT_SCHEMA_VERSION,
-      clientId: plan.clientId,
-      createdAt: now,
-      updatedAt: now
-    });
-    transaction.set(plan.clientRef, {
-      schemaVersion: CLIENT_SCHEMA_VERSION,
-      phoneNormalized: plan.phoneNormalized,
-      phoneDisplay: plan.phoneDisplay,
-      phoneLast4: plan.phoneLast4,
-      phoneHash: plan.phoneKey,
+      identityType: plan.identityType || "phone",
       profileIds: plan.clientProfileId ? [plan.clientProfileId] : [],
       createdAt: now,
       updatedAt: now
-    });
+    };
+    if (plan.identityType === "external") {
+      clientDocument.externalProvider = plan.externalProvider;
+      clientDocument.externalIdentityHash = plan.externalIdentityHash;
+    } else {
+      clientDocument.phoneNormalized = plan.phoneNormalized;
+      clientDocument.phoneDisplay = plan.phoneDisplay;
+      clientDocument.phoneLast4 = plan.phoneLast4;
+      clientDocument.phoneHash = plan.phoneKey;
+    }
+    transaction.set(plan.clientRef, clientDocument);
   } else if (plan.createdProfile) {
     transaction.set(plan.clientRef, {
       profileIds: FieldValue.arrayUnion(plan.clientProfileId),
@@ -297,6 +405,9 @@ function buildAppointmentPrivateData(appointmentId, appointment, identity, Field
     phoneDisplay: identity.phoneDisplay,
     phoneLast4: identity.phoneLast4,
     phoneHash: identity.phoneKey,
+    identityType: identity.identityType || "phone",
+    externalProvider: String(identity.externalProvider || ""),
+    externalIdentityHash: String(identity.externalIdentityHash || ""),
     clientNameNormalized: normalizeClientName(appointment?.client),
     source: String(appointment?.source || "calendar"),
     updatedAt: FieldValue.serverTimestamp()
@@ -380,9 +491,12 @@ module.exports = {
   buildClientHistoryData,
   deleteClientAppointmentRecords,
   getCachedProfileSummary,
+  hashExternalIdentity,
+  identityFromPrivateData,
   invalidateClientProfileSummary,
   loadClientHistoryInTransaction,
   planClientIdentityInTransaction,
+  planExternalClientIdentityInTransaction,
   readClientContext,
   readClientIdentity,
   readPhoneClient,

@@ -9,6 +9,7 @@ const {
   buildCreateBlockUrl,
   buildEditBlockUrl,
   buildNotificationCandidates,
+  classifyDashCalendarConflicts,
   dashNavigationReached,
   formatSafeDashPageState,
   getDashBlockIdFromUrl,
@@ -50,6 +51,26 @@ test("formats Dash select labels and stable notification clock text", () => {
   assert.equal(toTwelveHour("13:30"), "01:30 pm");
   assert.equal(toTwelveHour("20:00"), "08:00 pm");
   assert.equal(getStaticNotificationTime("13 hours ago at 08:26 pm"), "08:26 pm");
+});
+
+test("separates appointments, integration blocks, and replaceable manual overlaps", () => {
+  const conflicts = classifyDashCalendarConflicts([
+    { isBlock: false, dashStaffName: "Inna", startMinutes: 600, endMinutes: 660 },
+    { isBlock: true, dashStaffName: "Inna", startMinutes: 660, endMinutes: 720,
+      description: "Rose Calendar | off:owned" },
+    { isBlock: true, dashStaffName: "Inna", startMinutes: 710, endMinutes: 780,
+      description: "" },
+    { isBlock: true, dashStaffName: "Olha", startMinutes: 600, endMinutes: 780,
+      description: "" }
+  ], {
+    dashStaffName: "Inna",
+    start: "10:30",
+    end: "12:30"
+  });
+
+  assert.equal(conflicts.appointments.length, 1);
+  assert.equal(conflicts.integrationBlocks.length, 1);
+  assert.equal(conflicts.manualBlocks.length, 1);
 });
 
 test("keeps identical same-minute notifications as separate candidates", () => {
@@ -129,34 +150,52 @@ test("builds a read-only audit appointment directly from a visible calendar card
   assert.match(appointment.dashBookingId, /^audit_[a-f0-9]{40}$/);
 });
 
-test("reads a one-day audit from the authenticated page without opening another tab", async () => {
+test("reads a multi-day audit by reusing one authenticated page", async () => {
+  let currentDate = "";
   const page = {
+    goto: async url => {
+      currentDate = new URL(url).searchParams.get("date");
+    },
+    url: () => buildAppointmentsDateUrl(currentDate),
+    isClosed: () => false,
     waitForSelector: async () => {},
     waitForFunction: async () => {},
-    evaluate: async () => [{
-      cardKey: "style|Sample Client\nPedicure",
-      date: "2026-09-27",
-      lines: ["Sample Client", "Pedicure"],
-      isBlock: false,
-      dashStaffName: "Lan",
-      startMinutes: 10 * 60,
-      endMinutes: 11 * 60
-    }]
+    evaluate: async (_fn, date) => date === "2026-09-27"
+      ? [{
+          cardKey: "style|Sample Client\nPedicure",
+          date,
+          lines: ["Sample Client", "Pedicure"],
+          isBlock: false,
+          dashStaffName: "Lan",
+          startMinutes: 10 * 60,
+          endMinutes: 11 * 60
+        }]
+      : [{
+          cardKey: "style|Blocked Time\n11:00 - 12:00\nBusy",
+          date,
+          lines: ["Blocked Time", "11:00 - 12:00", "Busy"],
+          isBlock: true,
+          dashStaffName: "Lan",
+          startMinutes: 11 * 60,
+          endMinutes: 12 * 60,
+          description: "Busy"
+        }]
   };
 
   const result = await readDashCalendarRangeForAudit(page, {
     startDate: "2026-09-27",
-    endDate: "2026-09-27"
+    endDate: "2026-09-28"
   });
 
-  assert.equal(result.days.length, 1);
+  assert.equal(result.days.length, 2);
   assert.equal(result.appointments.length, 1);
-  assert.equal(result.blocks.length, 0);
+  assert.equal(result.blocks.length, 1);
+  assert.equal(result.days[1].date, "2026-09-28");
   await assert.rejects(
     readDashCalendarRangeForAudit(page, {
       startDate: "2026-09-27",
-      endDate: "2026-09-28"
+      endDate: "2026-10-27"
     }),
-    /one calendar day only/
+    /cannot exceed 30 calendar days/
   );
 });

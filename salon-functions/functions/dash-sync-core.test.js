@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 
 const {
   appointmentToDashBlock,
+  buildCanonicalBlockKey,
   buildDashAppointment,
   findDashRequestConflict,
   getDashRequestDocumentId,
@@ -60,6 +61,16 @@ test("builds an appointment block and clips it to Dash business hours", () => {
   assert.equal(result.block.end, "11:00");
   assert.equal(result.block.description, "Rose Calendar | appt:appt-1");
   assert.match(result.block.fingerprint, /^[a-f0-9]{64}$/);
+  assert.equal(result.block.durationMinutes, 60);
+  assert.equal(
+    result.block.canonicalKey,
+    buildCanonicalBlockKey({
+      date: "2026-10-01",
+      start: "10:00",
+      end: "11:00",
+      dashStaffId: result.block.dashStaffId
+    })
+  );
 });
 
 test("does not block canceled, pending, Dash-origin, or out-of-hours appointments", () => {
@@ -140,6 +151,7 @@ test("parses created, canceled, and rescheduled Dash appointment notifications",
 test("parses the visible Dash appointment detail page", () => {
   const detail = parseDashAppointmentDetail({
     url: "https://www.partnersdash.com/appointments/view?aid=dash-aid-123",
+    clientUrl: "/clients/details?cid=dash-client-789",
     text: [
       "Appointment Details",
       "Search Client",
@@ -156,6 +168,7 @@ test("parses the visible Dash appointment detail page", () => {
 
   assert.deepEqual(detail, {
     dashBookingId: "dash-aid-123",
+    dashClientId: "dash-client-789",
     client: "Sample Client",
     date: "2026-09-25",
     start: 39,
@@ -267,7 +280,26 @@ test("resolves the local technician and builds a confirmed Dash appointment", ()
   assert.equal(appointment.status, "confirmed");
   assert.equal(appointment.lastEditedBy, "DashBooking");
   assert.equal(appointment.lastAction, "dash_appointment_added");
+  assert.equal(appointment.hasClientHistory, false);
   assert.match(getDashRequestDocumentId(detail.dashBookingId), /^dash_[a-f0-9]{40}$/);
+});
+
+test("marks a Dash appointment as history-capable when Dash exposes a stable client cid", () => {
+  const appointment = buildDashAppointment({
+    dashBookingId: "dash-booking-43",
+    dashClientId: "dash-client-stable",
+    client: "Sample Client",
+    date: "2026-10-02",
+    start: 12,
+    duration: 4,
+    service: "Pedicure",
+    staffName: "Tanya"
+  }, { id: "local-tanya", name: "Tanya" });
+
+  assert.equal(appointment.hasPrivateContact, false);
+  assert.equal(appointment.hasClientHistory, true);
+  assert.equal(appointment.privacySchemaVersion, 1);
+  assert.equal(Object.hasOwn(appointment, "dashClientId"), false);
 });
 
 test("detects appointment and off-work conflicts for inbound Dash requests", () => {

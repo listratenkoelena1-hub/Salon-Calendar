@@ -3971,149 +3971,6 @@ body.modal-open{
   }
 }
 
-.dash-audit-launch {
-  position: fixed;
-  z-index: 20040;
-  top: max(10px, env(safe-area-inset-top));
-  right: 12px;
-  min-height: 34px;
-  padding: 7px 12px;
-  border: 1px solid rgba(22, 111, 151, 0.35);
-  border-radius: 999px;
-  background: rgba(230, 248, 255, 0.97);
-  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.16);
-  color: #12678f;
-  font: 800 11px/1.15 Arial, sans-serif;
-  letter-spacing: 0.025em;
-}
-.dash-audit-modal-content {
-  width: min(960px, calc(100vw - 24px));
-  max-width: 960px;
-  max-height: min(88vh, 820px);
-  padding: 18px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  background: #fbfdff;
-}
-.dash-audit-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-.dash-audit-heading h3 {
-  margin: 0 0 3px;
-  color: #17445c;
-}
-.dash-audit-heading p {
-  margin: 0;
-  color: #5d6d76;
-  font-size: 12px;
-}
-.dash-audit-safe-note {
-  padding: 8px 10px;
-  border: 1px solid #9ed9bb;
-  border-radius: 10px;
-  background: #edfff5;
-  color: #176d43;
-  font-size: 12px;
-  font-weight: 800;
-}
-.dash-audit-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.dash-audit-controls button {
-  min-height: 34px;
-  padding: 7px 12px;
-}
-.dash-audit-period {
-  color: #4d626e;
-  font-size: 12px;
-  font-weight: 700;
-}
-.dash-audit-status {
-  min-height: 18px;
-  color: #526772;
-  font-size: 12px;
-}
-.dash-audit-status.error { color: #a12d35; }
-.dash-audit-summary {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 7px;
-}
-.dash-audit-card {
-  padding: 8px;
-  border: 1px solid #d8e5eb;
-  border-radius: 9px;
-  background: white;
-  min-width: 0;
-}
-.dash-audit-card strong {
-  display: block;
-  color: #163e54;
-  font-size: 18px;
-}
-.dash-audit-card span {
-  display: block;
-  margin-top: 2px;
-  color: #657781;
-  font-size: 10px;
-  line-height: 1.2;
-}
-.dash-audit-card.review {
-  border-color: #e6c46a;
-  background: #fff9e8;
-}
-.dash-audit-table-wrap {
-  min-height: 150px;
-  overflow: auto;
-  border: 1px solid #dce6eb;
-  border-radius: 10px;
-  background: white;
-}
-.dash-audit-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 11px;
-}
-.dash-audit-table th,
-.dash-audit-table td {
-  padding: 7px 8px;
-  border-bottom: 1px solid #edf1f3;
-  text-align: left;
-  vertical-align: top;
-}
-.dash-audit-table th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: #edf6fa;
-  color: #385664;
-  white-space: nowrap;
-}
-.dash-audit-action-review { color: #9a6411; font-weight: 800; }
-.dash-audit-action-add_to_calendar,
-.dash-audit-action-create_dash_block,
-.dash-audit-action-update_local,
-.dash-audit-action-update_dash_block { color: #176d43; font-weight: 800; }
-.dash-audit-empty {
-  padding: 28px 12px;
-  text-align: center;
-  color: #73828a;
-}
-@media (max-width: 680px) {
-  .dash-audit-modal-content { padding: 13px; }
-  .dash-audit-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .dash-audit-table { min-width: 720px; }
-  .dash-audit-launch { right: 7px; }
-}
-
 </style>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -4955,53 +4812,6 @@ stroke-linejoin="round">
 <!-- Delete / Busy / Off-work conflicts -->
 <!-- ===================== -->
 
-<button id="dashAuditPreviewBtn" class="dash-audit-launch hidden" type="button" onclick="openDashAuditPreview()">
-  Dash audit · read only
-</button>
-<div id="dashAuditModal" class="modal hidden">
-  <div class="modal-content dash-audit-modal-content">
-    <div class="dash-audit-heading">
-      <div>
-        <h3>Dash Booking audit</h3>
-        <p>Comparison of the salon calendar and Dash Booking before the first synchronization.</p>
-      </div>
-      <button type="button" aria-label="Close" onclick="closeDashAuditPreview()">×</button>
-    </div>
-    <div class="dash-audit-safe-note">
-      READ-ONLY · This check cannot create, change, cancel, or block any appointment.
-    </div>
-    <div class="dash-audit-controls">
-      <button id="dashAuditRunBtn" class="btn-primary" type="button" onclick="runDashAuditPreview()">
-        Run today-only audit
-      </button>
-      <button type="button" onclick="loadLatestDashAuditPreview()">Load latest report</button>
-      <span id="dashAuditPeriod" class="dash-audit-period">Today only</span>
-    </div>
-    <div id="dashAuditStatus" class="dash-audit-status">No audit has been run in this preview yet.</div>
-    <div id="dashAuditSummary" class="dash-audit-summary"></div>
-    <div class="dash-audit-table-wrap">
-      <table class="dash-audit-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Time</th>
-            <th>Technician</th>
-            <th>Client / source</th>
-            <th>Audit result</th>
-            <th>Reason</th>
-          </tr>
-        </thead>
-        <tbody id="dashAuditRows">
-          <tr><td colspan="6" class="dash-audit-empty">Run the read-only audit to see the report.</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="modal-actions">
-      <button type="button" onclick="closeDashAuditPreview()">Close</button>
-    </div>
-  </div>
-</div>
-
 <div id="deleteModal" class="modal hidden">
 <div class="modal-content">
 <p>Delete this appointment?</p>
@@ -5149,8 +4959,6 @@ const managerGetAppointmentContact = httpsCallable(functions, "managerGetAppoint
 const managerLookupClientByPhone = httpsCallable(functions, "managerLookupClientByPhone");
 const managerGetActivityLogContacts = httpsCallable(functions, "managerGetActivityLogContacts");
 const getStaffActivityLog = httpsCallable(functions, "getStaffActivityLog");
-const managerRunDashBookingAudit = httpsCallable(functions, "managerRunDashBookingAudit");
-const managerGetLatestDashBookingAudit = httpsCallable(functions, "managerGetLatestDashBookingAudit");
 const FCM_VAPID_KEY = "";
 // Operational pause: keep Telegram code and data intact while staffMessages
 // remains the active internal notification channel. Set to false to resume.
@@ -5166,16 +4974,9 @@ const DASH_PREVIEW_DEMO_ENABLED = (() => {
     (host.endsWith('.web.app') || host.endsWith('.firebaseapp.com'));
   return isFirebasePreview && new URLSearchParams(window.location.search).get('dashDemo') === '1';
 })();
-const DASH_AUDIT_PREVIEW_ENABLED = (() => {
-  const host = String(window.location.hostname || '').toLowerCase();
-  const isFirebasePreview = host.startsWith('rosesnails-calendar--') &&
-    (host.endsWith('.web.app') || host.endsWith('.firebaseapp.com'));
-  return isFirebasePreview && new URLSearchParams(window.location.search).get('dashAudit') === '1';
-})();
 const DASH_PREVIEW_DEMO_CREATED_AT = new Date();
 let dashPreviewDemoConfirmed = false;
 let dashPreviewDemoRead = false;
-let dashAuditPreviewRunning = false;
 let staffNotifications = [];
 let staffNotificationsUnsubscribe = null;
 let staffPinnedUnsubscribe = null;
@@ -6081,185 +5882,6 @@ function ensureDashPreviewDemoBanner() {
   ].join(';');
   document.body.appendChild(banner);
 }
-
-function updateDashAuditPreviewVisibility() {
-  const button = document.getElementById('dashAuditPreviewBtn');
-  if (!button) return;
-  button.classList.toggle('hidden', !(DASH_AUDIT_PREVIEW_ENABLED && currentUserRole === 'manager'));
-}
-
-function formatDashAuditTime(row) {
-  if (typeof row.start === 'string' && row.start.includes(':')) {
-    return row.end ? `${row.start}-${row.end}` : row.start;
-  }
-  const start = Number(row.start);
-  const duration = Number(row.duration);
-  if (!Number.isInteger(start)) return '-';
-  const startText = timeLabel(start);
-  return Number.isInteger(duration) && duration > 0
-    ? `${startText}-${timeLabel(start + duration)}`
-    : startText;
-}
-
-function getDashAuditActionLabel(action) {
-  const labels = {
-    already_matched: 'Already matched',
-    already_blocked: 'Already blocked',
-    add_to_calendar: 'Add to Rose Calendar',
-    update_local: 'Update Rose appointment',
-    link_local: 'Link existing appointment',
-    create_dash_block: 'Create Dash Block Time',
-    update_dash_block: 'Update Dash Block Time',
-    covered_by_manual_block: 'Covered by existing Block Time',
-    review: 'Needs review'
-  };
-  return labels[action] || action || '-';
-}
-
-function getDashAuditReasonLabel(reason) {
-  const labels = {
-    dash_id_match: 'Same Dash ID and schedule',
-    dash_id_changed: 'Same Dash ID; date, time, or technician changed',
-    strict_legacy_match: 'Exact existing appointment found',
-    missing_in_rose: 'Exists in Dash only',
-    missing_in_dash: 'Not blocked in Dash',
-    integration_block_match: 'Integration Block Time matches',
-    integration_block_changed: 'Integration Block Time differs',
-    manual_exact_coverage: 'A manual Block Time already covers it',
-    unmapped_staff: 'Technician is not mapped',
-    ambiguous_local_match: 'More than one possible Rose appointment',
-    local_appointment_conflict: 'Overlaps a Rose appointment',
-    dash_appointment_overlap: 'Overlaps a Dash appointment',
-    dash_block_partial_overlap: 'Partly overlaps an existing Dash block'
-  };
-  return labels[reason] || reason || '-';
-}
-
-function renderDashAuditPreview(audit) {
-  const summaryEl = document.getElementById('dashAuditSummary');
-  const rowsEl = document.getElementById('dashAuditRows');
-  const periodEl = document.getElementById('dashAuditPeriod');
-  const statusEl = document.getElementById('dashAuditStatus');
-  if (!summaryEl || !rowsEl || !periodEl || !statusEl) return;
-
-  if (!audit) {
-    summaryEl.innerHTML = '';
-    rowsEl.innerHTML = '<tr><td colspan="6" class="dash-audit-empty">No saved audit report yet.</td></tr>';
-    statusEl.textContent = 'No saved audit report yet.';
-    statusEl.classList.remove('error');
-    return;
-  }
-
-  const summary = audit.summary || {};
-  const cards = [
-    ['dashAppointments', 'Dash appointments'],
-    ['roseAppointments', 'Rose appointments'],
-    ['addToCalendar', 'Add to Rose'],
-    ['updateCalendar', 'Update Rose'],
-    ['linkLocal', 'Link existing'],
-    ['createDashBlocks', 'Create Dash blocks'],
-    ['updateDashBlocks', 'Update Dash blocks'],
-    ['alreadyMatched', 'Already matched'],
-    ['manualBlocksFound', 'Manual blocks cover'],
-    ['needsReview', 'Needs review']
-  ];
-  summaryEl.innerHTML = cards.map(([key, label]) => (
-    `<div class="dash-audit-card${key === 'needsReview' ? ' review' : ''}">` +
-      `<strong>${escapeHtml(String(Number(summary[key]) || 0))}</strong>` +
-      `<span>${escapeHtml(label)}</span>` +
-    `</div>`
-  )).join('');
-
-  periodEl.textContent = `${audit.startDate || '-'} through ${audit.endDate || '-'}`;
-  const observedDays = Array.isArray(audit.observedDays) ? audit.observedDays.length : 0;
-  statusEl.textContent = `Audit ${audit.auditId || ''} completed. ${observedDays || 0} calendar days read. Writes performed: ${Number(audit.writesPerformed) || 0}.`;
-  statusEl.classList.remove('error');
-
-  const rows = Array.isArray(audit.rows) ? audit.rows.slice() : [];
-  const priority = { review: 0, add_to_calendar: 1, update_local: 1, create_dash_block: 2, update_dash_block: 2 };
-  rows.sort((left, right) => (
-    (priority[left.action] ?? 9) - (priority[right.action] ?? 9) ||
-    String(left.date || '').localeCompare(String(right.date || '')) ||
-    String(formatDashAuditTime(left)).localeCompare(String(formatDashAuditTime(right)))
-  ));
-  rowsEl.innerHTML = rows.length ? rows.map(row => {
-    const source = row.kind === 'dash_appointment'
-      ? [row.client, row.service].filter(Boolean).join(' · ')
-      : (row.sourceType === 'off_work' ? 'Off work' : 'Rose appointment');
-    return '<tr>' +
-      '<td>' + escapeHtml(row.date || '-') + '</td>' +
-      '<td>' + escapeHtml(formatDashAuditTime(row)) + '</td>' +
-      '<td>' + escapeHtml(row.staffName || row.staffId || '-') + '</td>' +
-      '<td>' + escapeHtml(source || '-') + '</td>' +
-      '<td class="dash-audit-action-' + escapeHtml(row.action || '') + '">' + escapeHtml(getDashAuditActionLabel(row.action)) + '</td>' +
-      '<td>' + escapeHtml(getDashAuditReasonLabel(row.reason)) + '</td>' +
-    '</tr>';
-  }).join('') : '<tr><td colspan="6" class="dash-audit-empty">No differences or actions were found.</td></tr>';
-}
-
-window.openDashAuditPreview = () => {
-  if (!DASH_AUDIT_PREVIEW_ENABLED || currentUserRole !== 'manager') return;
-  document.getElementById('dashAuditModal')?.classList.remove('hidden');
-  loadLatestDashAuditPreview();
-};
-
-window.closeDashAuditPreview = () => {
-  document.getElementById('dashAuditModal')?.classList.add('hidden');
-};
-
-window.loadLatestDashAuditPreview = async () => {
-  if (!DASH_AUDIT_PREVIEW_ENABLED || currentUserRole !== 'manager' || dashAuditPreviewRunning) return;
-  const statusEl = document.getElementById('dashAuditStatus');
-  if (statusEl) {
-    statusEl.textContent = 'Loading the latest read-only report...';
-    statusEl.classList.remove('error');
-  }
-  try {
-    const result = await managerGetLatestDashBookingAudit({});
-    renderDashAuditPreview(result.data?.audit || null);
-  } catch (error) {
-    if (statusEl) {
-      statusEl.textContent = 'The latest audit report could not be loaded.';
-      statusEl.classList.add('error');
-    }
-  }
-};
-
-window.runDashAuditPreview = async () => {
-  if (!DASH_AUDIT_PREVIEW_ENABLED || currentUserRole !== 'manager' || dashAuditPreviewRunning) return;
-  dashAuditPreviewRunning = true;
-  const runButton = document.getElementById('dashAuditRunBtn');
-  const statusEl = document.getElementById('dashAuditStatus');
-  if (runButton) {
-    runButton.disabled = true;
-    runButton.textContent = 'Reading Dash Booking...';
-  }
-  if (statusEl) {
-    statusEl.textContent = 'Reading today only from both calendars. Nothing will be changed.';
-    statusEl.classList.remove('error');
-  }
-  try {
-    const result = await managerRunDashBookingAudit({
-      startDate: toInputDate(new Date()),
-      horizonDays: 1
-    });
-    renderDashAuditPreview(result.data || null);
-    showToast('Read-only Dash audit completed. No appointments were changed.', 'success', 5000);
-  } catch (error) {
-    console.warn('Dash audit did not finish:', error);
-    if (statusEl) {
-      statusEl.textContent = error?.message || 'The read-only audit could not finish. Nothing was changed.';
-      statusEl.classList.add('error');
-    }
-    showToast('Dash audit did not finish. Nothing was changed.', 'error', 5000);
-  } finally {
-    dashAuditPreviewRunning = false;
-    if (runButton) {
-      runButton.disabled = false;
-      runButton.textContent = 'Run today-only audit';
-    }
-  }
-};
 
 function getHistoricalStaffList({ includeAnyone = true } = {}) {
   const list = allStaff.filter(s => includeAnyone || s.id !== ANYONE_ID);
@@ -7537,6 +7159,24 @@ function isOnlineBookingRequest(a) {
   return a?.type === 'online_booking_request' || (
     a?.source === 'online_booking' && ['request', 'confirmed', 'declined', 'restored_after_decline'].includes(a?.status)
   );
+}
+
+function findEquivalentWeeklyOffRule(candidate) {
+  const candidateStart = candidate.startDate || '0000-01-01';
+  const candidateEnd = candidate.endDate || '9999-12-31';
+  return weeklyOff.find(rule => {
+    if (rule.enabled === false) return false;
+    if (String(rule.staffId || '') !== String(candidate.staffId || '')) return false;
+    if (Number(rule.weekday) !== Number(candidate.weekday)) return false;
+    if ((rule.allDay === true) !== (candidate.allDay === true)) return false;
+    if (candidate.allDay !== true && (
+      Number(rule.start) !== Number(candidate.start) ||
+      Number(rule.end) !== Number(candidate.end)
+    )) return false;
+    const ruleStart = rule.startDate || '0000-01-01';
+    const ruleEnd = rule.endDate || '9999-12-31';
+    return ruleStart <= candidateEnd && candidateStart <= ruleEnd;
+  }) || null;
 }
 
 function isPendingOnlineBookingRequest(a) {
@@ -13663,6 +13303,8 @@ async function saveWeekOffWork() {
         weekStartDate
       };
 
+      if (findEquivalentWeeklyOffRule(weeklyData)) continue;
+
       const weeklyDoc = await addDoc(collection(db, 'WeeklyOff'), weeklyData);
       await writeActivityLogEntry({
         staffId,
@@ -14308,6 +13950,12 @@ window.saveOffWork = async () => {
       end: normalizedEnd,
       enabled: true
     };
+
+    if (findEquivalentWeeklyOffRule(weeklyData)) {
+      showToast("This weekly off already exists", "warning");
+      closeOffWork();
+      return;
+    }
 
     const weeklyDoc = await addDoc(collection(db, "WeeklyOff"), weeklyData);
     await writeActivityLogEntry({
@@ -15150,7 +14798,6 @@ try {
     currentUserRole = null;
     currentUserStaffId = null;
     currentUserEmail = '';
-    updateDashAuditPreviewVisibility();
     document.getElementById('loginScreen').classList.remove('hidden');
     document.getElementById('calendar-container').style.display = 'none';
     hideLoadingScreen();
@@ -15172,7 +14819,6 @@ try {
   currentUserRole = data.role;
 currentUserStaffId = data.staffId;
 currentUserEmail = String(user.email || '').trim().toLowerCase();
-updateDashAuditPreviewVisibility();
 
 if (!currentUserRole) {
   showToast("User role is missing. Please contact admin.", "error", 4000);

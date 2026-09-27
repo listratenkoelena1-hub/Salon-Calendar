@@ -25,6 +25,13 @@ const {
   createDashBrowserClient,
   launchDashBrowser
 } = require("./dash-browser");
+const {
+  applyClientIdentityPlan,
+  identityFromPrivateData,
+  planExternalClientIdentityInTransaction,
+  writeClientAppointmentRecords
+} = require("./client-history-store");
+const { dedupeWeeklyOffRules } = require("./weekly-off-dedupe-core");
 
 const ANYONE_ID = "anyone";
 const DASH_QUEUE_COLLECTION = "dashSyncQueue";
@@ -253,7 +260,7 @@ async function processDashQueue({ db, FieldValue, client, dryRun, limit = DEFAUL
     .orderBy("date", "asc")
     .limit(limit)
     .get();
-  const report = { scanned: snapshot.size, created: 0, adopted: 0, updated: 0, recreated: 0, deleted: 0, noop: 0, failed: 0, dryRun: 0 };
+  const report = { scanned: snapshot.size, created: 0, adopted: 0, updated: 0, recreated: 0, replaced: 0, deleted: 0, noop: 0, failed: 0, dryRun: 0 };
 
   for (const queueDoc of snapshot.docs) {
     const queue = queueDoc.data() || {};
@@ -322,6 +329,7 @@ async function processDashQueue({ db, FieldValue, client, dryRun, limit = DEFAUL
       if (action === "created") report.created += 1;
       else if (action === "adopted") report.adopted += 1;
       else if (action === "recreated") report.recreated += 1;
+      else if (action === "replaced") report.replaced += 1;
       else report.updated += 1;
       await finishQueueItem({
         db,
@@ -410,6 +418,19 @@ function makeWeeklyOccurrence(rule, dateKey) {
   };
 }
 
+function weeklyRuleFromSnapshot(docSnap) {
+  return {
+    id: docSnap.id,
+    ...docSnap.data(),
+    __createTime: typeof docSnap.createTime?.toMillis === "function"
+      ? docSnap.createTime.toMillis()
+      : 0,
+    __updateTime: typeof docSnap.updateTime?.toMillis === "function"
+      ? docSnap.updateTime.toMillis()
+      : 0
+  };
+}
+
 async function collectDashAuditState({
   db,
   startDate,
@@ -459,7 +480,11 @@ async function collectDashAuditState({
   const exceptions = new Set(offWorkDocs
     .filter(record => record.weeklyException === true && record.weeklyId)
     .map(record => `${record.weeklyId}__${record.date}`));
-  const weeklyRules = weeklySnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+  const weeklyDedupe = dedupeWeeklyOffRules(
+    weeklySnap.docs.map(weeklyRuleFromSnapshot),
+    { asOfDate: startDate }
+  );
+  const weeklyRules = weeklyDedupe.records;
   const days = Math.max(0, Math.round((Date.parse(`${endDate}T12:00:00Z`) - Date.parse(`${startDate}T12:00:00Z`)) / 86400000));
   for (let offset = 0; offset <= days; offset += 1) {
     const date = addDateKeyDays(startDate, offset);
@@ -487,7 +512,9 @@ async function collectDashAuditState({
     counts: {
       appointmentDocuments: appointmentSnap.size,
       offWorkDocuments: offWorkSnap.size,
-      weeklyRules: weeklySnap.size
+      weeklyRuleDocuments: weeklySnap.size,
+      weeklyRules: weeklyRules.length,
+      duplicateWeeklyRules: weeklyDedupe.plan.deletionCount
     }
   };
 }
@@ -631,7 +658,11 @@ async function enqueueDashReconciliation({
   const exceptions = new Set(offWorkDocs
     .filter(record => record.weeklyException === true && record.weeklyId)
     .map(record => `${record.weeklyId}__${record.date}`));
-  const weeklyRules = weeklySnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+  const weeklyDedupe = dedupeWeeklyOffRules(
+    weeklySnap.docs.map(weeklyRuleFromSnapshot),
+    { asOfDate: today }
+  );
+  const weeklyRules = weeklyDedupe.records;
   for (let offset = 0; offset <= horizonDays; offset += 1) {
     const dateKey = addDateKeyDays(today, offset);
     for (const rule of weeklyRules) {
@@ -685,14 +716,16 @@ async function enqueueDashReconciliation({
     endDate,
     appointments: appointmentSnap.size,
     offWork: offWorkSnap.size,
-    weeklyRules: weeklySnap.size,
+    weeklyRuleDocuments: weeklySnap.size,
+    weeklyRules: weeklyRules.length,
+    duplicateWeeklyRules: weeklyDedupe.plan.deletionCount,
     queued: jobs.length,
     cleanupQueued
   };
 }
 
 function getWeeklyOffOccurrencesForDate(records, date, staffId) {
-  return records
+  return dedupeWeeklyOffRules(records, { asOfDate: date }).records
     .filter(rule => rule.staffId === staffId && weeklyRuleActiveOnDate(rule, date))
     .map(rule => ({
       id: `weekly_${rule.id}_${date}`,
@@ -874,7 +907,11 @@ async function cancelDashAppointment({ db, FieldValue, Timestamp, item, staffRec
     const appointment = { id: existing.id, ...appointmentSnap.data() };
     const scheduleRef = db.collection(APPOINTMENT_SCHEDULE_COLLECTION)
       .doc(getScheduleId(appointment.date, appointment.staffId));
-    const scheduleSnap = await transaction.get(scheduleRef);
+    const privateRef = db.collection("appointmentPrivate").doc(existing.id);
+    const [scheduleSnap, privateSnap] = await Promise.all([
+      transaction.get(scheduleRef),
+      transaction.get(privateRef)
+    ]);
     const releasedSlots = scheduleSnap.exists
       ? releaseAppointmentFromSlots(scheduleSnap.data()?.slots, appointment, existing.id)
       : null;
@@ -899,7 +936,8 @@ async function cancelDashAppointment({ db, FieldValue, Timestamp, item, staffRec
         updatedAt: FieldValue.serverTimestamp()
       }, { merge: true });
     }
-    transaction.set(existing.ref, {
+    const updatedAppointment = {
+      ...appointment,
       canceled: true,
       cancelComment: detail.cancellationReason
         ? `Dash Booking: ${detail.cancellationReason}`
@@ -911,7 +949,20 @@ async function cancelDashAppointment({ db, FieldValue, Timestamp, item, staffRec
       updatedAt: FieldValue.serverTimestamp(),
       lastActionAt: FieldValue.serverTimestamp(),
       dashObservedAt: FieldValue.serverTimestamp()
-    }, { merge: true });
+    };
+    transaction.set(existing.ref, updatedAppointment, { merge: true });
+    const clientIdentity = privateSnap.exists
+      ? identityFromPrivateData(privateSnap.data() || {})
+      : null;
+    if (clientIdentity) {
+      writeClientAppointmentRecords(transaction, {
+        db,
+        FieldValue,
+        appointmentId: existing.id,
+        appointment: updatedAppointment,
+        identity: clientIdentity
+      });
+    }
     transaction.set(db.collection(DASH_RECEIPT_COLLECTION).doc(item.notificationKey), {
       notificationKey: item.notificationKey,
       dashBookingId: detail.dashBookingId,
@@ -985,6 +1036,7 @@ async function rescheduleDashAppointment({ db, FieldValue, Timestamp, item, staf
     const appointmentSnap = await transaction.get(existing.ref);
     if (!appointmentSnap.exists) return { status: "duplicate", appointmentId: existing.id };
     const appointment = { id: existing.id, ...appointmentSnap.data() };
+    const privateSnap = await transaction.get(db.collection("appointmentPrivate").doc(existing.id));
     const detailWithStaff = { ...detail, staffId: localStaff.id };
     const [appointmentsSnap, offWorkSnap, weeklyOffSnap] = await Promise.all([
       transaction.get(db.collection("appointments").where("date", "==", detail.date)),
@@ -993,7 +1045,7 @@ async function rescheduleDashAppointment({ db, FieldValue, Timestamp, item, staf
     ]);
     const appointments = appointmentsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
     const manualOffWork = offWorkSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-    const weeklyOffRecords = weeklyOffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+    const weeklyOffRecords = weeklyOffSnap.docs.map(weeklyRuleFromSnapshot);
     const weeklyExceptions = new Set(manualOffWork
       .filter(record => record.weeklyException === true && record.weeklyId)
       .map(record => record.weeklyId));
@@ -1122,7 +1174,7 @@ async function rescheduleDashAppointment({ db, FieldValue, Timestamp, item, staf
       eventType: "dash_appointment_rescheduled",
       previous
     });
-    transaction.set(existing.ref, {
+    const persistedAppointment = {
       ...updatedAppointment,
       canceled: false,
       cancelComment: null,
@@ -1131,7 +1183,20 @@ async function rescheduleDashAppointment({ db, FieldValue, Timestamp, item, staf
       updatedAt: FieldValue.serverTimestamp(),
       lastActionAt: FieldValue.serverTimestamp(),
       dashObservedAt: FieldValue.serverTimestamp()
-    }, { merge: true });
+    };
+    transaction.set(existing.ref, persistedAppointment, { merge: true });
+    const clientIdentity = privateSnap.exists
+      ? identityFromPrivateData(privateSnap.data() || {})
+      : null;
+    if (clientIdentity) {
+      writeClientAppointmentRecords(transaction, {
+        db,
+        FieldValue,
+        appointmentId: existing.id,
+        appointment: persistedAppointment,
+        identity: clientIdentity
+      });
+    }
     transaction.set(db.collection(DASH_RECEIPT_COLLECTION).doc(item.notificationKey), {
       notificationKey: item.notificationKey,
       dashBookingId: detail.dashBookingId,
@@ -1238,7 +1303,7 @@ async function importDashAppointment({
     ]);
     const appointments = appointmentsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
     const manualOffWork = offWorkSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-    const weeklyOffRecords = weeklyOffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+    const weeklyOffRecords = weeklyOffSnap.docs.map(weeklyRuleFromSnapshot);
     const weeklyExceptions = new Set(manualOffWork
       .filter(record => record.weeklyException === true && record.weeklyId)
       .map(record => record.weeklyId));
@@ -1293,10 +1358,20 @@ async function importDashAppointment({
       return { status: "conflict", appointmentId, reason: conflict.reason };
     }
 
-    const dashAppointment = buildDashAppointment(detailWithStaff, localStaff);
     const scheduleRef = db.collection(APPOINTMENT_SCHEDULE_COLLECTION)
       .doc(getScheduleId(detail.date, localStaff.id));
     const scheduleSnap = await transaction.get(scheduleRef);
+    const clientIdentity = detail.dashClientId
+      ? await planExternalClientIdentityInTransaction({
+          transaction,
+          db,
+          FieldValue,
+          provider: "dash_booking",
+          externalId: detail.dashClientId,
+          clientName: detail.client
+        })
+      : null;
+    const dashAppointment = buildDashAppointment(detailWithStaff, localStaff);
     const slots = scheduleSnap.exists
       ? cloneSlots(scheduleSnap.data()?.slots)
       : buildScheduleSlots(appointments, { date: detail.date, staffId: localStaff.id, anyoneId: ANYONE_ID });
@@ -1349,6 +1424,16 @@ async function importDashAppointment({
       dashObservedAt: FieldValue.serverTimestamp(),
       lastActionAt: FieldValue.serverTimestamp()
     });
+    if (clientIdentity) {
+      applyClientIdentityPlan(transaction, clientIdentity, FieldValue);
+      writeClientAppointmentRecords(transaction, {
+        db,
+        FieldValue,
+        appointmentId,
+        appointment: dashAppointment,
+        identity: clientIdentity
+      });
+    }
     transaction.set(receiptRef, {
       dashBookingId: detail.dashBookingId,
       notificationKey: item.notificationKey,
@@ -1531,7 +1616,7 @@ async function runDashSyncCycle({
           dryRun: true,
           limit: config.queueLimit
         })
-      : { scanned: 0, created: 0, adopted: 0, updated: 0, recreated: 0, deleted: 0, noop: 0, failed: 0, dryRun: 0 };
+      : { scanned: 0, created: 0, adopted: 0, updated: 0, recreated: 0, replaced: 0, deleted: 0, noop: 0, failed: 0, dryRun: 0 };
     const report = {
       status: "completed",
       queue,

@@ -22,11 +22,8 @@ test("registers disabled-by-default Dash triggers and protected scheduled creden
   assert.match(functionsSource, /if \(!config\.enabled\) return \{ skipped: true, reason: "disabled" \};/);
 });
 
-test("exposes a manager-only read-only Dash audit without an apply callable", () => {
-  assert.match(functionsSource, /exports\.managerRunDashBookingAudit = onCall/);
-  assert.match(functionsSource, /exports\.managerGetLatestDashBookingAudit = onCall/);
-  assert.match(functionsSource, /const actor = await requireManagerActor\(request\)/);
-  assert.match(functionsSource, /runDashAuditWithBrowser\(\{/);
-  assert.match(functionsSource, /No appointments or Block Time were changed/);
+test("does not expose the retired in-calendar Dash audit callables", () => {
+  assert.doesNotMatch(functionsSource, /exports\.managerRunDashBookingAudit/);
+  assert.doesNotMatch(functionsSource, /exports\.managerGetLatestDashBookingAudit/);
   assert.doesNotMatch(functionsSource, /exports\.managerApplyDashBookingAudit/);
 });

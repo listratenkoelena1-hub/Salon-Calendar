@@ -183,6 +183,53 @@ function timeToMinutes(value) {
   return hours * 60 + minutes;
 }
 
+function getCanonicalBlockInterval(block) {
+  if (!block || !isIsoDate(block.date)) return null;
+  const hasStartMinutes = block.startMinutes !== null && block.startMinutes !== undefined &&
+    Number.isInteger(Number(block.startMinutes));
+  const hasDurationMinutes = block.durationMinutes !== null && block.durationMinutes !== undefined &&
+    Number.isInteger(Number(block.durationMinutes));
+  const hasEndMinutes = block.endMinutes !== null && block.endMinutes !== undefined &&
+    Number.isInteger(Number(block.endMinutes));
+  const startMinutes = hasStartMinutes
+    ? Number(block.startMinutes)
+    : timeToMinutes(block.start);
+  const explicitDuration = Number(block.durationMinutes);
+  const endMinutes = hasEndMinutes
+    ? Number(block.endMinutes)
+    : timeToMinutes(block.end);
+  const durationMinutes = hasDurationMinutes && explicitDuration > 0
+    ? explicitDuration
+    : Number.isInteger(endMinutes) && Number.isInteger(startMinutes)
+      ? endMinutes - startMinutes
+      : null;
+  if (
+    !Number.isInteger(startMinutes) || !Number.isInteger(durationMinutes) ||
+    durationMinutes < 1 || startMinutes + durationMinutes > 24 * 60
+  ) return null;
+  const owner = String(block.dashStaffId || "").trim() ||
+    normalizeStaffName(block.dashStaffName || block.staffName);
+  if (!owner) return null;
+  return {
+    date: String(block.date),
+    owner,
+    startMinutes,
+    durationMinutes,
+    endMinutes: startMinutes + durationMinutes
+  };
+}
+
+function buildCanonicalBlockKey(block) {
+  const interval = getCanonicalBlockInterval(block);
+  if (!interval) return "";
+  return [
+    interval.date,
+    interval.owner,
+    interval.startMinutes,
+    interval.durationMinutes
+  ].join("|");
+}
+
 function minutesToSlot(minutes) {
   const value = Number(minutes);
   if (!Number.isInteger(value)) return null;
@@ -221,6 +268,7 @@ function buildBlockFingerprint(block) {
 }
 
 function makeBlockResult({ sourceType, sourceId, date, startMinutes, endMinutes, mapping }) {
+  const durationMinutes = Number(endMinutes) - Number(startMinutes);
   const block = {
     sourceType,
     sourceId: String(sourceId || ""),
@@ -229,9 +277,19 @@ function makeBlockResult({ sourceType, sourceId, date, startMinutes, endMinutes,
     end: minutesToTime(endMinutes),
     dashStaffId: mapping.dashStaffId,
     dashStaffName: mapping.dashName,
-    description: buildBlockDescription(sourceType, sourceId)
+    description: buildBlockDescription(sourceType, sourceId),
+    startMinutes,
+    endMinutes,
+    durationMinutes
   };
-  return { ok: true, block: { ...block, fingerprint: buildBlockFingerprint(block) } };
+  return {
+    ok: true,
+    block: {
+      ...block,
+      canonicalKey: buildCanonicalBlockKey(block),
+      fingerprint: buildBlockFingerprint(block)
+    }
+  };
 }
 
 function isPendingInternalOnlineRequest(appointment) {
@@ -382,7 +440,7 @@ function parseDashDurationMinutes(value) {
   return total > 0 ? total : null;
 }
 
-function parseDashAppointmentDetail({ text, url = "", clientHint = "" } = {}) {
+function parseDashAppointmentDetail({ text, url = "", clientHint = "", clientUrl = "" } = {}) {
   const lines = String(text || "")
     .split(/\r?\n/)
     .map(line => line.replace(/\s+/g, " ").trim())
@@ -409,6 +467,7 @@ function parseDashAppointmentDetail({ text, url = "", clientHint = "" } = {}) {
   const serviceLine = timeIndex >= 0 ? String(lines[timeIndex + 1] || "") : "";
   const service = serviceLine.replace(/\s+-\s+\$\s*[\d,.]+.*$/, "").trim();
   const aid = String(url || "").match(/[?&]aid=([^&#]+)/)?.[1] || "";
+  const dashClientId = String(clientUrl || "").match(/[?&]cid=([^&#]+)/)?.[1] || "";
   const start = startMinutes === null ? null : minutesToSlot(startMinutes);
   const duration = durationMinutes && durationMinutes % SLOT_MINUTES === 0
     ? durationMinutes / SLOT_MINUTES
@@ -421,6 +480,7 @@ function parseDashAppointmentDetail({ text, url = "", clientHint = "" } = {}) {
 
   return {
     dashBookingId: decodeURIComponent(aid),
+    dashClientId: dashClientId ? decodeURIComponent(dashClientId) : "",
     client,
     date,
     start,
@@ -475,8 +535,9 @@ function buildDashAppointment(detail, localStaff) {
     dashOriginBookingId: detail.dashBookingId,
     dashStaffName: detail.staffName,
     selectedServices: [detail.service],
-    privacySchemaVersion: null,
+    privacySchemaVersion: detail.dashClientId ? 1 : null,
     hasPrivateContact: false,
+    hasClientHistory: Boolean(detail.dashClientId),
     lastEditedBy: DASH_ACTOR_LABEL,
     lastAction: "dash_appointment_added",
     lastMutationMode: "dash_import",
@@ -574,6 +635,7 @@ module.exports = {
   SLOT_MINUTES,
   appointmentToDashBlock,
   buildBlockDescription,
+  buildCanonicalBlockKey,
   buildBlockFingerprint,
   buildDashRequestAppointment,
   buildDashAppointment,
@@ -582,6 +644,7 @@ module.exports = {
   clipMinutesToDashHours,
   findDashRequestConflict,
   getDashRequestDocumentId,
+  getCanonicalBlockInterval,
   getDirectoryEntryByDashName,
   isDashOriginAppointment,
   minutesToSlot,

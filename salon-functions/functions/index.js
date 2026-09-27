@@ -53,6 +53,7 @@ const {
   applyClientIdentityPlan,
   deleteClientAppointmentRecords,
   getCachedProfileSummary,
+  identityFromPrivateData,
   invalidateClientProfileSummary,
   loadClientHistoryInTransaction,
   planClientIdentityInTransaction,
@@ -75,7 +76,6 @@ const {
   getDashPollingWindow,
   loadDashConfig,
   makeWeeklyOccurrence,
-  runDashAuditWithBrowser,
   weeklyRuleActiveOnDate,
   runDashSyncCycle
 } = require("./dash-sync-runner");
@@ -1576,7 +1576,7 @@ exports.mutateAppointment = onCall(
         );
       }
 
-      const privateAppointmentSnap = before?.hasPrivateContact === true
+      const privateAppointmentSnap = before?.hasPrivateContact === true || before?.hasClientHistory === true
         ? await tx.get(privateAppointmentRef)
         : null;
       const beforePrivate = privateAppointmentSnap?.exists
@@ -1710,8 +1710,11 @@ exports.mutateAppointment = onCall(
       const legacyOnlineActivationPhone = isLegacyOnlineActivation
         ? (actor.role === "manager" ? managerSubmittedPhone : String(before?.phone || ""))
         : "";
+      const beforeHasPrivatePhone = Boolean(normalizePhone(
+        beforePrivate?.phoneDisplay || beforePrivate?.phoneNormalized || ""
+      ));
       const managerClearedPrivateContact = Boolean(
-        after && actor.role === "manager" && beforePrivate && !managerSubmittedPhone
+        after && actor.role === "manager" && beforeHasPrivatePhone && !managerSubmittedPhone
       );
       if (after && actor.role === "manager" && managerSubmittedPhone && !normalizedManagerPhone) {
         throw new HttpsError("invalid-argument", "Please enter a valid phone number.");
@@ -1726,7 +1729,7 @@ exports.mutateAppointment = onCall(
           normalizePhone(legacyOnlineActivationPhone)
         )
       );
-      const shouldKeepPrivateContact = Boolean(beforePrivate && !managerClearedPrivateContact);
+      const shouldKeepPrivateContact = Boolean(beforeHasPrivatePhone && !managerClearedPrivateContact);
       const effectivePrivatePhone = actor.role === "manager"
         ? managerSubmittedPhone
         : (beforePrivate?.phoneDisplay || beforePrivate?.phoneNormalized || legacyOnlineActivationPhone);
@@ -1748,13 +1751,23 @@ exports.mutateAppointment = onCall(
         after = stripPrivateAppointmentFields({
           ...after,
           privacySchemaVersion: CLIENT_SCHEMA_VERSION,
-          hasPrivateContact: true
+          hasPrivateContact: true,
+          hasClientHistory: Boolean(clientIdentity.clientProfileId)
+        });
+      } else if (after && beforePrivate?.externalProvider && beforePrivate?.clientProfileId) {
+        clientIdentity = identityFromPrivateData(beforePrivate);
+        after = stripPrivateAppointmentFields({
+          ...after,
+          privacySchemaVersion: CLIENT_SCHEMA_VERSION,
+          hasPrivateContact: false,
+          hasClientHistory: Boolean(clientIdentity?.clientProfileId)
         });
       } else if (after && (mode === "create" || isPrivateSchemaAppointment || beforePrivate)) {
         after = stripPrivateAppointmentFields({
           ...after,
           privacySchemaVersion: CLIENT_SCHEMA_VERSION,
-          hasPrivateContact: false
+          hasPrivateContact: false,
+          hasClientHistory: false
         });
       }
 
@@ -1890,6 +1903,9 @@ exports.mutateAppointment = onCall(
         revision: mode === "delete" ? currentRevision : currentRevision + 1,
         lastAction,
         hasPrivateContact: mode !== "delete" && Boolean(clientIdentity)
+          ? Boolean(normalizePhone(clientIdentity.phoneDisplay || clientIdentity.phoneNormalized || ""))
+          : false,
+        hasClientHistory: mode !== "delete" && Boolean(clientIdentity?.clientProfileId)
       };
     });
   }
@@ -1920,7 +1936,9 @@ exports.managerGetAppointmentContact = onCall(
       ok: true,
       appointmentId,
       phone: String(privateData.phoneDisplay || privateData.phoneNormalized || legacyData.phone || ""),
-      hasPrivateContact: privateSnapshot.exists,
+      hasPrivateContact: Boolean(normalizePhone(
+        privateData.phoneDisplay || privateData.phoneNormalized || ""
+      )),
       hasClientHistory: Boolean(privateData.clientProfileId)
     };
   }
@@ -4197,67 +4215,6 @@ exports.getOnlineBookingAvailability = onCall(
       weeklyOffRecords,
       clientSummary: clientContext?.summary || null
     });
-  }
-);
-
-exports.managerRunDashBookingAudit = onCall(
-  {
-    region: "us-central1",
-    memory: "1GiB",
-    timeoutSeconds: 1800,
-    maxInstances: 1,
-    concurrency: 1,
-    secrets: [DASH_BOOKING_EMAIL, DASH_BOOKING_PASSWORD]
-  },
-  async request => {
-    const actor = await requireManagerActor(request);
-    const input = request.data || {};
-    const today = dateKeyInTimeZone(new Date(), SALON_TIME_ZONE);
-    const startDate = input.startDate ? assertDate(input.startDate) : today;
-    if (startDate < today) {
-      throw new HttpsError("invalid-argument", "Dash audit cannot begin in the past.");
-    }
-    // Keep the experimental audit deliberately limited to today while the
-    // browser bridge is being verified. Ignore older preview pages that still
-    // submit horizonDays: 30.
-    const requestedHorizon = 1;
-    try {
-      return await runDashAuditWithBrowser({
-        db,
-        FieldValue,
-        email: String(DASH_BOOKING_EMAIL.value() || "").trim(),
-        password: String(DASH_BOOKING_PASSWORD.value() || ""),
-        startDate,
-        horizonDays: requestedHorizon,
-        requestedBy: actor.uid
-      });
-    } catch (error) {
-      console.error("Read-only Dash Booking audit failed", {
-        code: String(error?.code || ""),
-        message: String(error?.message || error || "Unknown error").slice(0, 300)
-      });
-      throw new HttpsError(
-        "internal",
-        "The read-only Dash Booking audit could not finish. No appointments or Block Time were changed."
-      );
-    }
-  }
-);
-
-exports.managerGetLatestDashBookingAudit = onCall(
-  {
-    region: "us-central1",
-    maxInstances: 2
-  },
-  async request => {
-    await requireManagerActor(request);
-    const snapshot = await db.collection("dashSyncAudits")
-      .orderBy("completedAt", "desc")
-      .limit(1)
-      .get();
-    if (snapshot.empty) return { audit: null };
-    const document = snapshot.docs[0];
-    return { audit: { auditId: document.id, ...document.data() } };
   }
 );
 

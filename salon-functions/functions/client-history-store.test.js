@@ -13,7 +13,10 @@ const {
   buildAppointmentPrivateData,
   buildClientHistoryData,
   getCachedProfileSummary,
+  hashExternalIdentity,
+  identityFromPrivateData,
   planClientIdentityInTransaction,
+  planExternalClientIdentityInTransaction,
   readPhoneClient,
   writeClientAppointmentRecords
 } = require("./client-history-store");
@@ -212,6 +215,72 @@ test("does not create identity or history without a valid phone", async () => {
     clientName: "Barbara"
   });
   assert.equal(plan, null);
+});
+
+test("creates one deterministic private client with a separate person branch from an opaque Dash cid", async () => {
+  const db = new FakeDb();
+  const transaction = new FakeTransaction();
+  const plan = await planExternalClientIdentityInTransaction({
+    transaction,
+    db,
+    FieldValue,
+    provider: "dash_booking",
+    externalId: "opaque-dash-cid-123",
+    clientName: "Christine"
+  });
+
+  assert.equal(plan.identityType, "external");
+  assert.equal(plan.externalProvider, "dash_booking");
+  assert.match(plan.clientId, /^external_[a-f0-9]{40}$/);
+  assert.match(plan.clientProfileId, /^random-/);
+  assert.notEqual(plan.clientProfileId, plan.clientId);
+  assert.equal(plan.externalIdentityHash, hashExternalIdentity("dash_booking", "opaque-dash-cid-123"));
+  assert.equal(JSON.stringify(plan).includes("opaque-dash-cid-123"), false);
+
+  applyClientIdentityPlan(transaction, plan, FieldValue);
+  assert.equal(transaction.writes.filter(write => write.type === "set").length, 2);
+  assert.equal(transaction.writes.some(write => write.ref.collectionName === CLIENT_PHONE_INDEX_COLLECTION), false);
+});
+
+test("keeps separate name branches when one opaque Dash cid books for another person", async () => {
+  const externalHash = hashExternalIdentity("dash_booking", "shared-dash-cid");
+  const clientId = `external_${externalHash.slice(0, 40)}`;
+  const db = new FakeDb();
+  const transaction = new FakeTransaction({
+    [`${CLIENT_COLLECTION}/${clientId}`]: { profileIds: ["naomi"] },
+    [`${CLIENT_PROFILE_COLLECTION}/naomi`]: {
+      clientId,
+      displayName: "Naomi",
+      nameNormalized: "naomi",
+      aliases: []
+    }
+  });
+  const plan = await planExternalClientIdentityInTransaction({
+    transaction,
+    db,
+    FieldValue,
+    provider: "dash_booking",
+    externalId: "shared-dash-cid",
+    clientName: "Deborah"
+  });
+
+  assert.equal(plan.clientId, clientId);
+  assert.equal(plan.createdClient, false);
+  assert.equal(plan.createdProfile, true);
+  assert.notEqual(plan.clientProfileId, "naomi");
+});
+
+test("reconstructs an external history identity without pretending it has a phone", () => {
+  const identity = identityFromPrivateData({
+    clientId: "external-client",
+    clientProfileId: "external-profile",
+    identityType: "external",
+    externalProvider: "dash_booking",
+    externalIdentityHash: "opaque-hash"
+  });
+  assert.equal(identity.clientProfileId, "external-profile");
+  assert.equal(identity.phoneDisplay, "");
+  assert.equal(identity.externalProvider, "dash_booking");
 });
 
 test("reads one exact phone client without exposing a prefix or scanning clients", async () => {

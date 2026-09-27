@@ -1,6 +1,7 @@
 "use strict";
 
 const {
+  buildCanonicalBlockKey,
   normalizeStaffName,
   rangesOverlap,
   stableHash,
@@ -77,10 +78,36 @@ function sameBlockOwner(left, right) {
 }
 
 function exactBlockCoverage(desired, observed) {
-  return String(desired?.date || "") === String(observed?.date || "") &&
-    sameBlockOwner(desired, observed) &&
-    String(desired?.start || "") === String(observed?.start || "") &&
-    String(desired?.end || "") === String(observed?.end || "");
+  const desiredKey = buildCanonicalBlockKey(desired);
+  const observedKey = buildCanonicalBlockKey(observed);
+  return Boolean(desiredKey && observedKey && desiredKey === observedKey);
+}
+
+function dedupeDesiredBlocks(desiredBlocks) {
+  const byCanonicalInterval = new Map();
+  const unkeyed = [];
+  for (const desired of Array.isArray(desiredBlocks) ? desiredBlocks : []) {
+    const canonicalKey = buildCanonicalBlockKey(desired);
+    if (!canonicalKey) {
+      unkeyed.push(desired);
+      continue;
+    }
+    const existing = byCanonicalInterval.get(canonicalKey);
+    if (!existing) {
+      byCanonicalInterval.set(canonicalKey, {
+        ...desired,
+        canonicalKey,
+        duplicateSources: [{ sourceType: desired.sourceType, sourceId: desired.sourceId }]
+      });
+      continue;
+    }
+    existing.duplicateSources.push({ sourceType: desired.sourceType, sourceId: desired.sourceId });
+  }
+  return {
+    blocks: [...byCanonicalInterval.values(), ...unkeyed],
+    duplicateCount: [...byCanonicalInterval.values()]
+      .reduce((total, block) => total + Math.max(0, block.duplicateSources.length - 1), 0)
+  };
 }
 
 function blocksOverlap(desired, observed) {
@@ -123,8 +150,10 @@ function buildSummary(rows) {
     linkLocal: 0,
     createDashBlocks: 0,
     updateDashBlocks: 0,
+    replaceManualBlocks: 0,
     manualBlocksFound: 0,
-    needsReview: 0
+    needsReview: 0,
+    duplicateRoseBlocks: 0
   };
   for (const row of rows) {
     if (row.kind === "dash_appointment") summary.dashAppointments += 1;
@@ -135,6 +164,7 @@ function buildSummary(rows) {
     else if (row.action === "link_local") summary.linkLocal += 1;
     else if (row.action === "create_dash_block") summary.createDashBlocks += 1;
     else if (row.action === "update_dash_block") summary.updateDashBlocks += 1;
+    else if (row.action === "replace_manual_block") summary.replaceManualBlocks += 1;
     else if (row.action === "covered_by_manual_block") summary.manualBlocksFound += 1;
     else if (row.action === "review") summary.needsReview += 1;
   }
@@ -151,6 +181,7 @@ function buildDashAuditPlan({
 } = {}) {
   const rows = [];
   const matchedLocalIds = new Set();
+  const dedupedDesired = dedupeDesiredBlocks(desiredBlocks);
 
   for (const dash of dashAppointments) {
     const base = {
@@ -208,7 +239,7 @@ function buildDashAuditPlan({
     rows.push({ ...base, action: "add_to_calendar", reason: "missing_in_rose" });
   }
 
-  for (const desired of desiredBlocks) {
+  for (const desired of dedupedDesired.blocks) {
     if (desired.sourceType === "appointment" && matchedLocalIds.has(desired.sourceId)) continue;
     const base = {
       kind: "rose_block",
@@ -245,14 +276,37 @@ function buildDashAuditPlan({
       continue;
     }
     const appointmentConflict = dashAppointments.find(appointment => desiredBlockOverlapsDashAppointment(desired, appointment));
-    const blockConflict = dashBlocks.find(block => blocksOverlap(desired, block));
-    if (appointmentConflict || blockConflict) {
+    if (appointmentConflict) {
       rows.push({
         ...base,
         action: "review",
-        reason: appointmentConflict ? "dash_appointment_overlap" : "dash_block_partial_overlap",
+        reason: "dash_appointment_overlap",
         dashBookingId: appointmentConflict?.dashBookingId || "",
-        dashBlockId: blockConflict?.dashBlockId || ""
+      });
+      continue;
+    }
+    const integrationConflict = dashBlocks.find(block => (
+      isIntegrationBlock(block) && blocksOverlap(desired, block)
+    ));
+    if (integrationConflict) {
+      rows.push({
+        ...base,
+        action: "review",
+        reason: "integration_block_overlap",
+        dashBlockId: integrationConflict.dashBlockId || ""
+      });
+      continue;
+    }
+    const manualConflicts = dashBlocks.filter(block => (
+      !isIntegrationBlock(block) && blocksOverlap(desired, block)
+    ));
+    if (manualConflicts.length) {
+      rows.push({
+        ...base,
+        action: "replace_manual_block",
+        reason: "manual_partial_overlap_replace",
+        dashBlockId: manualConflicts[0].dashBlockId || "",
+        dashBlockIds: manualConflicts.map(block => block.dashBlockId || "").filter(Boolean)
       });
       continue;
     }
@@ -262,8 +316,9 @@ function buildDashAuditPlan({
   const summary = buildSummary(rows);
   summary.roseAppointments = localAppointments.filter(isActiveLocalAppointment).length;
   summary.dashBlocks = dashBlocks.length;
+  summary.duplicateRoseBlocks = dedupedDesired.duplicateCount;
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     mode: "audit_only",
     startDate: String(startDate || ""),
     endDate: String(endDate || ""),
@@ -276,6 +331,7 @@ function buildDashAuditPlan({
 module.exports = {
   blockSlotRange,
   buildDashAuditPlan,
+  dedupeDesiredBlocks,
   exactBlockCoverage,
   isIntegrationBlock,
   normalizeClient,

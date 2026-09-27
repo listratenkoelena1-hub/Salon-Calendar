@@ -6,7 +6,8 @@ const {
   minutesToTime,
   parseDashAppointmentDetail,
   parseDashNotification,
-  stableHash
+  stableHash,
+  timeToMinutes
 } = require("./dash-sync-core");
 
 const DASH_BASE_URL = "https://www.partnersdash.com";
@@ -501,13 +502,8 @@ async function openExistingBlockByDescription(page, block) {
   return null;
 }
 
-async function createBlock(page, block, { dryRun = false } = {}) {
+async function createBlockDirect(page, block) {
   const createUrl = buildCreateBlockUrl(block);
-  if (dryRun) return { dryRun: true, action: "create", createUrl, block };
-  const existing = await openExistingBlockByDescription(page, block);
-  if (existing) {
-    return { dryRun: false, action: "adopted", ...existing };
-  }
   await page.goto(createUrl, { waitUntil: "domcontentloaded", timeout: DEFAULT_TIMEOUT_MS });
   await waitForBlockForm(page, "New Block Time");
   await assertSelectedDashStaff(page, block);
@@ -526,6 +522,60 @@ async function createBlock(page, block, { dryRun = false } = {}) {
   return { dryRun: false, action: "created", ...created };
 }
 
+async function createBlock(page, block, { dryRun = false } = {}) {
+  const createUrl = buildCreateBlockUrl(block);
+  if (dryRun) return { dryRun: true, action: "create", createUrl, block };
+  const existing = await openExistingBlockByDescription(page, block);
+  if (existing) return { dryRun: false, action: "adopted", ...existing };
+
+  const conflicts = await findDashCalendarConflicts(page, block);
+  if (conflicts.appointments.length) {
+    const error = new Error("Dash already has an appointment in the requested Block Time range.");
+    error.code = "DASH_APPOINTMENT_OVERLAP";
+    throw error;
+  }
+  if (conflicts.integrationBlocks.length) {
+    const error = new Error("Another Rose Calendar block overlaps the requested Block Time range.");
+    error.code = "DASH_INTEGRATION_BLOCK_OVERLAP";
+    throw error;
+  }
+  if (!conflicts.manualBlocks.length) return createBlockDirect(page, block);
+
+  // An exact manual block is converted in place to an integration-owned block.
+  // A partial manual block is removed before the exact calendar interval is
+  // created. If creation fails, restore every removed block from the captured
+  // form values before surfacing the error.
+  if (
+    conflicts.manualBlocks.length === 1 &&
+    conflicts.manualBlocks[0].start === block.start &&
+    conflicts.manualBlocks[0].end === block.end
+  ) {
+    const updated = await updateBlock(page, conflicts.manualBlocks[0], block, { dryRun: false });
+    return { ...updated, action: "adopted" };
+  }
+
+  for (const manual of conflicts.manualBlocks) {
+    await deleteBlock(page, manual, { dryRun: false });
+  }
+  try {
+    const created = await createBlockDirect(page, block);
+    return { ...created, action: "replaced" };
+  } catch (error) {
+    for (const manual of conflicts.manualBlocks) {
+      try {
+        await createBlockDirect(page, {
+          ...manual,
+          description: manual.description || "Restored Block Time"
+        });
+      } catch (_restoreError) {
+        // The original error is retained; the sync issue document will make
+        // this failed replacement visible for manual recovery.
+      }
+    }
+    throw error;
+  }
+}
+
 async function updateBlock(page, link, desired, { dryRun = false } = {}) {
   const existing = {
     ...link,
@@ -540,7 +590,9 @@ async function updateBlock(page, link, desired, { dryRun = false } = {}) {
     return { ...created, action: "recreated" };
   }
 
-  const located = dryRun ? null : await openExistingBlockByDescription(page, existing);
+  const located = dryRun || (existing.editUrl && existing.dashBlockId)
+    ? null
+    : await openExistingBlockByDescription(page, existing);
   if (!dryRun && !located) {
     return createBlock(page, desired, { dryRun: false });
   }
@@ -566,13 +618,18 @@ async function updateBlock(page, link, desired, { dryRun = false } = {}) {
 }
 
 async function deleteBlock(page, link, { dryRun = false } = {}) {
-  const located = dryRun ? null : await openExistingBlockByDescription(page, link);
-  if (!dryRun && !located) return { dryRun: false, action: "missing" };
+  const located = dryRun || (link.editUrl && link.dashBlockId)
+    ? null
+    : await openExistingBlockByDescription(page, link);
+  if (!dryRun && !located && !(link.editUrl && link.dashBlockId)) {
+    return { dryRun: false, action: "missing" };
+  }
   const effectiveLink = located ? { ...link, ...located } : link;
   const editUrl = effectiveLink.editUrl || buildEditBlockUrl(effectiveLink);
   if (dryRun) return { dryRun: true, action: "delete", editUrl };
   await page.goto(editUrl, { waitUntil: "domcontentloaded", timeout: DEFAULT_TIMEOUT_MS });
   await waitForBlockForm(page, "Edit Block Time");
+  if (effectiveLink.dashStaffName) await assertSelectedDashStaff(page, effectiveLink);
 
   let nativeDialogHandled = false;
   page.once("dialog", async dialog => {
@@ -691,11 +748,15 @@ async function parseDashAppointmentPage(page) {
     text: String(document.body?.innerText || ""),
     clientHint: String(
       document.querySelector('a[href*="/clients/details"]')?.textContent || ""
-    ).replace(/\s+/g, " ").trim()
+    ).replace(/\s+/g, " ").trim(),
+    clientUrl: String(
+      document.querySelector('a[href*="/clients/details"]')?.getAttribute("href") || ""
+    ).trim()
   }));
   return parseDashAppointmentDetail({
     text: visible.text,
     clientHint: visible.clientHint,
+    clientUrl: visible.clientUrl,
     url: page.url()
   });
 }
@@ -813,6 +874,78 @@ async function collectDashCalendarCards(page, date) {
   }, date);
 }
 
+function classifyDashCalendarConflicts(cards, block) {
+  const startMinutes = timeToMinutes(block?.start);
+  const endMinutes = timeToMinutes(block?.end);
+  const owner = normalizeVisibleLabel(block?.dashStaffName);
+  const result = { appointments: [], integrationBlocks: [], manualBlocks: [] };
+  if (!Number.isInteger(startMinutes) || !Number.isInteger(endMinutes) || endMinutes <= startMinutes || !owner) {
+    return result;
+  }
+  for (const card of Array.isArray(cards) ? cards : []) {
+    if (normalizeVisibleLabel(card.dashStaffName) !== owner) continue;
+    if (!Number.isInteger(card.startMinutes) || !Number.isInteger(card.endMinutes)) continue;
+    if (!(startMinutes < card.endMinutes && card.startMinutes < endMinutes)) continue;
+    if (!card.isBlock) {
+      result.appointments.push(card);
+    } else if (/^Rose Calendar\s*\|\s*(?:appt|off):/i.test(String(card.description || "").trim())) {
+      result.integrationBlocks.push(card);
+    } else {
+      result.manualBlocks.push(card);
+    }
+  }
+  return result;
+}
+
+async function openDashBlockCard(page, card) {
+  await navigateDashPage(page, buildAppointmentsDateUrl(card.date));
+  await waitForDashCalendar(page);
+  const opened = await page.evaluate(cardKey => {
+    const match = Array.from(document.querySelectorAll(".react-grid-item")).find(element => {
+      const text = String(element.innerText || "").replace(/\r/g, "").trim();
+      const style = String(element.getAttribute("style") || "");
+      return `${style}|${text}` === cardKey;
+    });
+    if (!match) return false;
+    match.click();
+    return true;
+  }, card.cardKey);
+  if (!opened) throw new Error("The overlapping Dash Block Time could not be reopened safely.");
+  await page.waitForFunction(
+    () => location.pathname.endsWith("/appointments/block-time") && new URL(location.href).searchParams.has("aid"),
+    { timeout: DEFAULT_TIMEOUT_MS }
+  );
+  const editUrl = page.url();
+  const dashBlockId = getDashBlockIdFromUrl(editUrl);
+  if (!dashBlockId) throw new Error("The overlapping Dash Block Time has no stable id.");
+  return {
+    ...card,
+    start: minutesToTime(card.startMinutes),
+    end: minutesToTime(card.endMinutes),
+    dashBlockId,
+    dashStaffId: getDashStaffIdFromUrl(editUrl) || "",
+    editUrl
+  };
+}
+
+async function findDashCalendarConflicts(page, block) {
+  const cards = await readDashCalendarCards(page, block.date);
+  const classified = classifyDashCalendarConflicts(cards, block);
+  const integrationBlocks = [];
+  const manualBlocks = [];
+  for (const card of classified.integrationBlocks) {
+    integrationBlocks.push(await openDashBlockCard(page, card));
+  }
+  for (const card of classified.manualBlocks) {
+    manualBlocks.push(await openDashBlockCard(page, card));
+  }
+  return {
+    appointments: classified.appointments,
+    integrationBlocks,
+    manualBlocks
+  };
+}
+
 async function readDashCalendarCards(page, date) {
   await navigateDashPage(page, buildAppointmentsDateUrl(date));
   await waitForDashCalendar(page);
@@ -850,35 +983,53 @@ function buildDashAuditAppointmentFromCard(card) {
 }
 
 async function readDashCalendarRangeForAudit(page, { startDate, endDate } = {}) {
-  const date = String(startDate || "");
+  const first = String(startDate || "");
   const last = String(endDate || "");
-  if (!date || date !== last) {
-    throw new Error("The experimental Dash audit currently supports one calendar day only.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(first) || !/^\d{4}-\d{2}-\d{2}$/.test(last) || last < first) {
+    throw new Error("Dash audit dates must be a valid ascending YYYY-MM-DD range.");
+  }
+  const totalDays = Math.round(
+    (Date.parse(`${last}T12:00:00Z`) - Date.parse(`${first}T12:00:00Z`)) / 86400000
+  ) + 1;
+  if (!Number.isInteger(totalDays) || totalDays < 1 || totalDays > 30) {
+    throw new Error("Dash audit range cannot exceed 30 calendar days.");
   }
 
-  // The Cloud Functions Chromium build supports the single page created for
-  // authentication, but not Target.createTarget for a second tab. Today is
-  // already the default Dash calendar after sign-in, so read that page in
-  // place without another navigation or browser target.
-  await waitForDashCalendar(page);
-  const cards = await collectDashCalendarCards(page, date);
-  const blocks = cards.filter(item => item.isBlock).map(item => ({
-    date,
-    start: minutesToTime(item.startMinutes),
-    end: minutesToTime(item.endMinutes),
-    dashStaffName: item.dashStaffName,
-    description: item.description,
-    observedKey: stableHash(item.cardKey)
-  })).filter(item => item.start && item.end && item.dashStaffName);
-  const appointments = cards
-    .map(buildDashAuditAppointmentFromCard)
-    .filter(Boolean);
+  // Keep one authenticated Chromium page and navigate it day by day. This
+  // avoids Target.createTarget (the operation that failed in Cloud Functions)
+  // while still allowing the complete reviewed horizon.
+  const appointments = [];
+  const blocks = [];
+  const days = [];
+  for (let offset = 0; offset < totalDays; offset += 1) {
+    const date = addDateDays(first, offset);
+    const cards = await readDashCalendarCards(page, date);
+    const dayBlocks = cards.filter(item => item.isBlock).map(item => ({
+      date,
+      start: minutesToTime(item.startMinutes),
+      end: minutesToTime(item.endMinutes),
+      dashStaffName: item.dashStaffName,
+      description: item.description,
+      observedKey: stableHash(item.cardKey)
+    })).filter(item => item.start && item.end && item.dashStaffName);
+    const dayAppointments = cards
+      .map(buildDashAuditAppointmentFromCard)
+      .filter(Boolean);
+    blocks.push(...dayBlocks);
+    appointments.push(...dayAppointments);
+    days.push({
+      date,
+      appointments: dayAppointments.length,
+      blocks: dayBlocks.length,
+      cards: cards.length
+    });
+  }
   return {
-    startDate: date,
-    endDate: date,
+    startDate: first,
+    endDate: last,
     appointments,
     blocks,
-    days: [{ date, appointments: appointments.length, blocks: blocks.length, cards: cards.length }]
+    days
   };
 }
 
@@ -966,6 +1117,7 @@ module.exports = {
   buildEditBlockUrl,
   buildAppointmentsDateUrl,
   buildDashAuditAppointmentFromCard,
+  classifyDashCalendarConflicts,
   createBlock,
   createAuthenticatedDashPage,
   createDashBrowserClient,
@@ -973,6 +1125,7 @@ module.exports = {
   deleteBlock,
   ensureDashLogin,
   formatSafeDashPageState,
+  findDashCalendarConflicts,
   getSafeDashPageState,
   getDashBlockIdFromUrl,
   getDashStaffIdFromUrl,

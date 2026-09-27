@@ -47,7 +47,7 @@ test("plans confirmed Dash appointments without creating duplicate Rose blocks",
   assert.equal(plan.rows[0].action, "link_local");
 });
 
-test("adopts exact manual coverage but reviews partial overlaps", () => {
+test("adopts exact manual coverage and replaces a partial manual block", () => {
   const desiredBlocks = [
     {
       sourceType: "appointment",
@@ -81,8 +81,40 @@ test("adopts exact manual coverage but reviews partial overlaps", () => {
   });
 
   assert.equal(plan.rows[0].action, "covered_by_manual_block");
-  assert.equal(plan.rows[1].action, "review");
-  assert.equal(plan.rows[1].reason, "dash_block_partial_overlap");
+  assert.equal(plan.rows[1].action, "replace_manual_block");
+  assert.equal(plan.rows[1].reason, "manual_partial_overlap_replace");
+  assert.equal(plan.summary.replaceManualBlocks, 1);
+});
+
+test("deduplicates equal intervals using date, technician, start, and duration", () => {
+  const plan = buildDashAuditPlan({
+    desiredBlocks: [
+      {
+        sourceType: "off_work",
+        sourceId: "older-weekly-rule",
+        date: "2026-10-04",
+        start: "10:00",
+        end: "12:00",
+        dashStaffId: "dash-1",
+        dashStaffName: "Inna",
+        description: "Rose Calendar | off:older-weekly-rule"
+      },
+      {
+        sourceType: "off_work",
+        sourceId: "newer-weekly-rule",
+        date: "2026-10-04",
+        startMinutes: 600,
+        durationMinutes: 120,
+        dashStaffId: "dash-1",
+        dashStaffName: "Inna",
+        description: "Rose Calendar | off:newer-weekly-rule"
+      }
+    ]
+  });
+
+  assert.equal(plan.rows.length, 1);
+  assert.equal(plan.summary.createDashBlocks, 1);
+  assert.equal(plan.summary.duplicateRoseBlocks, 1);
 });
 
 test("updates an integration-owned block when its time changed", () => {
