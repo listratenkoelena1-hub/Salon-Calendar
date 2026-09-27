@@ -15,6 +15,7 @@ const {
   getDashStaffIdFromUrl,
   getStaticNotificationTime,
   isRetryableNavigationError,
+  readDashCalendarRangeForAudit,
   toTwelveHour
 } = require("./dash-browser");
 
@@ -126,4 +127,36 @@ test("builds a read-only audit appointment directly from a visible calendar card
   assert.equal(appointment.staffName, "Lan");
   assert.equal(appointment.auditSummaryOnly, true);
   assert.match(appointment.dashBookingId, /^audit_[a-f0-9]{40}$/);
+});
+
+test("reads a one-day audit from the authenticated page without opening another tab", async () => {
+  const page = {
+    waitForSelector: async () => {},
+    waitForFunction: async () => {},
+    evaluate: async () => [{
+      cardKey: "style|Sample Client\nPedicure",
+      date: "2026-09-27",
+      lines: ["Sample Client", "Pedicure"],
+      isBlock: false,
+      dashStaffName: "Lan",
+      startMinutes: 10 * 60,
+      endMinutes: 11 * 60
+    }]
+  };
+
+  const result = await readDashCalendarRangeForAudit(page, {
+    startDate: "2026-09-27",
+    endDate: "2026-09-27"
+  });
+
+  assert.equal(result.days.length, 1);
+  assert.equal(result.appointments.length, 1);
+  assert.equal(result.blocks.length, 0);
+  await assert.rejects(
+    readDashCalendarRangeForAudit(page, {
+      startDate: "2026-09-27",
+      endDate: "2026-09-28"
+    }),
+    /one calendar day only/
+  );
 });

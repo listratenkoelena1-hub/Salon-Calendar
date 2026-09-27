@@ -849,63 +849,37 @@ function buildDashAuditAppointmentFromCard(card) {
   };
 }
 
-async function openDashAuditCalendarPage(browser, date) {
-  let lastError = null;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const page = await browser.newPage();
-    try {
-      await prepareDashPage(page);
-      await navigateDashPage(page, buildAppointmentsDateUrl(date));
-      await waitForDashCalendar(page);
-      return page;
-    } catch (error) {
-      lastError = error;
-      if (!page.isClosed()) await page.close().catch(() => {});
-      const retryable = (
-        isRetryableNavigationError(error) ||
-        /waiting failed|timeout|navigation/i.test(String(error?.message || error || ""))
-      );
-      if (!retryable || attempt === 3) throw error;
-    }
-  }
-  throw lastError;
-}
-
-async function readDashCalendarRangeForAudit(browser, { startDate, endDate } = {}) {
-  const appointments = [];
-  const blocks = [];
-  const days = [];
-  let date = String(startDate || "");
+async function readDashCalendarRangeForAudit(page, { startDate, endDate } = {}) {
+  const date = String(startDate || "");
   const last = String(endDate || "");
-  for (let guard = 0; date && last && date <= last && guard < 62; guard += 1) {
-    const page = await openDashAuditCalendarPage(browser, date);
-    try {
-      const cards = await collectDashCalendarCards(page, date);
-      const dayBlocks = cards.filter(item => item.isBlock).map(item => ({
-        date,
-        start: minutesToTime(item.startMinutes),
-        end: minutesToTime(item.endMinutes),
-        dashStaffName: item.dashStaffName,
-        description: item.description,
-        observedKey: stableHash(item.cardKey)
-      })).filter(item => item.start && item.end && item.dashStaffName);
-      const dayAppointments = cards
-        .map(buildDashAuditAppointmentFromCard)
-        .filter(Boolean);
-      appointments.push(...dayAppointments);
-      blocks.push(...dayBlocks);
-      days.push({
-        date,
-        appointments: dayAppointments.length,
-        blocks: dayBlocks.length,
-        cards: cards.length
-      });
-    } finally {
-      if (!page.isClosed()) await page.close().catch(() => {});
-    }
-    date = addDateDays(date, 1);
+  if (!date || date !== last) {
+    throw new Error("The experimental Dash audit currently supports one calendar day only.");
   }
-  return { startDate, endDate, appointments, blocks, days };
+
+  // The Cloud Functions Chromium build supports the single page created for
+  // authentication, but not Target.createTarget for a second tab. Today is
+  // already the default Dash calendar after sign-in, so read that page in
+  // place without another navigation or browser target.
+  await waitForDashCalendar(page);
+  const cards = await collectDashCalendarCards(page, date);
+  const blocks = cards.filter(item => item.isBlock).map(item => ({
+    date,
+    start: minutesToTime(item.startMinutes),
+    end: minutesToTime(item.endMinutes),
+    dashStaffName: item.dashStaffName,
+    description: item.description,
+    observedKey: stableHash(item.cardKey)
+  })).filter(item => item.start && item.end && item.dashStaffName);
+  const appointments = cards
+    .map(buildDashAuditAppointmentFromCard)
+    .filter(Boolean);
+  return {
+    startDate: date,
+    endDate: date,
+    appointments,
+    blocks,
+    days: [{ date, appointments: appointments.length, blocks: blocks.length, cards: cards.length }]
+  };
 }
 
 async function openDashCalendarCard(page, date, cardKey) {
@@ -971,15 +945,15 @@ async function readDashCalendarRange(page, { startDate, endDate } = {}) {
 
 function createDashBrowserClient(page, options = {}) {
   const dryRun = options.dryRun === true;
-  const auditBrowser = options.auditBrowser || null;
+  const auditSummaryOnly = options.auditSummaryOnly === true;
   return {
     createBlock: block => createBlock(page, block, { dryRun }),
     updateBlock: (link, block) => updateBlock(page, link, block, { dryRun }),
     deleteBlock: link => deleteBlock(page, link, { dryRun }),
     readNewDashAppointments: input => readNewDashAppointments(page, input),
     readDashEvents: input => readNewDashAppointments(page, input),
-    readCalendarRange: input => auditBrowser
-      ? readDashCalendarRangeForAudit(auditBrowser, input)
+    readCalendarRange: input => auditSummaryOnly
+      ? readDashCalendarRangeForAudit(page, input)
       : readDashCalendarRange(page, input)
   };
 }
