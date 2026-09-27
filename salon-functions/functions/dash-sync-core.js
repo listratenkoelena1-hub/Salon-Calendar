@@ -382,21 +382,29 @@ function parseDashDurationMinutes(value) {
   return total > 0 ? total : null;
 }
 
-function parseDashAppointmentDetail({ text, url = "" } = {}) {
+function parseDashAppointmentDetail({ text, url = "", clientHint = "" } = {}) {
   const lines = String(text || "")
     .split(/\r?\n/)
     .map(line => line.replace(/\s+/g, " ").trim())
     .filter(Boolean);
-  const detailsIndex = lines.findIndex(line => line === "Appointment Details");
+  const detailsIndex = lines.findIndex(line => (
+    line === "Appointment Details" || line === "View Appointment"
+  ));
   const searchIndex = lines.findIndex(line => line === "Search Client");
-  const client = searchIndex >= 0 ? String(lines[searchIndex + 1] || "").trim() : "";
+  const client = String(
+    searchIndex >= 0 ? lines[searchIndex + 1] || "" : clientHint || ""
+  ).trim();
   const dateLine = lines.find(line => parseDashLongDate(line)) || "";
   const date = parseDashLongDate(dateLine);
   const timeLine = lines.find(line => /^\d{1,2}:\d{2}\s*(?:am|pm)$/i.test(line)) || "";
   const startMinutes = timeToMinutes(timeLine);
-  const durationStaffLine = lines.find(line => /^\s*(?:(?:\d+\s*h)(?:\s*\d+\s*min)?|\d+\s*min)\s+-\s+.+$/i.test(line)) || "";
+  const durationStaffIndex = lines.findIndex(line => (
+    /^\s*(?:(?:\d+\s*h)(?:\s*\d+\s*min)?|\d+\s*min)\s*-\s*.*$/i.test(line)
+  ));
+  const durationStaffLine = durationStaffIndex >= 0 ? lines[durationStaffIndex] : "";
   const durationMinutes = parseDashDurationMinutes(durationStaffLine);
-  const staffName = durationStaffLine.replace(/^.*?\s+-\s+/, "").trim();
+  const inlineStaffName = durationStaffLine.match(/-\s*(.+)$/)?.[1]?.trim() || "";
+  const staffName = inlineStaffName || String(lines[durationStaffIndex + 1] || "").trim();
   const timeIndex = lines.indexOf(timeLine);
   const serviceLine = timeIndex >= 0 ? String(lines[timeIndex + 1] || "") : "";
   const service = serviceLine.replace(/\s+-\s+\$\s*[\d,.]+.*$/, "").trim();

@@ -219,6 +219,31 @@ test("parses an exact-hour Dash duration without a zero-minute suffix", () => {
   assert.equal(detail.staffName, "Luba");
 });
 
+test("parses the current View Appointment page with linked client and split staff line", () => {
+  const detail = parseDashAppointmentDetail({
+    url: "https://www.partnersdash.com/appointments/view?aid=current-dash-page",
+    clientHint: "Sample Current Client",
+    text: [
+      "View Appointment",
+      "Saturday, 26 Sep 2026",
+      "Completed",
+      "10:00 am",
+      "House Special Spa Pedicure With Shellac",
+      "1h -",
+      "Lan",
+      "Type:",
+      "Dash Booking"
+    ].join("\n")
+  });
+
+  assert.equal(detail.client, "Sample Current Client");
+  assert.equal(detail.date, "2026-09-26");
+  assert.equal(detail.start, 8);
+  assert.equal(detail.duration, 4);
+  assert.equal(detail.service, "House Special Spa Pedicure With Shellac");
+  assert.equal(detail.staffName, "Lan");
+});
+
 test("resolves the local technician and builds a confirmed Dash appointment", () => {
   const localStaff = resolveLocalStaffForDashName([
     { id: "local-tanya", name: "Tatyana" },

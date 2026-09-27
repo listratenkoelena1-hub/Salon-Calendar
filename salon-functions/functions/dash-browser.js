@@ -662,6 +662,42 @@ function buildNotificationCandidates(summaries) {
   }).filter(Boolean);
 }
 
+async function waitForDashAppointmentDetail(page) {
+  await page.waitForFunction(
+    () => location.pathname === "/appointments/view" && new URL(location.href).searchParams.has("aid"),
+    { timeout: DEFAULT_TIMEOUT_MS }
+  );
+  await page.waitForFunction(
+    () => {
+      const bodyText = String(document.body?.innerText || "");
+      const hasHeading = (
+        bodyText.includes("Appointment Details") ||
+        bodyText.includes("View Appointment")
+      );
+      const hasClient = (
+        Boolean(document.querySelector('a[href*="/clients/details"]')) ||
+        bodyText.includes("Search Client")
+      );
+      return hasHeading && hasClient && bodyText.includes("Dash Booking");
+    },
+    { timeout: DEFAULT_TIMEOUT_MS }
+  );
+}
+
+async function parseDashAppointmentPage(page) {
+  const visible = await page.evaluate(() => ({
+    text: String(document.body?.innerText || ""),
+    clientHint: String(
+      document.querySelector('a[href*="/clients/details"]')?.textContent || ""
+    ).replace(/\s+/g, " ").trim()
+  }));
+  return parseDashAppointmentDetail({
+    text: visible.text,
+    clientHint: visible.clientHint,
+    url: page.url()
+  });
+}
+
 async function readNewDashAppointments(page, { knownNotificationKeys = new Set(), limit = 20 } = {}) {
   const summaries = await readNotificationSummaries(page, limit);
   const candidates = buildNotificationCandidates(summaries);
@@ -690,18 +726,8 @@ async function readNewDashAppointments(page, { knownNotificationKeys = new Set()
     const rows = await page.$$("li.notification-item-container");
     if (!rows[currentCandidate.summary.index]) continue;
     await rows[currentCandidate.summary.index].click();
-    await page.waitForFunction(
-      () => location.pathname === "/appointments/view" && new URL(location.href).searchParams.has("aid"),
-      { timeout: DEFAULT_TIMEOUT_MS }
-    );
-    await page.waitForFunction(
-      () => document.body.innerText.includes("Appointment Details") && document.body.innerText.includes("Dash Booking"),
-      { timeout: DEFAULT_TIMEOUT_MS }
-    );
-    const detail = parseDashAppointmentDetail({
-      text: await page.evaluate(() => document.body.innerText),
-      url: page.url()
-    });
+    await waitForDashAppointmentDetail(page);
+    const detail = await parseDashAppointmentPage(page);
     newItems.push({
       notificationKey: candidate.notificationKey,
       notificationFingerprint: candidate.fingerprint,
@@ -796,18 +822,8 @@ async function openDashCalendarCard(page, date, cardKey) {
     return true;
   }, cardKey);
   if (!clicked) return null;
-  await page.waitForFunction(
-    () => location.pathname === "/appointments/view" && new URL(location.href).searchParams.has("aid"),
-    { timeout: DEFAULT_TIMEOUT_MS }
-  );
-  await page.waitForFunction(
-    () => document.body.innerText.includes("Appointment Details") && document.body.innerText.includes("Dash Booking"),
-    { timeout: DEFAULT_TIMEOUT_MS }
-  );
-  return parseDashAppointmentDetail({
-    text: await page.evaluate(() => document.body.innerText),
-    url: page.url()
-  });
+  await waitForDashAppointmentDetail(page);
+  return parseDashAppointmentPage(page);
 }
 
 async function readDashCalendarDay(page, date) {
