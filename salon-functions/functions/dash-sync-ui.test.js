@@ -28,6 +28,8 @@ test("Hosting preview offers a manager-only read-only Dash audit", () => {
   assert.match(calendarHtml, /DASH_AUDIT_PREVIEW_ENABLED && currentUserRole === 'manager'/);
   assert.match(calendarHtml, /READ-ONLY · This check cannot create, change, cancel, or block any appointment/);
   assert.match(calendarHtml, /managerRunDashBookingAudit\(\{/);
+  assert.match(calendarHtml, /horizonDays: 1/);
+  assert.match(calendarHtml, /Run today-only audit/);
   assert.match(calendarHtml, /Writes performed:/);
   assert.doesNotMatch(calendarHtml, /Apply audit plan/);
 });

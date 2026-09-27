@@ -501,7 +501,8 @@ async function runDashAudit({
   requestedBy = ""
 }) {
   const safeHorizon = clampInteger(horizonDays, 1, 30, DEFAULT_HORIZON_DAYS);
-  const endDate = addDateKeyDays(startDate, safeHorizon);
+  // horizonDays is an inclusive calendar-day count: 1 means startDate only.
+  const endDate = addDateKeyDays(startDate, safeHorizon - 1);
   const now = new Date();
   const today = dateKeyInTimeZone(now);
   const currentMinute = minutesInTimeZone(now);

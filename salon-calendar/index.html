@@ -4972,10 +4972,10 @@ stroke-linejoin="round">
     </div>
     <div class="dash-audit-controls">
       <button id="dashAuditRunBtn" class="btn-primary" type="button" onclick="runDashAuditPreview()">
-        Run 30-day audit
+        Run today-only audit
       </button>
       <button type="button" onclick="loadLatestDashAuditPreview()">Load latest report</button>
-      <span id="dashAuditPeriod" class="dash-audit-period">Today through 30 days ahead</span>
+      <span id="dashAuditPeriod" class="dash-audit-period">Today only</span>
     </div>
     <div id="dashAuditStatus" class="dash-audit-status">No audit has been run in this preview yet.</div>
     <div id="dashAuditSummary" class="dash-audit-summary"></div>
@@ -6235,13 +6235,13 @@ window.runDashAuditPreview = async () => {
     runButton.textContent = 'Reading Dash Booking...';
   }
   if (statusEl) {
-    statusEl.textContent = 'Reading up to 30 days from both calendars. This can take several minutes. Nothing will be changed.';
+    statusEl.textContent = 'Reading today only from both calendars. Nothing will be changed.';
     statusEl.classList.remove('error');
   }
   try {
     const result = await managerRunDashBookingAudit({
       startDate: toInputDate(new Date()),
-      horizonDays: 30
+      horizonDays: 1
     });
     renderDashAuditPreview(result.data || null);
     showToast('Read-only Dash audit completed. No appointments were changed.', 'success', 5000);
@@ -6256,7 +6256,7 @@ window.runDashAuditPreview = async () => {
     dashAuditPreviewRunning = false;
     if (runButton) {
       runButton.disabled = false;
-      runButton.textContent = 'Run 30-day audit';
+      runButton.textContent = 'Run today-only audit';
     }
   }
 };
