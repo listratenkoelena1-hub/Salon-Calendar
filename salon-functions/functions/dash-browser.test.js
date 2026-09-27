@@ -8,11 +8,12 @@ const {
   buildCreateBlockUrl,
   buildEditBlockUrl,
   buildNotificationCandidates,
+  dashNavigationReached,
   formatSafeDashPageState,
   getDashBlockIdFromUrl,
   getDashStaffIdFromUrl,
   getStaticNotificationTime,
-  isDetachedFrameError,
+  isRetryableNavigationError,
   toTwelveHour
 } = require("./dash-browser");
 
@@ -85,7 +86,22 @@ test("formats login diagnostics without page text or customer data", () => {
   assert.doesNotMatch(diagnostic, /customer|must never/i);
 });
 
-test("retries only Chromium detached-frame navigation failures", () => {
-  assert.equal(isDetachedFrameError(new Error("Attempted to use detached Frame 'abc'")), true);
-  assert.equal(isDetachedFrameError(new Error("Navigation timeout exceeded")), false);
+test("retries only transient Chromium navigation failures", () => {
+  assert.equal(isRetryableNavigationError(new Error("Attempted to use detached Frame 'abc'")), true);
+  assert.equal(isRetryableNavigationError(new Error("net::ERR_ABORTED at https://example.com")), true);
+  assert.equal(isRetryableNavigationError(new Error("Navigation timeout exceeded")), false);
+  assert.equal(
+    dashNavigationReached(
+      "https://www.partnersdash.com/appointments?date=2026-09-26",
+      "https://www.partnersdash.com/appointments?date=2026-09-26"
+    ),
+    true
+  );
+  assert.equal(
+    dashNavigationReached(
+      "https://www.partnersdash.com/appointments?date=2026-09-27",
+      "https://www.partnersdash.com/appointments?date=2026-09-26"
+    ),
+    false
+  );
 });

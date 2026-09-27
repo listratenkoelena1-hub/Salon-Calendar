@@ -298,18 +298,29 @@ async function createAuthenticatedDashPage(browser, credentials) {
   const authPage = await browser.newPage();
   try {
     await ensureDashLogin(authPage, credentials);
-    const workPage = await browser.newPage();
-    await prepareDashPage(workPage);
-    await authPage.close();
-    return workPage;
+    return authPage;
   } catch (error) {
     if (!authPage.isClosed()) await authPage.close().catch(() => {});
     throw error;
   }
 }
 
-function isDetachedFrameError(error) {
-  return /detached frame/i.test(String(error?.message || error || ""));
+function isRetryableNavigationError(error) {
+  return /detached frame|net::err_aborted/i.test(String(error?.message || error || ""));
+}
+
+function dashNavigationReached(actualUrl, requestedUrl) {
+  try {
+    const actual = new URL(String(actualUrl || ""));
+    const requested = new URL(String(requestedUrl || ""));
+    return (
+      actual.origin === requested.origin &&
+      actual.pathname === requested.pathname &&
+      actual.searchParams.get("date") === requested.searchParams.get("date")
+    );
+  } catch (_error) {
+    return false;
+  }
 }
 
 async function navigateDashPage(page, url, timeout = DEFAULT_TIMEOUT_MS) {
@@ -319,8 +330,10 @@ async function navigateDashPage(page, url, timeout = DEFAULT_TIMEOUT_MS) {
       return await page.goto(url, { waitUntil: "domcontentloaded", timeout });
     } catch (error) {
       lastError = error;
-      if (!isDetachedFrameError(error) || page.isClosed() || attempt === 2) throw error;
+      if (!isRetryableNavigationError(error) || page.isClosed()) throw error;
       await new Promise(resolve => setTimeout(resolve, 500));
+      if (dashNavigationReached(page.url(), url)) return null;
+      if (attempt === 2) throw error;
     }
   }
   throw lastError;
@@ -861,6 +874,7 @@ module.exports = {
   createBlock,
   createAuthenticatedDashPage,
   createDashBrowserClient,
+  dashNavigationReached,
   deleteBlock,
   ensureDashLogin,
   formatSafeDashPageState,
@@ -868,7 +882,7 @@ module.exports = {
   getDashBlockIdFromUrl,
   getDashStaffIdFromUrl,
   getStaticNotificationTime,
-  isDetachedFrameError,
+  isRetryableNavigationError,
   launchDashBrowser,
   navigateDashPage,
   prepareDashPage,
