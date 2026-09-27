@@ -71,9 +71,11 @@ const {
 const {
   enqueueDashReconciliation,
   enqueueDashSource,
+  dateKeyInTimeZone,
   getDashPollingWindow,
   loadDashConfig,
   makeWeeklyOccurrence,
+  runDashAuditWithBrowser,
   weeklyRuleActiveOnDate,
   runDashSyncCycle
 } = require("./dash-sync-runner");
@@ -4195,6 +4197,67 @@ exports.getOnlineBookingAvailability = onCall(
       weeklyOffRecords,
       clientSummary: clientContext?.summary || null
     });
+  }
+);
+
+exports.managerRunDashBookingAudit = onCall(
+  {
+    region: "us-central1",
+    memory: "1GiB",
+    timeoutSeconds: 1800,
+    maxInstances: 1,
+    concurrency: 1,
+    secrets: [DASH_BOOKING_EMAIL, DASH_BOOKING_PASSWORD]
+  },
+  async request => {
+    const actor = await requireManagerActor(request);
+    const input = request.data || {};
+    const today = dateKeyInTimeZone(new Date(), SALON_TIME_ZONE);
+    const startDate = input.startDate ? assertDate(input.startDate) : today;
+    if (startDate < today) {
+      throw new HttpsError("invalid-argument", "Dash audit cannot begin in the past.");
+    }
+    const requestedHorizon = input.horizonDays === undefined ? 30 : Number(input.horizonDays);
+    if (!Number.isInteger(requestedHorizon) || requestedHorizon < 1 || requestedHorizon > 30) {
+      throw new HttpsError("invalid-argument", "Dash audit horizon must be between 1 and 30 days.");
+    }
+    try {
+      return await runDashAuditWithBrowser({
+        db,
+        FieldValue,
+        email: String(DASH_BOOKING_EMAIL.value() || "").trim(),
+        password: String(DASH_BOOKING_PASSWORD.value() || ""),
+        startDate,
+        horizonDays: requestedHorizon,
+        requestedBy: actor.uid
+      });
+    } catch (error) {
+      console.error("Read-only Dash Booking audit failed", {
+        code: String(error?.code || ""),
+        message: String(error?.message || error || "Unknown error").slice(0, 300)
+      });
+      throw new HttpsError(
+        "internal",
+        "The read-only Dash Booking audit could not finish. No appointments or Block Time were changed."
+      );
+    }
+  }
+);
+
+exports.managerGetLatestDashBookingAudit = onCall(
+  {
+    region: "us-central1",
+    maxInstances: 2
+  },
+  async request => {
+    await requireManagerActor(request);
+    const snapshot = await db.collection("dashSyncAudits")
+      .orderBy("completedAt", "desc")
+      .limit(1)
+      .get();
+    if (snapshot.empty) return { audit: null };
+    const document = snapshot.docs[0];
+    return { audit: { auditId: document.id, ...document.data() } };
   }
 );
 

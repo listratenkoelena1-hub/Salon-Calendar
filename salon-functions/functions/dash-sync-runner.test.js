@@ -24,8 +24,9 @@ test("keeps the Dash bridge disabled unless the server config explicitly enables
     writeEnabled: false,
     inboundEnabled: false,
     inboundBaselineComplete: false,
+    initialApplyEnabled: false,
     dailyReconciliationEnabled: true,
-    horizonDays: 60,
+    horizonDays: 30,
     queueLimit: 25
   });
   assert.deepEqual(buildDefaultConfig({
@@ -40,14 +41,17 @@ test("keeps the Dash bridge disabled unless the server config explicitly enables
     writeEnabled: true,
     inboundEnabled: true,
     inboundBaselineComplete: false,
+    initialApplyEnabled: false,
     dailyReconciliationEnabled: true,
-    horizonDays: 180,
+    horizonDays: 30,
     queueLimit: 1
   });
 });
 
 test("retries incomplete incoming receipts but not terminal Dash outcomes", () => {
   assert.equal(isTerminalIncomingStatus("imported"), true);
+  assert.equal(isTerminalIncomingStatus("canceled"), true);
+  assert.equal(isTerminalIncomingStatus("rescheduled"), true);
   assert.equal(isTerminalIncomingStatus("conflict"), true);
   assert.equal(isTerminalIncomingStatus("duplicate"), true);
   assert.equal(isTerminalIncomingStatus("baseline"), true);
@@ -126,7 +130,7 @@ test("builds one canonical Important message for manager and assigned technician
     FieldValue,
     Timestamp,
     message: "DASH BOOKING APPOINTMENT",
-    eventType: "dash_request_created",
+    eventType: "dash_appointment_added",
     entityType: "appointment",
     entityId: "dash_123",
     staffId: "staff-1",
@@ -143,6 +147,30 @@ test("builds one canonical Important message for manager and assigned technician
   assert.equal(message.managerPriority, "key");
   assert.equal(message.staffDefaultPriority, "secondary");
   assert.equal(message.source, "dash_booking");
+  assert.equal(message.title, "Dash Booking appointment");
+});
+
+test("uses distinct titles for ongoing Dash cancellation and reschedule events", () => {
+  const FieldValue = { serverTimestamp: () => "SERVER_TIME" };
+  const Timestamp = { fromDate: date => ({ millis: date.getTime() }) };
+  const base = {
+    FieldValue,
+    Timestamp,
+    message: "Dash event",
+    entityType: "appointment",
+    entityId: "dash_123",
+    staffId: "staff-1",
+    staffName: "Tanya",
+    staffRecords: [{ id: "staff-1", active: true }]
+  };
+  assert.equal(buildDashMessageDoc({
+    ...base,
+    eventType: "dash_appointment_canceled"
+  }).title, "Dash Booking canceled");
+  assert.equal(buildDashMessageDoc({
+    ...base,
+    eventType: "dash_appointment_rescheduled"
+  }).title, "Dash Booking rescheduled");
 });
 
 test("builds a phone-free Dash activity log entry", () => {
@@ -154,14 +182,14 @@ test("builds a phone-free Dash activity log entry", () => {
       client: "Sample Client",
       service: "Pedicure"
     },
-    eventType: "dash_request_created",
+    eventType: "dash_appointment_added",
     entityType: "appointment",
     entityId: "dash_123",
     staffId: "staff-1",
     message: "DASH BOOKING APPOINTMENT"
   });
 
-  assert.equal(entry.actorLabel, "Dash Booking");
+  assert.equal(entry.actorLabel, "DashBooking");
   assert.equal(entry.logDate, "2026-10-03");
   assert.equal(entry.hasPrivateContact, false);
   assert.equal(Object.hasOwn(entry, "phone"), false);

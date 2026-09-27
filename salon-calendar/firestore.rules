@@ -110,6 +110,10 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /dashSyncAudits/{document=**} {
+      allow read, write: if false;
+    }
+
     // Staff may create operational log entries, but only managers may read
     // the log. Non-managers cannot put a phone into an otherwise public log.
     match /activityLog/{logId} {
@@ -167,6 +171,7 @@ service cloud.firestore {
         && collection != 'dashSyncConfig'
         && collection != 'dashStaffMappings'
         && collection != 'dashSyncIssues'
+        && collection != 'dashSyncAudits'
         && collection != 'activityLog'
         && collection != 'users'
         && collection != 'staff';

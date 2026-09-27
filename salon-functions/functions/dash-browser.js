@@ -2,7 +2,12 @@
 
 const os = require("node:os");
 const path = require("node:path");
-const { parseDashAppointmentDetail, parseDashNotification, stableHash } = require("./dash-sync-core");
+const {
+  minutesToTime,
+  parseDashAppointmentDetail,
+  parseDashNotification,
+  stableHash
+} = require("./dash-sync-core");
 
 const DASH_BASE_URL = "https://www.partnersdash.com";
 const DASH_APPOINTMENTS_URL = `${DASH_BASE_URL}/appointments`;
@@ -536,10 +541,153 @@ async function readNewDashAppointments(page, { knownNotificationKeys = new Set()
       notificationKey: candidate.notificationKey,
       notificationFingerprint: candidate.fingerprint,
       notification: candidate.parsed,
+      kind: candidate.parsed.kind,
       detail
     });
   }
   return newItems;
+}
+
+function addDateDays(dateKey, days) {
+  const [year, month, day] = String(dateKey || "").split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + Number(days || 0), 12));
+  if (Number.isNaN(date.getTime())) return "";
+  return [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, "0"),
+    String(date.getUTCDate()).padStart(2, "0")
+  ].join("-");
+}
+
+async function waitForDashCalendar(page) {
+  await page.waitForSelector('input[placeholder="Select date"]', { timeout: DEFAULT_TIMEOUT_MS });
+  await page.waitForSelector(".react-grid-layout", { timeout: DEFAULT_TIMEOUT_MS });
+  try {
+    await page.waitForFunction(
+      () => !document.querySelector(".ant-spin-spinning"),
+      { timeout: 10000 }
+    );
+  } catch (_error) {
+    // Some Dash releases keep an unrelated hidden spinner mounted.
+  }
+  await new Promise(resolve => setTimeout(resolve, 250));
+}
+
+async function readDashCalendarCards(page, date) {
+  await page.goto(buildAppointmentsDateUrl(date), {
+    waitUntil: "domcontentloaded",
+    timeout: DEFAULT_TIMEOUT_MS
+  });
+  await waitForDashCalendar(page);
+  return page.evaluate(currentDate => {
+    const staffHeadings = Array.from(document.querySelectorAll("h4"))
+      .map(element => ({
+        name: String(element.textContent || "").replace(/\s+/g, " ").trim(),
+        rect: element.getBoundingClientRect()
+      }))
+      .filter(item => item.name && item.rect.width > 100 && item.rect.height > 0)
+      .sort((left, right) => left.rect.x - right.rect.x);
+    const cards = Array.from(document.querySelectorAll(".react-grid-item"));
+    return cards.map((element, index) => {
+      const text = String(element.innerText || "").replace(/\r/g, "").trim();
+      const style = String(element.getAttribute("style") || "");
+      const transform = style.match(/translate\(\s*([\d.-]+)px\s*,\s*([\d.-]+)px\s*\)/i);
+      const heightMatch = style.match(/height:\s*([\d.-]+)px/i);
+      const x = Number(transform?.[1]);
+      const y = Number(transform?.[2]);
+      const height = Number(heightMatch?.[1]);
+      const staffIndex = Number.isFinite(x) ? Math.max(0, Math.round(x / 143)) : -1;
+      const startMinutes = Number.isFinite(y) ? 6 * 60 + Math.round(y / 2) : null;
+      const endMinutes = Number.isFinite(height) && Number.isFinite(startMinutes)
+        ? startMinutes + Math.round(height / 2)
+        : null;
+      const lines = text.split(/\n+/).map(line => line.trim()).filter(Boolean);
+      const isBlock = /^Blocked Time$/i.test(lines[0] || "");
+      return {
+        index,
+        cardKey: `${style}|${text}`,
+        date: currentDate,
+        text,
+        lines,
+        isBlock,
+        dashStaffName: staffHeadings[staffIndex]?.name || "",
+        startMinutes,
+        endMinutes,
+        description: isBlock ? String(lines.slice(2).join(" ") || "").trim() : ""
+      };
+    });
+  }, date);
+}
+
+async function openDashCalendarCard(page, date, cardKey) {
+  const cards = await readDashCalendarCards(page, date);
+  const candidate = cards.find(item => item.cardKey === cardKey);
+  if (!candidate) return null;
+  const clicked = await page.evaluate(key => {
+    const element = Array.from(document.querySelectorAll(".react-grid-item")).find(item => {
+      const style = String(item.getAttribute("style") || "");
+      const text = String(item.innerText || "").replace(/\r/g, "").trim();
+      return `${style}|${text}` === key;
+    });
+    if (!element) return false;
+    element.click();
+    return true;
+  }, cardKey);
+  if (!clicked) return null;
+  await page.waitForFunction(
+    () => location.pathname === "/appointments/view" && new URL(location.href).searchParams.has("aid"),
+    { timeout: DEFAULT_TIMEOUT_MS }
+  );
+  await page.waitForFunction(
+    () => document.body.innerText.includes("Appointment Details") && document.body.innerText.includes("Dash Booking"),
+    { timeout: DEFAULT_TIMEOUT_MS }
+  );
+  return parseDashAppointmentDetail({
+    text: await page.evaluate(() => document.body.innerText),
+    url: page.url()
+  });
+}
+
+async function readDashCalendarDay(page, date) {
+  const cards = await readDashCalendarCards(page, date);
+  const blocks = cards.filter(item => item.isBlock).map(item => ({
+    date,
+    start: minutesToTime(item.startMinutes),
+    end: minutesToTime(item.endMinutes),
+    dashStaffName: item.dashStaffName,
+    description: item.description,
+    observedKey: stableHash(item.cardKey)
+  })).filter(item => item.start && item.end && item.dashStaffName);
+  const appointments = [];
+  const seen = new Set();
+  for (const card of cards.filter(item => !item.isBlock)) {
+    const detail = await openDashCalendarCard(page, date, card.cardKey);
+    if (!detail?.dashBookingId || seen.has(detail.dashBookingId)) continue;
+    seen.add(detail.dashBookingId);
+    appointments.push(detail);
+  }
+  return { date, appointments, blocks, cardCount: cards.length };
+}
+
+async function readDashCalendarRange(page, { startDate, endDate } = {}) {
+  const appointments = [];
+  const blocks = [];
+  const days = [];
+  let date = String(startDate || "");
+  const last = String(endDate || "");
+  for (let guard = 0; date && last && date <= last && guard < 62; guard += 1) {
+    const day = await readDashCalendarDay(page, date);
+    appointments.push(...day.appointments);
+    blocks.push(...day.blocks);
+    days.push({
+      date,
+      appointments: day.appointments.length,
+      blocks: day.blocks.length,
+      cards: day.cardCount
+    });
+    date = addDateDays(date, 1);
+  }
+  return { startDate, endDate, appointments, blocks, days };
 }
 
 function createDashBrowserClient(page, options = {}) {
@@ -548,7 +696,9 @@ function createDashBrowserClient(page, options = {}) {
     createBlock: block => createBlock(page, block, { dryRun }),
     updateBlock: (link, block) => updateBlock(page, link, block, { dryRun }),
     deleteBlock: link => deleteBlock(page, link, { dryRun }),
-    readNewDashAppointments: input => readNewDashAppointments(page, input)
+    readNewDashAppointments: input => readNewDashAppointments(page, input),
+    readDashEvents: input => readNewDashAppointments(page, input),
+    readCalendarRange: input => readDashCalendarRange(page, input)
   };
 }
 
@@ -567,6 +717,9 @@ module.exports = {
   getDashStaffIdFromUrl,
   getStaticNotificationTime,
   launchDashBrowser,
+  readDashCalendarCards,
+  readDashCalendarDay,
+  readDashCalendarRange,
   readNewDashAppointments,
   readSelectedAntLabel,
   selectAntValue,

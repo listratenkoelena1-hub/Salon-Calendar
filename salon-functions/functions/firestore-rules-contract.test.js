@@ -29,7 +29,8 @@ const serverOnlyCollections = [
   "dashSyncRuns",
   "dashSyncConfig",
   "dashStaffMappings",
-  "dashSyncIssues"
+  "dashSyncIssues",
+  "dashSyncAudits"
 ];
 
 test("private client and delivery collections are denied to every browser role", () => {

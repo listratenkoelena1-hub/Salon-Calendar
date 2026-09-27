@@ -55,7 +55,7 @@ test("old phone-free appointments stay readable while private client records are
       await setDoc(doc(db, "operationalSettings", "synthetic-setting"), { enabled: true });
       for (const collectionName of [
         "dashSyncQueue", "dashSyncLinks", "dashIncomingReceipts", "dashSyncRuns",
-        "dashSyncConfig", "dashStaffMappings", "dashSyncIssues"
+        "dashSyncConfig", "dashStaffMappings", "dashSyncIssues", "dashSyncAudits"
       ]) {
         await setDoc(doc(db, collectionName, "synthetic-dash-record"), { serverOnly: true });
       }
@@ -78,7 +78,7 @@ test("old phone-free appointments stay readable while private client records are
         "appointmentPrivate", "clientLookup", "clientPhoneIndex",
         "clientProfiles", "clientAppointmentHistory", "dashSyncQueue",
         "dashSyncLinks", "dashIncomingReceipts", "dashSyncRuns",
-        "dashSyncConfig", "dashStaffMappings", "dashSyncIssues"
+        "dashSyncConfig", "dashStaffMappings", "dashSyncIssues", "dashSyncAudits"
       ]) {
         const documentId = privateCollection.startsWith("dash")
           ? "synthetic-dash-record"

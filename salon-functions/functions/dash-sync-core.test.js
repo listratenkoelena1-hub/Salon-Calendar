@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 
 const {
   appointmentToDashBlock,
-  buildDashRequestAppointment,
+  buildDashAppointment,
   findDashRequestConflict,
   getDashRequestDocumentId,
   offWorkToDashBlock,
@@ -116,20 +116,25 @@ test("queue planner is idempotent and requests deletion only for linked blocks",
   }).action, "noop");
 });
 
-test("parses only new Dash appointment notifications", () => {
+test("parses created, canceled, and rescheduled Dash appointment notifications", () => {
   const parsed = parseDashNotification({
     title: "New Dash Booking Appointment",
     description: "Sample Client has booked an appointment on 2026-10-03 at 14:15",
     observedLabel: "2 minutes ago"
   });
   assert.equal(parsed.client, "Sample Client");
+  assert.equal(parsed.kind, "created");
   assert.equal(parsed.date, "2026-10-03");
   assert.equal(parsed.time, "14:15");
   assert.match(parsed.receiptKey, /^[a-f0-9]{64}$/);
   assert.equal(parseDashNotification({
+    title: "Appointment Canceled",
+    description: "Sample Client has canceled the appointment on 2026-10-03"
+  }).kind, "canceled");
+  assert.equal(parseDashNotification({
     title: "Appointment Rescheduled",
-    description: "Sample Client has rescheduled"
-  }), null);
+    description: "Sample Client has rescheduled the appointment to 2026-10-04"
+  }).kind, "rescheduled");
 });
 
 test("parses the visible Dash appointment detail page", () => {
@@ -157,8 +162,42 @@ test("parses the visible Dash appointment detail page", () => {
     duration: 6,
     service: "Gel Nails Extension",
     staffName: "Cindy",
-    sourceUrl: "https://www.partnersdash.com/appointments/view?aid=dash-aid-123"
+    sourceUrl: "https://www.partnersdash.com/appointments/view?aid=dash-aid-123",
+    dashStatus: "confirmed",
+    canceledByClient: false,
+    cancellationReason: "",
+    previousDate: "",
+    previousTime: "",
+    rescheduledDate: "",
+    rescheduledTime: ""
   });
+});
+
+test("parses Dash cancellation and reschedule history from appointment details", () => {
+  const detail = parseDashAppointmentDetail({
+    url: "https://www.partnersdash.com/appointments/view?aid=dash-state",
+    text: [
+      "Appointment Details",
+      "Search Client",
+      "Sample Client",
+      "Friday, 25 Sep 2026",
+      "10:00 am",
+      "Pedicure",
+      "1h - Luba",
+      "Canceled by Client",
+      "Canceled reason: Schedule changed",
+      "Rescheduled on Dash Booking: 2026-09-24 09:00 → 2026-09-25 10:00",
+      "Dash Booking"
+    ].join("\n")
+  });
+
+  assert.equal(detail.dashStatus, "canceled");
+  assert.equal(detail.canceledByClient, true);
+  assert.equal(detail.cancellationReason, "Schedule changed");
+  assert.equal(detail.previousDate, "2026-09-24");
+  assert.equal(detail.previousTime, "09:00");
+  assert.equal(detail.rescheduledDate, "2026-09-25");
+  assert.equal(detail.rescheduledTime, "10:00");
 });
 
 test("parses an exact-hour Dash duration without a zero-minute suffix", () => {
@@ -180,7 +219,7 @@ test("parses an exact-hour Dash duration without a zero-minute suffix", () => {
   assert.equal(detail.staffName, "Luba");
 });
 
-test("resolves the local technician and builds a deterministic blue request", () => {
+test("resolves the local technician and builds a confirmed Dash appointment", () => {
   const localStaff = resolveLocalStaffForDashName([
     { id: "local-tanya", name: "Tatyana" },
     { id: "local-cindy", name: "Cindy" }
@@ -196,11 +235,13 @@ test("resolves the local technician and builds a deterministic blue request", ()
     service: "Refill",
     staffName: "Tanya"
   };
-  const request = buildDashRequestAppointment(detail, localStaff);
-  assert.equal(request.type, "dash_booking_request");
-  assert.equal(request.source, "dash_booking");
-  assert.equal(request.staffId, "local-tanya");
-  assert.equal(request.status, "request");
+  const appointment = buildDashAppointment(detail, localStaff);
+  assert.equal(appointment.type, "appointment");
+  assert.equal(appointment.source, "dash_booking");
+  assert.equal(appointment.staffId, "local-tanya");
+  assert.equal(appointment.status, "confirmed");
+  assert.equal(appointment.lastEditedBy, "DashBooking");
+  assert.equal(appointment.lastAction, "dash_appointment_added");
   assert.match(getDashRequestDocumentId(detail.dashBookingId), /^dash_[a-f0-9]{40}$/);
 });
 

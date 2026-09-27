@@ -22,9 +22,11 @@ test("registers disabled-by-default Dash triggers and protected scheduled creden
   assert.match(functionsSource, /if \(!config\.enabled\) return \{ skipped: true, reason: "disabled" \};/);
 });
 
-test("confirms Dash requests without permitting a Dash decline path", () => {
-  assert.match(functionsSource, /function isPendingDashRequest\(appointment\)/);
-  assert.match(functionsSource, /source: confirmingDashRequest \? "dash_booking" : "online_booking"/);
-  assert.match(functionsSource, /\? "dash_request_confirmed"\s*: "online_request_confirmed"/);
-  assert.doesNotMatch(functionsSource, /dash_request_declined/);
+test("exposes a manager-only read-only Dash audit without an apply callable", () => {
+  assert.match(functionsSource, /exports\.managerRunDashBookingAudit = onCall/);
+  assert.match(functionsSource, /exports\.managerGetLatestDashBookingAudit = onCall/);
+  assert.match(functionsSource, /const actor = await requireManagerActor\(request\)/);
+  assert.match(functionsSource, /runDashAuditWithBrowser\(\{/);
+  assert.match(functionsSource, /No appointments or Block Time were changed/);
+  assert.doesNotMatch(functionsSource, /exports\.managerApplyDashBookingAudit/);
 });

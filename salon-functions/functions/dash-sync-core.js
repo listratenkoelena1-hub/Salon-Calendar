@@ -9,6 +9,7 @@ const DASH_CLOSE_MINUTES = 20 * 60;
 const DASH_REQUEST_TYPE = "dash_booking_request";
 const DASH_SOURCE = "dash_booking";
 const DASH_BLOCK_PREFIX = "Rose Calendar";
+const DASH_ACTOR_LABEL = "DashBooking";
 
 // These IDs were read from the visible Staff selector in the Dash partner UI.
 // Aliases intentionally include the spellings currently used by the salon
@@ -325,14 +326,27 @@ function planQueueOperation({ desiredResult, existingLink }) {
 
 function parseDashNotification({ title, description, observedLabel = "" } = {}) {
   const cleanTitle = String(title || "").trim();
-  if (normalizeText(cleanTitle) !== "new dash booking appointment") return null;
   const cleanDescription = String(description || "").replace(/\s+/g, " ").trim();
-  const match = cleanDescription.match(/^(.*?)\s+has booked an appointment on\s+(\d{4}-\d{2}-\d{2})\s+at\s+(\d{1,2}:\d{2})$/i);
-  if (!match) return null;
+  const normalizedTitle = normalizeText(cleanTitle);
+  let kind = "";
+  let match = null;
+
+  if (normalizedTitle === "new dash booking appointment") {
+    kind = "created";
+    match = cleanDescription.match(/^(.*?)\s+has booked an appointment[^\d]*(\d{4}-\d{2}-\d{2})(?:\s+at\s+(\d{1,2}:\d{2}))?/i);
+  } else if (normalizedTitle === "appointment canceled" || normalizedTitle === "appointment cancelled") {
+    kind = "canceled";
+    match = cleanDescription.match(/^(.*?)\s+has cancel(?:ed|led)[^\d]*(\d{4}-\d{2}-\d{2})(?:\s+at\s+(\d{1,2}:\d{2}))?/i);
+  } else if (normalizedTitle === "appointment rescheduled") {
+    kind = "rescheduled";
+    match = cleanDescription.match(/^(.*?)\s+has reschedule(?:d)?[^\d]*(\d{4}-\d{2}-\d{2})(?:\s+at\s+(\d{1,2}:\d{2}))?/i);
+  }
+  if (!kind || !match) return null;
   const notification = {
+    kind,
     client: match[1].trim(),
     date: match[2],
-    time: match[3].padStart(5, "0"),
+    time: match[3] ? match[3].padStart(5, "0") : "",
     title: cleanTitle,
     description: cleanDescription,
     observedLabel: String(observedLabel || "").trim()
@@ -405,7 +419,26 @@ function parseDashAppointmentDetail({ text, url = "" } = {}) {
     duration,
     service,
     staffName,
-    sourceUrl: String(url || "")
+    sourceUrl: String(url || ""),
+    ...parseDashAppointmentState({ text })
+  };
+}
+
+function parseDashAppointmentState({ text } = {}) {
+  const raw = String(text || "").replace(/\r/g, "");
+  const cancellationReason = raw.match(/Canceled reason:\s*([^\n]+)/i)?.[1]?.trim() || "";
+  const canceledByClient = /(?:^|\n)Canceled by Client(?:\n|$)/i.test(raw);
+  const rescheduled = raw.match(
+    /Rescheduled on Dash Booking:\s*(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})\s*(?:→|->)\s*(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})/i
+  );
+  return {
+    dashStatus: canceledByClient || cancellationReason ? "canceled" : "confirmed",
+    canceledByClient,
+    cancellationReason,
+    previousDate: rescheduled?.[1] || "",
+    previousTime: rescheduled?.[2] || "",
+    rescheduledDate: rescheduled?.[3] || "",
+    rescheduledTime: rescheduled?.[4] || ""
   };
 }
 
@@ -413,7 +446,7 @@ function getDashRequestDocumentId(dashBookingId) {
   return `dash_${stableHash(dashBookingId).slice(0, 40)}`;
 }
 
-function buildDashRequestAppointment(detail, localStaff) {
+function buildDashAppointment(detail, localStaff) {
   if (!detail?.dashBookingId || !localStaff?.id) return null;
   return {
     date: detail.date,
@@ -426,21 +459,27 @@ function buildDashRequestAppointment(detail, localStaff) {
     noShow: false,
     canceled: false,
     cancelComment: null,
-    type: DASH_REQUEST_TYPE,
+    type: "appointment",
     source: DASH_SOURCE,
-    status: "request",
+    status: "confirmed",
     requestWarning: null,
     dashBookingId: detail.dashBookingId,
+    dashOriginBookingId: detail.dashBookingId,
     dashStaffName: detail.staffName,
     selectedServices: [detail.service],
     privacySchemaVersion: null,
     hasPrivateContact: false,
-    lastEditedBy: "Dash Booking",
-    lastAction: "dash_request_created",
+    lastEditedBy: DASH_ACTOR_LABEL,
+    lastAction: "dash_appointment_added",
     lastMutationMode: "dash_import",
     revision: 1
   };
 }
+
+// Keep the old export temporarily so historical tests and any queued warm
+// instance can load the module during the staged rollout. New code uses the
+// confirmed-appointment name above.
+const buildDashRequestAppointment = buildDashAppointment;
 
 function rangesOverlap(startA, endA, startB, endB) {
   return Number(startA) < Number(endB) && Number(startB) < Number(endA);
@@ -468,29 +507,57 @@ function findDashRequestConflict({ detail, appointments = [], offWork = [] } = {
   return { conflict: false };
 }
 
-function buildDashStaffMessage(detail, { conflict = null } = {}) {
+function buildDashStaffMessage(detail, { eventType = "dash_appointment_added", conflict = null, previous = null } = {}) {
   const startMinutes = slotToMinutes(detail.start);
   const endMinutes = startMinutes + detail.duration * SLOT_MINUTES;
+  const range = `${detail.date}, ${minutesToTime(startMinutes)}-${minutesToTime(endMinutes)}`;
+  if (eventType === "dash_appointment_canceled") {
+    const reason = String(detail.cancellationReason || "").trim();
+    return [
+      "DASH BOOKING CANCELED",
+      `${detail.client} canceled the appointment with ${detail.staffName}.`,
+      `${detail.date} at ${minutesToTime(startMinutes)}. The time is available now.`,
+      ...(reason ? ["", `Reason: ${reason}`] : [])
+    ].join("\n");
+  }
+  if (eventType === "dash_appointment_rescheduled") {
+    const previousStaff = String(previous?.staffName || detail.staffName || "").trim();
+    const oldDate = String(previous?.date || detail.previousDate || "").trim();
+    const oldTime = String(previous?.time || detail.previousTime || "").trim();
+    const lines = [
+      "DASH BOOKING RESCHEDULED",
+      `${detail.client}'s appointment with ${detail.staffName} was changed.`,
+      "",
+      `From: ${oldDate || "previous date"}, ${oldTime || "previous time"}`,
+      `To: ${detail.date}, ${minutesToTime(startMinutes)}`,
+      detail.service
+    ];
+    if (previousStaff && previousStaff !== detail.staffName) {
+      lines.push(`Technician changed from ${previousStaff} to ${detail.staffName}.`);
+    }
+    return lines.join("\n");
+  }
   const lines = [
     "DASH BOOKING APPOINTMENT",
-    `${detail.client} requested ${detail.staffName}.`,
-    `${detail.date}, ${minutesToTime(startMinutes)}-${minutesToTime(endMinutes)}`,
+    `${detail.client} booked with ${detail.staffName}.`,
+    range,
     detail.service
   ];
   if (conflict?.conflict) {
     lines.push("");
     lines.push(conflict.reason === "off-work"
-      ? "The technician is off during this time. Please contact the client."
-      : "This time overlaps the salon calendar. Please contact the client.");
+      ? "This Dash appointment is already confirmed, but the technician is off during this time. Please resolve the conflict."
+      : "This Dash appointment is already confirmed, but the time overlaps the salon calendar. Please resolve the conflict.");
   } else {
     lines.push("");
-    lines.push("Open the blue request and confirm it in the calendar.");
+    lines.push("Added to the calendar automatically.");
   }
   return lines.join("\n");
 }
 
 module.exports = {
   DASH_BLOCK_PREFIX,
+  DASH_ACTOR_LABEL,
   DASH_CLOSE_MINUTES,
   DASH_OPEN_MINUTES,
   DASH_REQUEST_TYPE,
@@ -501,6 +568,7 @@ module.exports = {
   buildBlockDescription,
   buildBlockFingerprint,
   buildDashRequestAppointment,
+  buildDashAppointment,
   buildDashStaffMessage,
   buildQueueId,
   clipMinutesToDashHours,
@@ -513,6 +581,7 @@ module.exports = {
   normalizeStaffName,
   offWorkToDashBlock,
   parseDashAppointmentDetail,
+  parseDashAppointmentState,
   parseDashDurationMinutes,
   parseDashLongDate,
   parseDashNotification,
