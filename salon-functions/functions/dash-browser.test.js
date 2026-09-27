@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 
 const {
   buildAppointmentsDateUrl,
+  buildDashAuditAppointmentFromCard,
   buildCreateBlockUrl,
   buildEditBlockUrl,
   buildNotificationCandidates,
@@ -104,4 +105,25 @@ test("retries only transient Chromium navigation failures", () => {
     ),
     false
   );
+});
+
+test("builds a read-only audit appointment directly from a visible calendar card", () => {
+  const appointment = buildDashAuditAppointmentFromCard({
+    cardKey: "style|Sample Client\\nPedicure",
+    date: "2026-09-27",
+    lines: ["Sample Client", "Pedicure"],
+    isBlock: false,
+    dashStaffName: "Lan",
+    startMinutes: 10 * 60,
+    endMinutes: 11 * 60
+  });
+
+  assert.equal(appointment.date, "2026-09-27");
+  assert.equal(appointment.start, 8);
+  assert.equal(appointment.duration, 4);
+  assert.equal(appointment.client, "Sample Client");
+  assert.equal(appointment.service, "Pedicure");
+  assert.equal(appointment.staffName, "Lan");
+  assert.equal(appointment.auditSummaryOnly, true);
+  assert.match(appointment.dashBookingId, /^audit_[a-f0-9]{40}$/);
 });

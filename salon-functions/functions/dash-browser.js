@@ -128,6 +128,8 @@ async function launchDashBrowser({ executablePath = "" } = {}) {
 }
 
 async function prepareDashPage(page) {
+  await page.setBypassServiceWorker(true);
+  await page.setCacheEnabled(false);
   await page.setUserAgent(
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
     "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
@@ -752,7 +754,13 @@ function addDateDays(dateKey, days) {
 
 async function waitForDashCalendar(page) {
   await page.waitForSelector('input[placeholder="Select date"]', { timeout: DEFAULT_TIMEOUT_MS });
-  await page.waitForSelector(".react-grid-layout", { timeout: DEFAULT_TIMEOUT_MS });
+  await page.waitForFunction(
+    () => Array.from(document.querySelectorAll("h4")).some(element => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 100 && rect.height > 0;
+    }),
+    { timeout: DEFAULT_TIMEOUT_MS }
+  );
   try {
     await page.waitForFunction(
       () => !document.querySelector(".ant-spin-spinning"),
@@ -764,9 +772,7 @@ async function waitForDashCalendar(page) {
   await new Promise(resolve => setTimeout(resolve, 250));
 }
 
-async function readDashCalendarCards(page, date) {
-  await navigateDashPage(page, buildAppointmentsDateUrl(date));
-  await waitForDashCalendar(page);
+async function collectDashCalendarCards(page, date) {
   return page.evaluate(currentDate => {
     const staffHeadings = Array.from(document.querySelectorAll("h4"))
       .map(element => ({
@@ -805,6 +811,101 @@ async function readDashCalendarCards(page, date) {
       };
     });
   }, date);
+}
+
+async function readDashCalendarCards(page, date) {
+  await navigateDashPage(page, buildAppointmentsDateUrl(date));
+  await waitForDashCalendar(page);
+  return collectDashCalendarCards(page, date);
+}
+
+function buildDashAuditAppointmentFromCard(card) {
+  const startMinutes = Number(card?.startMinutes);
+  const endMinutes = Number(card?.endMinutes);
+  const start = Math.round((startMinutes - 8 * 60) / 15);
+  const duration = Math.round((endMinutes - startMinutes) / 15);
+  const lines = Array.isArray(card?.lines) ? card.lines.map(line => String(line || "").trim()).filter(Boolean) : [];
+  if (
+    card?.isBlock === true || !String(card?.date || "") || !String(card?.dashStaffName || "").trim() ||
+    !Number.isInteger(start) || start < 0 || !Number.isInteger(duration) || duration < 1 || lines.length < 1
+  ) return null;
+  return {
+    dashBookingId: `audit_${stableHash(String(card.cardKey || "")).slice(0, 40)}`,
+    client: lines[0],
+    date: String(card.date),
+    start,
+    duration,
+    service: String(lines.slice(1).join(" ") || "Dash Booking appointment"),
+    staffName: String(card.dashStaffName).trim(),
+    sourceUrl: buildAppointmentsDateUrl(card.date),
+    dashStatus: "confirmed",
+    canceledByClient: false,
+    cancellationReason: "",
+    previousDate: "",
+    previousTime: "",
+    rescheduledDate: "",
+    rescheduledTime: "",
+    auditSummaryOnly: true
+  };
+}
+
+async function openDashAuditCalendarPage(browser, date) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const page = await browser.newPage();
+    try {
+      await prepareDashPage(page);
+      await navigateDashPage(page, buildAppointmentsDateUrl(date));
+      await waitForDashCalendar(page);
+      return page;
+    } catch (error) {
+      lastError = error;
+      if (!page.isClosed()) await page.close().catch(() => {});
+      const retryable = (
+        isRetryableNavigationError(error) ||
+        /waiting failed|timeout|navigation/i.test(String(error?.message || error || ""))
+      );
+      if (!retryable || attempt === 3) throw error;
+    }
+  }
+  throw lastError;
+}
+
+async function readDashCalendarRangeForAudit(browser, { startDate, endDate } = {}) {
+  const appointments = [];
+  const blocks = [];
+  const days = [];
+  let date = String(startDate || "");
+  const last = String(endDate || "");
+  for (let guard = 0; date && last && date <= last && guard < 62; guard += 1) {
+    const page = await openDashAuditCalendarPage(browser, date);
+    try {
+      const cards = await collectDashCalendarCards(page, date);
+      const dayBlocks = cards.filter(item => item.isBlock).map(item => ({
+        date,
+        start: minutesToTime(item.startMinutes),
+        end: minutesToTime(item.endMinutes),
+        dashStaffName: item.dashStaffName,
+        description: item.description,
+        observedKey: stableHash(item.cardKey)
+      })).filter(item => item.start && item.end && item.dashStaffName);
+      const dayAppointments = cards
+        .map(buildDashAuditAppointmentFromCard)
+        .filter(Boolean);
+      appointments.push(...dayAppointments);
+      blocks.push(...dayBlocks);
+      days.push({
+        date,
+        appointments: dayAppointments.length,
+        blocks: dayBlocks.length,
+        cards: cards.length
+      });
+    } finally {
+      if (!page.isClosed()) await page.close().catch(() => {});
+    }
+    date = addDateDays(date, 1);
+  }
+  return { startDate, endDate, appointments, blocks, days };
 }
 
 async function openDashCalendarCard(page, date, cardKey) {
@@ -870,13 +971,16 @@ async function readDashCalendarRange(page, { startDate, endDate } = {}) {
 
 function createDashBrowserClient(page, options = {}) {
   const dryRun = options.dryRun === true;
+  const auditBrowser = options.auditBrowser || null;
   return {
     createBlock: block => createBlock(page, block, { dryRun }),
     updateBlock: (link, block) => updateBlock(page, link, block, { dryRun }),
     deleteBlock: link => deleteBlock(page, link, { dryRun }),
     readNewDashAppointments: input => readNewDashAppointments(page, input),
     readDashEvents: input => readNewDashAppointments(page, input),
-    readCalendarRange: input => readDashCalendarRange(page, input)
+    readCalendarRange: input => auditBrowser
+      ? readDashCalendarRangeForAudit(auditBrowser, input)
+      : readDashCalendarRange(page, input)
   };
 }
 
@@ -887,6 +991,7 @@ module.exports = {
   buildCreateBlockUrl,
   buildEditBlockUrl,
   buildAppointmentsDateUrl,
+  buildDashAuditAppointmentFromCard,
   createBlock,
   createAuthenticatedDashPage,
   createDashBrowserClient,
@@ -905,6 +1010,7 @@ module.exports = {
   readDashCalendarCards,
   readDashCalendarDay,
   readDashCalendarRange,
+  readDashCalendarRangeForAudit,
   readNewDashAppointments,
   readSelectedAntLabel,
   selectAntValue,

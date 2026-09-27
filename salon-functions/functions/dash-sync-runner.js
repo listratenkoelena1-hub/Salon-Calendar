@@ -570,7 +570,7 @@ async function runDashAuditWithBrowser({
   const browser = await launchDashBrowser({ executablePath });
   try {
     const page = await createAuthenticatedDashPage(browser, { email, password });
-    const client = createDashBrowserClient(page, { dryRun: true });
+    const client = createDashBrowserClient(page, { dryRun: true, auditBrowser: browser });
     return runDashAudit({
       db,
       FieldValue,
