@@ -276,6 +276,7 @@ module.exports = {
   decodeFirestoreFields,
   decodeFirestoreValue,
   documentFromRest,
+  getFirebaseCliAccessToken,
   parseOptions,
   run
 };

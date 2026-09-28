@@ -7,6 +7,7 @@ const {
   appointmentToDashBlock,
   buildCanonicalBlockKey,
   buildDashAppointment,
+  dashOriginAppointmentToDashTailBlock,
   findDashRequestConflict,
   getDashRequestDocumentId,
   offWorkToDashBlock,
@@ -73,7 +74,7 @@ test("builds an appointment block and clips it to Dash business hours", () => {
   );
 });
 
-test("does not block canceled, pending, Dash-origin, or out-of-hours appointments", () => {
+test("does not block canceled, pending, unlinked Dash-origin, or out-of-hours appointments", () => {
   const staff = { id: "staff-c", name: "Cindy" };
   const base = {
     id: "appt-2",
@@ -84,9 +85,54 @@ test("does not block canceled, pending, Dash-origin, or out-of-hours appointment
   };
   assert.equal(appointmentToDashBlock({ ...base, canceled: true }, staff).reason, "inactive-appointment");
   assert.equal(appointmentToDashBlock({ ...base, type: "online_booking_request", status: "request" }, staff).reason, "pending-online-request");
-  assert.equal(appointmentToDashBlock({ ...base, source: "dash_booking" }, staff).reason, "dash-origin");
+  assert.equal(appointmentToDashBlock({ ...base, source: "dash_booking" }, staff).reason, "dash-origin-unlinked");
   assert.equal(appointmentToDashBlock({ ...base, start: 48 }, staff).reason, "outside-dash-hours");
   assert.equal(appointmentToDashBlock({ ...base, start: -1 }, staff).reason, "unspecified-start");
+});
+
+test("creates only the extra tail when a Dash-origin appointment is longer in Rose", () => {
+  const appointment = {
+    id: "dash-local-1",
+    date: "2026-09-28",
+    staffId: "staff-o",
+    start: 30,
+    duration: 14,
+    source: "dash_booking",
+    dashBookingId: "dash-1",
+    dashOriginDate: "2026-09-28",
+    dashOriginStart: 30,
+    dashOriginDuration: 12,
+    dashOriginStaffName: "Olha"
+  };
+  const result = dashOriginAppointmentToDashTailBlock(
+    appointment,
+    { id: "staff-o", name: "Olha" }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.block.start, "18:30");
+  assert.equal(result.block.end, "19:00");
+  assert.equal(result.block.description, "Rose Calendar | appt-tail:dash-local-1");
+  assert.equal(appointmentToDashBlock(appointment, { id: "staff-o", name: "Olha" }).ok, true);
+});
+
+test("reports shorter or moved Dash-origin appointments instead of blocking over them", () => {
+  const base = {
+    id: "dash-local-2",
+    date: "2026-09-28",
+    staffId: "staff-o",
+    start: 30,
+    duration: 10,
+    source: "dash_booking",
+    dashBookingId: "dash-2",
+    dashOriginDate: "2026-09-28",
+    dashOriginStart: 30,
+    dashOriginDuration: 12,
+    dashOriginStaffName: "Olha"
+  };
+  const staff = { id: "staff-o", name: "Olha" };
+  assert.equal(appointmentToDashBlock(base, staff).reason, "dash-origin-shorter");
+  assert.equal(appointmentToDashBlock({ ...base, start: 31 }, staff).reason, "dash-origin-placement-changed");
 });
 
 test("maps an all-day off-work record to the Dash 10 AM-8 PM window", () => {
@@ -257,6 +303,35 @@ test("parses the current View Appointment page with linked client and split staf
   assert.equal(detail.staffName, "Lan");
 });
 
+test("sums every sequential service in one Dash appointment", () => {
+  const detail = parseDashAppointmentDetail({
+    url: "https://www.partnersdash.com/appointments/view?aid=multi-service",
+    clientHint: "Sample Client",
+    text: [
+      "View Appointment",
+      "Monday, 28 Sep 2026",
+      "03:30 pm",
+      "Refill Lashes",
+      "1h 15min -",
+      "Olha",
+      "04:45 pm",
+      "Eye brow Wax",
+      "15min -",
+      "Olha",
+      "05:00 pm",
+      "Nail Refill",
+      "1h 30min -",
+      "Olha",
+      "Dash Booking"
+    ].join("\n")
+  });
+
+  assert.equal(detail.start, 30);
+  assert.equal(detail.duration, 12);
+  assert.equal(detail.staffName, "Olha");
+  assert.equal(detail.service, "Refill Lashes + Eye brow Wax + Nail Refill");
+});
+
 test("resolves the local technician and builds a confirmed Dash appointment", () => {
   const localStaff = resolveLocalStaffForDashName([
     { id: "local-tanya", name: "Tatyana" },
@@ -280,6 +355,10 @@ test("resolves the local technician and builds a confirmed Dash appointment", ()
   assert.equal(appointment.status, "confirmed");
   assert.equal(appointment.lastEditedBy, "DashBooking");
   assert.equal(appointment.lastAction, "dash_appointment_added");
+  assert.equal(appointment.dashOriginDate, detail.date);
+  assert.equal(appointment.dashOriginStart, detail.start);
+  assert.equal(appointment.dashOriginDuration, detail.duration);
+  assert.equal(appointment.dashOriginStaffName, detail.staffName);
   assert.equal(appointment.hasClientHistory, false);
   assert.match(getDashRequestDocumentId(detail.dashBookingId), /^dash_[a-f0-9]{40}$/);
 });

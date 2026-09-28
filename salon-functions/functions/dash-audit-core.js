@@ -66,7 +66,7 @@ function localOverlapsDash(local, dash) {
 }
 
 function isIntegrationBlock(block) {
-  return /^Rose Calendar\s*\|\s*(?:appt|off):/i.test(String(block?.description || "").trim());
+  return /^Rose Calendar\s*\|\s*(?:appt|appt-tail|off):/i.test(String(block?.description || "").trim());
 }
 
 function sameBlockOwner(left, right) {

@@ -250,7 +250,11 @@ function stableHash(value) {
 }
 
 function buildBlockDescription(sourceType, sourceId) {
-  const type = sourceType === "off_work" ? "off" : "appt";
+  const type = sourceType === "off_work"
+    ? "off"
+    : sourceType === "appointment_tail"
+      ? "appt-tail"
+      : "appt";
   return `${DASH_BLOCK_PREFIX} | ${type}:${String(sourceId || "").trim()}`;
 }
 
@@ -303,6 +307,53 @@ function isDashOriginAppointment(appointment) {
     Boolean(appointment?.dashBookingId || appointment?.dashOriginBookingId);
 }
 
+function dashOriginAppointmentToDashTailBlock(appointment, localStaff, overrides = {}) {
+  if (!appointment) return { ok: false, reason: "missing-appointment" };
+  if (!isIsoDate(appointment.date)) return { ok: false, reason: "invalid-date" };
+  const startSlot = Number(appointment.start);
+  const duration = Number(appointment.duration);
+  const originStartSlot = Number(appointment.dashOriginStart);
+  const originDuration = Number(appointment.dashOriginDuration);
+  if (!Number.isInteger(startSlot) || startSlot < 0) {
+    return { ok: false, reason: "unspecified-start" };
+  }
+  if (!Number.isInteger(duration) || duration < 1) {
+    return { ok: false, reason: "invalid-duration" };
+  }
+  if (!Number.isInteger(originStartSlot) || originStartSlot < 0 ||
+      !Number.isInteger(originDuration) || originDuration < 1) {
+    return { ok: false, reason: "dash-origin-unlinked" };
+  }
+  const mapping = resolveDashStaff(localStaff, overrides);
+  if (!mapping.ok) return mapping;
+  const originDate = String(appointment.dashOriginDate || appointment.date || "");
+  const originStaff = normalizeStaffName(appointment.dashOriginStaffName || "");
+  if (
+    originDate !== appointment.date ||
+    originStartSlot !== startSlot ||
+    (originStaff && originStaff !== normalizeStaffName(mapping.dashName))
+  ) {
+    return { ok: false, reason: "dash-origin-placement-changed" };
+  }
+  const originEndMinutes = slotToMinutes(originStartSlot) + originDuration * SLOT_MINUTES;
+  const localEndMinutes = slotToMinutes(startSlot) + duration * SLOT_MINUTES;
+  if (localEndMinutes < originEndMinutes) {
+    return { ok: false, reason: "dash-origin-shorter" };
+  }
+  if (localEndMinutes === originEndMinutes) {
+    return { ok: false, reason: "dash-origin-no-tail" };
+  }
+  const clipped = clipMinutesToDashHours(originEndMinutes, localEndMinutes);
+  if (!clipped) return { ok: false, reason: "outside-dash-hours" };
+  return makeBlockResult({
+    sourceType: "appointment_tail",
+    sourceId: appointment.id,
+    date: appointment.date,
+    ...clipped,
+    mapping
+  });
+}
+
 function appointmentToDashBlock(appointment, localStaff, overrides = {}) {
   if (!appointment) return { ok: false, reason: "missing-appointment" };
   if (appointment.canceled === true || appointment.noShow === true) {
@@ -312,7 +363,7 @@ function appointmentToDashBlock(appointment, localStaff, overrides = {}) {
     return { ok: false, reason: "pending-online-request" };
   }
   if (isDashOriginAppointment(appointment)) {
-    return { ok: false, reason: "dash-origin" };
+    return dashOriginAppointmentToDashTailBlock(appointment, localStaff, overrides);
   }
   if (!isIsoDate(appointment.date)) return { ok: false, reason: "invalid-date" };
   const startSlot = Number(appointment.start);
@@ -454,18 +505,36 @@ function parseDashAppointmentDetail({ text, url = "", clientHint = "", clientUrl
   ).trim();
   const dateLine = lines.find(line => parseDashLongDate(line)) || "";
   const date = parseDashLongDate(dateLine);
-  const timeLine = lines.find(line => /^\d{1,2}:\d{2}\s*(?:am|pm)$/i.test(line)) || "";
+  const timeIndexes = lines
+    .map((line, index) => (/^\d{1,2}:\d{2}\s*(?:am|pm)$/i.test(line) ? index : -1))
+    .filter(index => index >= 0);
+  const timeLine = timeIndexes.length ? lines[timeIndexes[0]] : "";
   const startMinutes = timeToMinutes(timeLine);
-  const durationStaffIndex = lines.findIndex(line => (
-    /^\s*(?:(?:\d+\s*h)(?:\s*\d+\s*min)?|\d+\s*min)\s*-\s*.*$/i.test(line)
-  ));
-  const durationStaffLine = durationStaffIndex >= 0 ? lines[durationStaffIndex] : "";
-  const durationMinutes = parseDashDurationMinutes(durationStaffLine);
-  const inlineStaffName = durationStaffLine.match(/-\s*(.+)$/)?.[1]?.trim() || "";
-  const staffName = inlineStaffName || String(lines[durationStaffIndex + 1] || "").trim();
-  const timeIndex = lines.indexOf(timeLine);
-  const serviceLine = timeIndex >= 0 ? String(lines[timeIndex + 1] || "") : "";
-  const service = serviceLine.replace(/\s+-\s+\$\s*[\d,.]+.*$/, "").trim();
+  const durationStaffIndexes = lines
+    .map((line, index) => (
+      /^\s*(?:(?:\d+\s*h)(?:\s*\d+\s*min)?|\d+\s*min)\s*-\s*.*$/i.test(line) ? index : -1
+    ))
+    .filter(index => index >= 0);
+  const durationStaffLines = durationStaffIndexes.map(index => lines[index]);
+  const durationMinutes = durationStaffLines.reduce((total, line) => (
+    total + Number(parseDashDurationMinutes(line) || 0)
+  ), 0) || null;
+  const staffNames = durationStaffIndexes.map(index => {
+    const inline = lines[index].match(/-\s*(.+)$/)?.[1]?.trim() || "";
+    return inline || String(lines[index + 1] || "").trim();
+  }).filter(Boolean);
+  const staffName = staffNames[0] || "";
+  const serviceNames = timeIndexes.map(index => (
+    String(lines[index + 1] || "").replace(/\s+-\s+\$\s*[\d,.]+.*$/, "").trim()
+  )).filter(Boolean);
+  const service = serviceNames.join(" + ");
+  /*
+   * A Dash appointment can contain several sequential service cards under one
+   * stable appointment id. Its duration is the sum of those cards, not merely
+   * the first card shown in the detail page.
+   */
+  const hasMixedStaff = staffNames.some(name => normalizeStaffName(name) !== normalizeStaffName(staffName));
+  if (hasMixedStaff) return null;
   const aid = String(url || "").match(/[?&]aid=([^&#]+)/)?.[1] || "";
   const dashClientId = String(clientUrl || "").match(/[?&]cid=([^&#]+)/)?.[1] || "";
   const start = startMinutes === null ? null : minutesToSlot(startMinutes);
@@ -533,6 +602,10 @@ function buildDashAppointment(detail, localStaff) {
     requestWarning: null,
     dashBookingId: detail.dashBookingId,
     dashOriginBookingId: detail.dashBookingId,
+    dashOriginDate: detail.date,
+    dashOriginStart: detail.start,
+    dashOriginDuration: detail.duration,
+    dashOriginStaffName: detail.staffName,
     dashStaffName: detail.staffName,
     selectedServices: [detail.service],
     privacySchemaVersion: detail.dashClientId ? 1 : null,
@@ -646,6 +719,7 @@ module.exports = {
   getDashRequestDocumentId,
   getCanonicalBlockInterval,
   getDirectoryEntryByDashName,
+  dashOriginAppointmentToDashTailBlock,
   isDashOriginAppointment,
   minutesToSlot,
   minutesToTime,

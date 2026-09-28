@@ -343,6 +343,8 @@ async function navigateDashPage(page, url, timeout = DEFAULT_TIMEOUT_MS) {
 }
 
 async function selectAntValue(page, selector, label, rawValue = "") {
+  const current = normalizeVisibleLabel(await readSelectedAntLabel(page, selector));
+  if (current === normalizeVisibleLabel(label)) return;
   await page.click(selector);
   await page.waitForSelector(".ant-select-dropdown .ant-select-item-option", { timeout: 10000 });
 
@@ -366,40 +368,47 @@ async function selectAntValue(page, selector, label, rawValue = "") {
   let selected = false;
   for (let attempt = 0; attempt < 24 && !selected; attempt += 1) {
     await new Promise(resolve => setTimeout(resolve, 40));
-    const result = await page.evaluate(({ labelValue, raw }) => {
-      const normalized = value => String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+    const optionHandles = await page.$$(".ant-select-dropdown .ant-select-item-option");
+    for (const optionHandle of optionHandles) {
+      const matches = await optionHandle.evaluate((item, values) => {
+        const normalized = value => String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+        const dropdown = item.closest(".ant-select-dropdown");
+        const style = dropdown ? window.getComputedStyle(dropdown) : null;
+        if (!style || style.display === "none" || style.visibility === "hidden") return false;
+        return (
+          normalized(item.getAttribute("title")) === normalized(values.labelValue) ||
+          normalized(item.textContent) === normalized(values.labelValue) ||
+          (values.raw && normalized(item.textContent) === normalized(values.raw))
+        );
+      }, { labelValue: label, raw: rawValue });
+      if (!matches) continue;
+      await optionHandle.click();
+      selected = true;
+      break;
+    }
+    if (selected) break;
+    const canContinue = await page.evaluate(() => {
       const dropdowns = Array.from(document.querySelectorAll(".ant-select-dropdown"));
       const dropdown = dropdowns.find(element => {
         const style = window.getComputedStyle(element);
         return style.display !== "none" && style.visibility !== "hidden";
       });
-      if (!dropdown) return { selected: false, canContinue: false };
-      const options = Array.from(dropdown.querySelectorAll(".ant-select-item-option"));
-      const option = options.find(item => (
-        normalized(item.getAttribute("title")) === normalized(labelValue) ||
-        normalized(item.textContent) === normalized(labelValue) ||
-        (raw && normalized(item.textContent) === normalized(raw))
-      ));
-      if (option) {
-        option.click();
-        return { selected: true, canContinue: false };
-      }
+      if (!dropdown) return false;
       const holder = dropdown.querySelector(".rc-virtual-list-holder");
-      if (!holder) return { selected: false, canContinue: false };
+      if (!holder) return false;
       const before = holder.scrollTop;
       const step = Math.max(Math.floor(holder.clientHeight * 0.75), 64);
       holder.scrollTop = Math.min(holder.scrollHeight - holder.clientHeight, before + step);
       holder.dispatchEvent(new Event("scroll", { bubbles: true }));
-      return { selected: false, canContinue: holder.scrollTop > before };
-    }, { labelValue: label, raw: rawValue });
-    selected = result.selected === true;
-    if (!selected && result.canContinue !== true) break;
+      return holder.scrollTop > before;
+    });
+    if (!canContinue) break;
   }
 
   if (!selected) throw new Error(`Dash option was not found: ${label}`);
   const chosen = normalizeVisibleLabel(await readSelectedAntLabel(page, selector));
   if (chosen !== normalizeVisibleLabel(label)) {
-    throw new Error(`Dash selected a different option instead of: ${label}`);
+    throw new Error(`Dash selected ${chosen || "nothing"} instead of ${normalizeVisibleLabel(label)}.`);
   }
 }
 
@@ -425,7 +434,10 @@ async function fillDescription(page, description) {
   const field = await page.$("#description");
   if (!field) throw new Error("Dash Block Time description field was not found.");
   await field.click();
-  await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+  const modifier = process.platform === "darwin" ? "Meta" : "Control";
+  await page.keyboard.down(modifier);
+  await page.keyboard.press("A");
+  await page.keyboard.up(modifier);
   await page.keyboard.press("Backspace");
   await field.type(String(description || ""));
 }
@@ -515,18 +527,38 @@ async function createBlockDirect(page, block) {
     () => location.pathname === "/appointments",
     { timeout: DEFAULT_TIMEOUT_MS }
   );
-  const created = await openExistingBlockByDescription(page, block);
-  if (!created?.dashBlockId) {
-    throw new Error("Dash did not expose the newly created Block Time.");
+  const cards = await readDashCalendarCards(page, block.date);
+  const created = cards.find(item => (
+    item.isBlock &&
+    normalizeVisibleLabel(item.dashStaffName) === normalizeVisibleLabel(block.dashStaffName) &&
+    minutesToTime(item.startMinutes) === block.start &&
+    minutesToTime(item.endMinutes) === block.end &&
+    String(item.description || "").trim() === String(block.description || "").trim()
+  ));
+  if (!created) {
+    throw new Error("Dash did not expose the newly created Block Time in the calendar.");
   }
-  return { dryRun: false, action: "created", ...created };
+  return { dryRun: false, action: "created", observedKey: stableHash(created.cardKey) };
 }
 
 async function createBlock(page, block, { dryRun = false } = {}) {
   const createUrl = buildCreateBlockUrl(block);
   if (dryRun) return { dryRun: true, action: "create", createUrl, block };
-  const existing = await openExistingBlockByDescription(page, block);
-  if (existing) return { dryRun: false, action: "adopted", ...existing };
+  const visibleCards = await readDashCalendarCards(page, block.date);
+  const visibleExisting = visibleCards.find(item => (
+    item.isBlock &&
+    normalizeVisibleLabel(item.dashStaffName) === normalizeVisibleLabel(block.dashStaffName) &&
+    minutesToTime(item.startMinutes) === block.start &&
+    minutesToTime(item.endMinutes) === block.end &&
+    String(item.description || "").trim() === String(block.description || "").trim()
+  ));
+  if (visibleExisting) {
+    return {
+      dryRun: false,
+      action: "adopted",
+      observedKey: stableHash(visibleExisting.cardKey)
+    };
+  }
 
   const conflicts = await findDashCalendarConflicts(page, block);
   if (conflicts.appointments.length) {
@@ -641,6 +673,16 @@ async function deleteBlock(page, link, { dryRun = false } = {}) {
     await dialog.accept();
   });
   await clickButtonByText(page, ["delete"]);
+
+  // Current Dash builds can delete Block Time immediately without displaying
+  // a second confirmation surface. Treat the verified return to the calendar
+  // as the authoritative success signal in that variant.
+  try {
+    await page.waitForFunction(() => location.pathname === "/appointments", { timeout: 2500 });
+    return { dryRun: false, action: "deleted" };
+  } catch (_directDeleteWaitError) {
+    // Older builds use either a native confirm or an Ant Design dialog below.
+  }
 
   if (!nativeDialogHandled) {
     try {
@@ -761,6 +803,15 @@ async function parseDashAppointmentPage(page) {
   });
 }
 
+async function readDashAppointmentById(page, dashBookingId) {
+  const bookingId = String(dashBookingId || "").trim();
+  if (!bookingId) throw new Error("A Dash appointment id is required.");
+  const url = `${DASH_APPOINTMENTS_URL}/view?aid=${encodeURIComponent(bookingId)}`;
+  await navigateDashPage(page, url);
+  await waitForDashAppointmentDetail(page);
+  return parseDashAppointmentPage(page);
+}
+
 async function readNewDashAppointments(page, { knownNotificationKeys = new Set(), limit = 20 } = {}) {
   const summaries = await readNotificationSummaries(page, limit);
   const candidates = buildNotificationCandidates(summaries);
@@ -874,6 +925,21 @@ async function collectDashCalendarCards(page, date) {
   }, date);
 }
 
+async function clickDashCalendarCardByKey(page, cardKey) {
+  const handles = await page.$$(".react-grid-item");
+  for (const handle of handles) {
+    const currentKey = await handle.evaluate(element => {
+      const text = String(element.innerText || "").replace(/\r/g, "").trim();
+      const style = String(element.getAttribute("style") || "");
+      return `${style}|${text}`;
+    });
+    if (currentKey !== cardKey) continue;
+    await handle.click();
+    return true;
+  }
+  return false;
+}
+
 function classifyDashCalendarConflicts(cards, block) {
   const startMinutes = timeToMinutes(block?.start);
   const endMinutes = timeToMinutes(block?.end);
@@ -888,7 +954,7 @@ function classifyDashCalendarConflicts(cards, block) {
     if (!(startMinutes < card.endMinutes && card.startMinutes < endMinutes)) continue;
     if (!card.isBlock) {
       result.appointments.push(card);
-    } else if (/^Rose Calendar\s*\|\s*(?:appt|off):/i.test(String(card.description || "").trim())) {
+    } else if (/^Rose Calendar\s*\|\s*(?:appt|appt-tail|off):/i.test(String(card.description || "").trim())) {
       result.integrationBlocks.push(card);
     } else {
       result.manualBlocks.push(card);
@@ -900,16 +966,7 @@ function classifyDashCalendarConflicts(cards, block) {
 async function openDashBlockCard(page, card) {
   await navigateDashPage(page, buildAppointmentsDateUrl(card.date));
   await waitForDashCalendar(page);
-  const opened = await page.evaluate(cardKey => {
-    const match = Array.from(document.querySelectorAll(".react-grid-item")).find(element => {
-      const text = String(element.innerText || "").replace(/\r/g, "").trim();
-      const style = String(element.getAttribute("style") || "");
-      return `${style}|${text}` === cardKey;
-    });
-    if (!match) return false;
-    match.click();
-    return true;
-  }, card.cardKey);
+  const opened = await clickDashCalendarCardByKey(page, card.cardKey);
   if (!opened) throw new Error("The overlapping Dash Block Time could not be reopened safely.");
   await page.waitForFunction(
     () => location.pathname.endsWith("/appointments/block-time") && new URL(location.href).searchParams.has("aid"),
@@ -956,16 +1013,7 @@ async function openDashCalendarCard(page, date, cardKey) {
   const cards = await readDashCalendarCards(page, date);
   const candidate = cards.find(item => item.cardKey === cardKey);
   if (!candidate) return null;
-  const clicked = await page.evaluate(key => {
-    const element = Array.from(document.querySelectorAll(".react-grid-item")).find(item => {
-      const style = String(item.getAttribute("style") || "");
-      const text = String(item.innerText || "").replace(/\r/g, "").trim();
-      return `${style}|${text}` === key;
-    });
-    if (!element) return false;
-    element.click();
-    return true;
-  }, cardKey);
+  const clicked = await clickDashCalendarCardByKey(page, cardKey);
   if (!clicked) return null;
   await waitForDashAppointmentDetail(page);
   return parseDashAppointmentPage(page);
@@ -1061,6 +1109,7 @@ module.exports = {
   readDashCalendarCards,
   readDashCalendarDay,
   readDashCalendarRange,
+  readDashAppointmentById,
   readNewDashAppointments,
   readSelectedAntLabel,
   selectAntValue,
