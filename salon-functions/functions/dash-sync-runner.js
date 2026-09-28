@@ -10,7 +10,8 @@ const {
   minutesToTime,
   offWorkToDashBlock,
   resolveDashStaff,
-  resolveLocalStaffForDashName
+  resolveLocalStaffForDashName,
+  slotToMinutes
 } = require("./dash-sync-core");
 const { buildDashAuditPlan } = require("./dash-audit-core");
 const {
@@ -46,6 +47,10 @@ const APPOINTMENT_SCHEDULE_COLLECTION = "appointmentSchedules";
 const STAFF_MESSAGE_TTL_MS = 60 * 24 * 60 * 60 * 1000;
 const DEFAULT_HORIZON_DAYS = 30;
 const DEFAULT_QUEUE_LIMIT = 25;
+const DASH_OUTBOUND_MISMATCH_REASONS = new Set([
+  "dash-origin-shorter",
+  "dash-origin-placement-changed"
+]);
 
 function clampInteger(value, min, max, fallback) {
   const number = Number(value);
@@ -57,6 +62,44 @@ function sanitizeError(error) {
   return String(error?.message || error || "Unknown Dash sync error")
     .replace(/password|secret|credential/gi, "protected value")
     .slice(0, 500);
+}
+
+function formatAppointmentInterval(date, start, duration) {
+  const startSlot = Number(start);
+  const slotCount = Number(duration);
+  if (!date || !Number.isInteger(startSlot) || !Number.isInteger(slotCount) || slotCount < 1) {
+    return String(date || "Unknown date");
+  }
+  const startMinutes = slotToMinutes(startSlot);
+  return `${date}, ${minutesToTime(startMinutes)}-${minutesToTime(startMinutes + slotCount * 15)}`;
+}
+
+function buildDashOutboundMismatchMessage(appointment, localStaff, reason) {
+  const client = String(appointment?.client || "A client").trim() || "A client";
+  const roseStaff = String(localStaff?.name || localStaff?.displayName || "technician").trim();
+  const dashStaff = String(appointment?.dashOriginStaffName || roseStaff).trim();
+  const roseInterval = formatAppointmentInterval(
+    appointment?.date,
+    appointment?.start,
+    appointment?.duration
+  );
+  const dashInterval = formatAppointmentInterval(
+    appointment?.dashOriginDate || appointment?.date,
+    appointment?.dashOriginStart,
+    appointment?.dashOriginDuration
+  );
+  const explanation = reason === "dash-origin-shorter"
+    ? `${client}'s time in Rose Calendar is shorter than the confirmed Dash Booking appointment.`
+    : `${client}'s date, time, or technician in Rose Calendar no longer matches Dash Booking.`;
+  return [
+    "DASH BOOKING TIME MISMATCH",
+    explanation,
+    "",
+    `Rose Calendar: ${roseInterval} · ${roseStaff}`,
+    `Dash Booking: ${dashInterval} · ${dashStaff}`,
+    "",
+    "Dash Booking was not changed. Please check this appointment manually."
+  ].join("\n");
 }
 
 function isTerminalIncomingStatus(value) {
@@ -88,6 +131,12 @@ function dashCycleNeedsBrowser(config, hasPendingQueue) {
   return config.inboundEnabled === true || (
     config.writeEnabled === true && hasPendingQueue === true
   );
+}
+
+function resolveStableDashLink(result = {}, existingLink = {}) {
+  const dashBlockId = String(result.dashBlockId || existingLink?.dashBlockId || "").trim();
+  const editUrl = String(result.editUrl || existingLink?.editUrl || "").trim();
+  return dashBlockId && editUrl ? { dashBlockId, editUrl } : null;
 }
 
 function getDashPollingWindow(date = new Date(), timeZone = "America/Edmonton") {
@@ -123,6 +172,25 @@ function getDashPollingWindow(date = new Date(), timeZone = "America/Edmonton") 
   };
 }
 
+function getReconciliationRange(startDate, horizonDays = DEFAULT_HORIZON_DAYS) {
+  const dayCount = clampInteger(horizonDays, 1, 30, DEFAULT_HORIZON_DAYS);
+  return {
+    startDate,
+    endDate: addDateKeyDays(startDate, dayCount - 1),
+    horizonDays: dayCount
+  };
+}
+
+function getDailyReconciliationWindows(today, horizonDays = DEFAULT_HORIZON_DAYS) {
+  const range = getReconciliationRange(today, horizonDays);
+  const edgeDate = range.endDate;
+  const windows = [{ startDate: today, horizonDays: 1, purpose: "today" }];
+  if (edgeDate !== today) {
+    windows.push({ startDate: edgeDate, horizonDays: 1, purpose: "rolling_edge" });
+  }
+  return windows;
+}
+
 async function loadDashConfig(db) {
   const snapshot = await db.collection(DASH_CONFIG_COLLECTION).doc("runtime").get();
   return buildDefaultConfig(snapshot.exists ? snapshot.data() : {});
@@ -150,12 +218,15 @@ async function loadLocalStaff(db, staffId) {
 async function enqueueDashSource({
   db,
   FieldValue,
+  Timestamp = null,
   sourceType,
   sourceId,
   before = null,
   after = null,
   localStaffOverride = undefined,
-  mappingsOverride = undefined
+  mappingsOverride = undefined,
+  emitMismatchNotification = false,
+  staffRecordsOverride = undefined
 }) {
   const effective = after || before || {};
   const localStaff = localStaffOverride === undefined
@@ -173,9 +244,27 @@ async function enqueueDashSource({
   }
   const queueRef = db.collection(DASH_QUEUE_COLLECTION).doc(buildQueueId(sourceType, sourceId));
   const issueRef = db.collection(DASH_ISSUE_COLLECTION).doc(queueRef.id);
+  const mismatchReason = DASH_OUTBOUND_MISMATCH_REASONS.has(desiredResult.reason);
+  const trackedIssueReason = ["unmapped-staff", "missing-local-staff"].includes(desiredResult.reason) || mismatchReason;
+  let mismatchNotification = null;
+  if (mismatchReason && emitMismatchNotification) {
+    let staffRecords = staffRecordsOverride;
+    if (staffRecords === undefined) {
+      const staffSnap = await db.collection("staff").get();
+      staffRecords = staffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+    }
+    mismatchNotification = {
+      staffRecords: [
+        { id: ANYONE_ID, name: "Anyone", active: true },
+        ...(Array.isArray(staffRecords) ? staffRecords : [])
+      ],
+      message: buildDashOutboundMismatchMessage(effective, localStaff, desiredResult.reason)
+    };
+  }
 
   await db.runTransaction(async transaction => {
     const current = await transaction.get(queueRef);
+    const currentIssue = trackedIssueReason ? await transaction.get(issueRef) : null;
     const version = Number(current.data()?.version || 0) + 1;
     transaction.set(queueRef, {
       sourceType,
@@ -193,15 +282,58 @@ async function enqueueDashSource({
       lastAttemptAt: FieldValue.delete()
     }, { merge: true });
 
-    if (["unmapped-staff", "missing-local-staff"].includes(desiredResult.reason)) {
+    if (trackedIssueReason) {
+      const previousIssue = currentIssue?.exists ? currentIssue.data() || {} : {};
+      const sameMismatch = previousIssue.reason === desiredResult.reason;
+      const shouldNotify = mismatchReason && emitMismatchNotification && (
+        !sameMismatch || previousIssue.notificationSent !== true
+      );
       transaction.set(issueRef, {
         sourceType,
         sourceId,
         staffId: String(effective.staffId || ""),
         staffName: String(localStaff?.name || localStaff?.displayName || ""),
         reason: desiredResult.reason,
+        date: String(effective.date || ""),
+        roseStart: Number.isInteger(Number(effective.start)) ? Number(effective.start) : null,
+        roseDuration: Number.isInteger(Number(effective.duration)) ? Number(effective.duration) : null,
+        dashDate: String(effective.dashOriginDate || effective.date || ""),
+        dashStart: Number.isInteger(Number(effective.dashOriginStart)) ? Number(effective.dashOriginStart) : null,
+        dashDuration: Number.isInteger(Number(effective.dashOriginDuration)) ? Number(effective.dashOriginDuration) : null,
+        notificationSent: mismatchReason
+          ? (shouldNotify || (sameMismatch && previousIssue.notificationSent === true))
+          : false,
         updatedAt: FieldValue.serverTimestamp()
       }, { merge: true });
+      if (shouldNotify && mismatchNotification) {
+        const eventDocumentId = `dash_outbound_mismatch_${sourceId}`;
+        const eventType = "dash_appointment_time_mismatch";
+        transaction.set(db.collection("staffMessages").doc(eventDocumentId), buildDashMessageDoc({
+          FieldValue,
+          Timestamp,
+          message: mismatchNotification.message,
+          eventType,
+          entityType: "appointment",
+          entityId: sourceId,
+          staffId: String(effective.staffId || ""),
+          staffName: String(localStaff?.name || localStaff?.displayName || ""),
+          staffRecords: mismatchNotification.staffRecords,
+          conflict: true
+        }));
+        transaction.set(db.collection("activityLog").doc(eventDocumentId), buildDashActivityLogDoc({
+          FieldValue,
+          detail: {
+            date: String(effective.date || ""),
+            client: String(effective.client || ""),
+            service: String(effective.note || "")
+          },
+          eventType,
+          entityType: "appointment",
+          entityId: sourceId,
+          staffId: String(effective.staffId || ""),
+          message: mismatchNotification.message
+        }));
+      }
     } else {
       transaction.delete(issueRef);
     }
@@ -304,7 +436,7 @@ async function processDashQueue({ db, FieldValue, client, dryRun, limit = DEFAUL
         await finishQueueItem({ db, queueRef: queueDoc.ref, expectedVersion: queue.version });
         continue;
       }
-      if (link?.fingerprint === desired.fingerprint) {
+      if (link?.fingerprint === desired.fingerprint && resolveStableDashLink({}, link)) {
         report.noop += 1;
         await finishQueueItem({ db, queueRef: queueDoc.ref, expectedVersion: queue.version });
         continue;
@@ -326,6 +458,12 @@ async function processDashQueue({ db, FieldValue, client, dryRun, limit = DEFAUL
       }
 
       const action = result.action || (link ? "updated" : "created");
+      const stableLink = resolveStableDashLink(result, link);
+      if (!stableLink) {
+        const error = new Error("Dash Block Time was saved but its stable id could not be verified.");
+        error.code = "DASH_BLOCK_ID_MISSING";
+        throw error;
+      }
       if (action === "created") report.created += 1;
       else if (action === "adopted") report.adopted += 1;
       else if (action === "recreated") report.recreated += 1;
@@ -340,8 +478,7 @@ async function processDashQueue({ db, FieldValue, client, dryRun, limit = DEFAUL
           sourceType: queue.sourceType,
           sourceId: queue.sourceId,
           ...desired,
-          dashBlockId: result.dashBlockId || link?.dashBlockId || "",
-          editUrl: result.editUrl || link?.editUrl || "",
+          ...stableLink,
           syncedAt: FieldValue.serverTimestamp(),
           lastAction: action
         }
@@ -527,9 +664,9 @@ async function runDashAudit({
   horizonDays = DEFAULT_HORIZON_DAYS,
   requestedBy = ""
 }) {
-  const safeHorizon = clampInteger(horizonDays, 1, 30, DEFAULT_HORIZON_DAYS);
-  // horizonDays is an inclusive calendar-day count: 1 means startDate only.
-  const endDate = addDateKeyDays(startDate, safeHorizon - 1);
+  const range = getReconciliationRange(startDate, horizonDays);
+  const safeHorizon = range.horizonDays;
+  const endDate = range.endDate;
   const now = new Date();
   const today = dateKeyInTimeZone(now);
   const currentMinute = minutesInTimeZone(now);
@@ -620,14 +757,18 @@ async function enqueueDashReconciliation({
   db,
   FieldValue,
   horizonDays = DEFAULT_HORIZON_DAYS,
-  today = dateKeyInTimeZone()
+  startDate = "",
+  today = ""
 }) {
-  const endDate = addDateKeyDays(today, horizonDays);
+  const rangeStart = String(startDate || today || dateKeyInTimeZone());
+  const range = getReconciliationRange(rangeStart, horizonDays);
+  const dayCount = range.horizonDays;
+  const endDate = range.endDate;
   const [appointmentSnap, offWorkSnap, weeklySnap, linkSnap, staffSnap, mappings] = await Promise.all([
-    db.collection("appointments").where("date", ">=", today).where("date", "<=", endDate).get(),
-    db.collection("OffWork").where("date", ">=", today).where("date", "<=", endDate).get(),
+    db.collection("appointments").where("date", ">=", rangeStart).where("date", "<=", endDate).get(),
+    db.collection("OffWork").where("date", ">=", rangeStart).where("date", "<=", endDate).get(),
     db.collection("WeeklyOff").get(),
-    db.collection(DASH_LINK_COLLECTION).where("date", ">=", today).where("date", "<=", endDate).get(),
+    db.collection(DASH_LINK_COLLECTION).where("date", ">=", rangeStart).where("date", "<=", endDate).get(),
     db.collection("staff").get(),
     loadDashMappings(db)
   ]);
@@ -664,11 +805,11 @@ async function enqueueDashReconciliation({
     .map(record => `${record.weeklyId}__${record.date}`));
   const weeklyDedupe = dedupeWeeklyOffRules(
     weeklySnap.docs.map(weeklyRuleFromSnapshot),
-    { asOfDate: today }
+    { asOfDate: rangeStart }
   );
   const weeklyRules = weeklyDedupe.records;
-  for (let offset = 0; offset <= horizonDays; offset += 1) {
-    const dateKey = addDateKeyDays(today, offset);
+  for (let offset = 0; offset < dayCount; offset += 1) {
+    const dateKey = addDateKeyDays(rangeStart, offset);
     for (const rule of weeklyRules) {
       if (!weeklyRuleActiveOnDate(rule, dateKey)) continue;
       if (exceptions.has(`${rule.id}__${dateKey}`)) continue;
@@ -697,7 +838,7 @@ async function enqueueDashReconciliation({
   let cleanupQueued = 0;
   for (const linkDoc of linkSnap.docs) {
     const link = linkDoc.data() || {};
-    if (link.date && (link.date < today || link.date > endDate)) continue;
+    if (link.date && (link.date < rangeStart || link.date > endDate)) continue;
     if (desiredKeys.has(linkDoc.id)) continue;
     await db.collection(DASH_QUEUE_COLLECTION).doc(linkDoc.id).set({
       sourceType: link.sourceType || "appointment",
@@ -716,8 +857,10 @@ async function enqueueDashReconciliation({
   }
 
   return {
-    today,
+    today: rangeStart,
+    startDate: rangeStart,
     endDate,
+    horizonDays: dayCount,
     appointments: appointmentSnap.size,
     offWork: offWorkSnap.size,
     weeklyRuleDocuments: weeklySnap.size,
@@ -760,14 +903,15 @@ function buildDashMessageDoc({
     dash_appointment_added: "Dash Booking appointment",
     dash_appointment_canceled: "Dash Booking canceled",
     dash_appointment_rescheduled: "Dash Booking rescheduled",
-    dash_appointment_conflict: "Dash Booking conflict"
+    dash_appointment_conflict: "Dash Booking conflict",
+    dash_appointment_time_mismatch: "Dash Booking time mismatch"
   };
   return {
     recipientStaffId: "",
     recipientStaffName: "",
     visibleToManager: true,
     visibleToAllStaff: true,
-    title: conflict ? "Dash Booking conflict" : (titles[eventType] || "Dash Booking appointment"),
+    title: titles[eventType] || (conflict ? "Dash Booking conflict" : "Dash Booking appointment"),
     body: message,
     eventType,
     entityType,
@@ -778,7 +922,9 @@ function buildDashMessageDoc({
     pushEligible: true,
     readBy: {},
     createdAt: FieldValue.serverTimestamp(),
-    expiresAt: Timestamp.fromDate(new Date(Date.now() + STAFF_MESSAGE_TTL_MS)),
+    expiresAt: Timestamp?.fromDate
+      ? Timestamp.fromDate(new Date(Date.now() + STAFF_MESSAGE_TTL_MS))
+      : new Date(Date.now() + STAFF_MESSAGE_TTL_MS),
     source: "dash_booking",
     messageGroupId: `dash-booking-${entityId}`,
     audienceVersion: 2,
@@ -1685,6 +1831,7 @@ module.exports = {
   DASH_RUN_COLLECTION,
   addDateKeyDays,
   buildDashMessageDoc,
+  buildDashOutboundMismatchMessage,
   buildDashActivityLogDoc,
   buildDashEventDocumentId,
   buildDefaultConfig,
@@ -1694,6 +1841,8 @@ module.exports = {
   enqueueDashReconciliation,
   enqueueDashSource,
   getDashPollingWindow,
+  getDailyReconciliationWindows,
+  getReconciliationRange,
   getWeeklyOffOccurrencesForDate,
   importDashAppointment,
   cancelDashAppointment,
@@ -1708,6 +1857,7 @@ module.exports = {
   runDashAudit,
   runDashAuditWithBrowser,
   runDashSyncCycle,
+  resolveStableDashLink,
   sanitizeError,
   weekdayForDateKey,
   weeklyRuleActiveOnDate

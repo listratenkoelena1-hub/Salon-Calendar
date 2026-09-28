@@ -9,6 +9,7 @@ const {
   buildEditBlockUrl,
   buildNotificationCandidates,
   classifyDashCalendarConflicts,
+  dashBlockCardMatches,
   dashNavigationReached,
   formatSafeDashPageState,
   getDashBlockIdFromUrl,
@@ -69,6 +70,27 @@ test("separates appointments, integration blocks, and replaceable manual overlap
   assert.equal(conflicts.appointments.length, 1);
   assert.equal(conflicts.integrationBlocks.length, 1);
   assert.equal(conflicts.manualBlocks.length, 1);
+});
+
+test("matches an integration block by owner, exact interval, and description before adopting its Dash id", () => {
+  const card = {
+    isBlock: true,
+    dashStaffName: "Natalia",
+    startMinutes: 600,
+    endMinutes: 690,
+    description: "Rose Calendar | appt:rose-123"
+  };
+  const block = {
+    dashStaffName: "Natalia",
+    start: "10:00",
+    end: "11:30",
+    description: "Rose Calendar | appt:rose-123"
+  };
+
+  assert.equal(dashBlockCardMatches(card, block), true);
+  assert.equal(dashBlockCardMatches({ ...card, endMinutes: 675 }, block), false);
+  assert.equal(dashBlockCardMatches({ ...card, dashStaffName: "Olha" }, block), false);
+  assert.equal(dashBlockCardMatches({ ...card, description: "" }, block), false);
 });
 
 test("keeps identical same-minute notifications as separate candidates", () => {

@@ -73,6 +73,7 @@ const {
   enqueueDashReconciliation,
   enqueueDashSource,
   dateKeyInTimeZone,
+  getDailyReconciliationWindows,
   getDashPollingWindow,
   loadDashConfig,
   makeWeeklyOccurrence,
@@ -4232,10 +4233,12 @@ exports.dashAppointmentWritten = onDocumentWritten(
     return enqueueDashSource({
       db,
       FieldValue,
+      Timestamp,
       sourceType: "appointment",
       sourceId: event.params.appointmentId,
       before,
-      after
+      after,
+      emitMismatchNotification: true
     });
   }
 );
@@ -4373,9 +4376,13 @@ exports.dashSyncEveryFifteenMinutes = onSchedule(
     const config = await loadDashConfig(db);
     if (!config.enabled) return { skipped: true, reason: "disabled" };
     if (pollingWindow.morningReconciliation && config.dailyReconciliationEnabled) {
-      // At 6:00 AM, rebuild today's queue before the same cycle opens Dash.
-      // Direct appointment/off-work triggers keep future changes queued overnight.
-      await enqueueDashReconciliation({ db, FieldValue, horizonDays: 0 });
+      // At 6:00 AM, rebuild today and the new far edge of the rolling window.
+      // This keeps recurring WeeklyOff occurrences available in Dash without
+      // rescanning all 30 days every morning.
+      const today = dateKeyInTimeZone();
+      for (const window of getDailyReconciliationWindows(today, config.horizonDays)) {
+        await enqueueDashReconciliation({ db, FieldValue, ...window });
+      }
     }
     const email = String(DASH_BOOKING_EMAIL.value() || "").trim();
     const password = String(DASH_BOOKING_PASSWORD.value() || "");

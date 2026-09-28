@@ -450,66 +450,14 @@ async function waitForBlockForm(page, expectedHeading) {
 }
 
 async function openExistingBlockByDescription(page, block) {
-  const dateUrl = buildAppointmentsDateUrl(block.date);
-  const openDate = async () => {
-    await page.goto(dateUrl, {
-      waitUntil: "domcontentloaded",
-      timeout: DEFAULT_TIMEOUT_MS
-    });
-    await page.waitForSelector('input[placeholder="Select date"]', {
-      timeout: DEFAULT_TIMEOUT_MS
-    });
-    await page.waitForSelector(".react-grid-layout", { timeout: DEFAULT_TIMEOUT_MS });
-    try {
-      await page.waitForFunction(
-        () => !document.querySelector(".ant-spin-spinning"),
-        { timeout: 10000 }
-      );
-    } catch (_error) {
-      // Some Dash builds leave an unrelated hidden spinner mounted. The
-      // rendered grid is still the authoritative signal used below.
-    }
-    await new Promise(resolve => setTimeout(resolve, 250));
-  };
-
-  await openDate();
-  const matchingCount = await page.$$eval("span", (items, value) => items.filter(item => (
-    String(item.textContent || "").trim() === value &&
-    item.closest(".react-grid-item")
-  )).length, block.description);
-
-  for (let matchIndex = 0; matchIndex < matchingCount; matchIndex += 1) {
-    if (matchIndex > 0) await openDate();
-    const opened = await page.evaluate(({ value, index }) => {
-      const labels = Array.from(document.querySelectorAll("span")).filter(item => (
-        String(item.textContent || "").trim() === value &&
-        item.closest(".react-grid-item")
-      ));
-      const card = labels[index]?.closest(".react-grid-item");
-      if (!card) return false;
-      card.click();
-      return true;
-    }, { value: block.description, index: matchIndex });
-    if (!opened) continue;
-    await page.waitForFunction(
-      () => location.pathname.endsWith("/appointments/block-time") && new URL(location.href).searchParams.has("aid"),
-      { timeout: DEFAULT_TIMEOUT_MS }
-    );
-    const editUrl = page.url();
-    const dashBlockId = getDashBlockIdFromUrl(editUrl);
-    const dashStaffId = getDashStaffIdFromUrl(editUrl);
-    const dashStaffName = await readSelectedAntLabel(page, "#staff");
-    const staffMatches = !block.dashStaffId
-      ? true
-      : dashStaffId
-        ? dashStaffId === block.dashStaffId
-        : normalizeVisibleLabel(dashStaffName) === normalizeVisibleLabel(block.dashStaffName);
-    if (
-      dashBlockId &&
-      staffMatches
-    ) {
-      return { dashBlockId, dashStaffId: dashStaffId || block.dashStaffId || "", editUrl };
-    }
+  const cards = await readDashCalendarCards(page, block.date);
+  const candidates = cards.filter(card => dashBlockCardMatches(card, block));
+  for (const candidate of candidates) {
+    const located = await openDashBlockCard(page, candidate);
+    const staffMatches = !block.dashStaffId ||
+      located.dashStaffId === block.dashStaffId ||
+      normalizeVisibleLabel(located.dashStaffName) === normalizeVisibleLabel(block.dashStaffName);
+    if (located.dashBlockId && staffMatches) return located;
   }
   return null;
 }
@@ -538,7 +486,15 @@ async function createBlockDirect(page, block) {
   if (!created) {
     throw new Error("Dash did not expose the newly created Block Time in the calendar.");
   }
-  return { dryRun: false, action: "created", observedKey: stableHash(created.cardKey) };
+  const located = await openDashBlockCard(page, created);
+  return {
+    dryRun: false,
+    action: "created",
+    observedKey: stableHash(created.cardKey),
+    dashBlockId: located.dashBlockId,
+    dashStaffId: located.dashStaffId || block.dashStaffId || "",
+    editUrl: located.editUrl
+  };
 }
 
 async function createBlock(page, block, { dryRun = false } = {}) {
@@ -553,10 +509,14 @@ async function createBlock(page, block, { dryRun = false } = {}) {
     String(item.description || "").trim() === String(block.description || "").trim()
   ));
   if (visibleExisting) {
+    const located = await openDashBlockCard(page, visibleExisting);
     return {
       dryRun: false,
       action: "adopted",
-      observedKey: stableHash(visibleExisting.cardKey)
+      observedKey: stableHash(visibleExisting.cardKey),
+      dashBlockId: located.dashBlockId,
+      dashStaffId: located.dashStaffId || block.dashStaffId || "",
+      editUrl: located.editUrl
     };
   }
 
@@ -614,7 +574,11 @@ async function updateBlock(page, link, desired, { dryRun = false } = {}) {
     dashBlockId: link.dashBlockId,
     description: link.description || desired.description
   };
-  const changedOwner = existing.date !== desired.date || existing.dashStaffId !== desired.dashStaffId;
+  const changedOwner = existing.date !== desired.date || Boolean(
+    existing.dashStaffId &&
+    desired.dashStaffId &&
+    existing.dashStaffId !== desired.dashStaffId
+  );
   if (changedOwner) {
     if (dryRun) return { dryRun: true, action: "recreate", existing, desired };
     const created = await createBlock(page, desired, { dryRun: false });
@@ -963,6 +927,18 @@ function classifyDashCalendarConflicts(cards, block) {
   return result;
 }
 
+function dashBlockCardMatches(card, block) {
+  if (!card?.isBlock || !block) return false;
+  if (String(card.description || "").trim() !== String(block.description || "").trim()) return false;
+  if (
+    block.dashStaffName &&
+    normalizeVisibleLabel(card.dashStaffName) !== normalizeVisibleLabel(block.dashStaffName)
+  ) return false;
+  if (block.start && minutesToTime(card.startMinutes) !== block.start) return false;
+  if (block.end && minutesToTime(card.endMinutes) !== block.end) return false;
+  return true;
+}
+
 async function openDashBlockCard(page, card) {
   await navigateDashPage(page, buildAppointmentsDateUrl(card.date));
   await waitForDashCalendar(page);
@@ -1090,6 +1066,7 @@ module.exports = {
   buildEditBlockUrl,
   buildAppointmentsDateUrl,
   classifyDashCalendarConflicts,
+  dashBlockCardMatches,
   createBlock,
   createAuthenticatedDashPage,
   createDashBrowserClient,

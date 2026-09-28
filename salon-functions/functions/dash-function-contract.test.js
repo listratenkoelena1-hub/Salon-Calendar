@@ -19,6 +19,8 @@ test("registers disabled-by-default Dash triggers and protected scheduled creden
   assert.match(functionsSource, /getDashPollingWindow\(new Date\(\), SALON_TIME_ZONE\)/);
   assert.match(functionsSource, /reason: "outside_active_hours"/);
   assert.match(functionsSource, /pollingWindow\.morningReconciliation && config\.dailyReconciliationEnabled/);
+  assert.match(functionsSource, /getDailyReconciliationWindows\(today, config\.horizonDays\)/);
+  assert.doesNotMatch(functionsSource, /enqueueDashReconciliation\(\{ db, FieldValue, horizonDays: 0 \}\)/);
   assert.match(functionsSource, /secrets: \[DASH_BOOKING_EMAIL, DASH_BOOKING_PASSWORD\]/);
   assert.match(functionsSource, /if \(!config\.enabled\) return \{ skipped: true, reason: "disabled" \};/);
 });

@@ -7,13 +7,17 @@ const {
   addDateKeyDays,
   buildDashActivityLogDoc,
   buildDashMessageDoc,
+  buildDashOutboundMismatchMessage,
   buildDefaultConfig,
   dashCycleNeedsBrowser,
   dateKeyInTimeZone,
+  getDailyReconciliationWindows,
   getDashPollingWindow,
+  getReconciliationRange,
   getWeeklyOffOccurrencesForDate,
   isTerminalIncomingStatus,
   makeWeeklyOccurrence,
+  resolveStableDashLink,
   weekdayForDateKey,
   weeklyRuleActiveOnDate
 } = require("./dash-sync-runner");
@@ -68,6 +72,24 @@ test("starts Chromium only for inbound polling or real pending writes", () => {
   assert.equal(dashCycleNeedsBrowser({ inboundEnabled: true, writeEnabled: false }, false), true);
 });
 
+test("accepts a synchronized Block Time only after its stable Dash id is known", () => {
+  assert.equal(resolveStableDashLink({ observedKey: "visual-only" }), null);
+  assert.deepEqual(resolveStableDashLink({
+    dashBlockId: "dash-block-1",
+    editUrl: "https://www.partnersdash.com/appointments/block-time?aid=dash-block-1"
+  }), {
+    dashBlockId: "dash-block-1",
+    editUrl: "https://www.partnersdash.com/appointments/block-time?aid=dash-block-1"
+  });
+  assert.deepEqual(resolveStableDashLink({}, {
+    dashBlockId: "dash-block-legacy",
+    editUrl: "https://www.partnersdash.com/appointments/block-time?aid=dash-block-legacy"
+  }), {
+    dashBlockId: "dash-block-legacy",
+    editUrl: "https://www.partnersdash.com/appointments/block-time?aid=dash-block-legacy"
+  });
+});
+
 test("polls Dash hourly before opening and every fifteen minutes from 9 AM through 7 PM", () => {
   const atEdmonton = (hour, minute = 0) => new Date(Date.UTC(2026, 8, 25, hour + 6, minute));
 
@@ -94,6 +116,21 @@ test("handles reconciliation date keys without local DST drift", () => {
   assert.equal(addDateKeyDays("2026-03-08", 1), "2026-03-09");
   assert.equal(weekdayForDateKey("2026-09-25"), 5);
   assert.equal(dateKeyInTimeZone(new Date("2026-09-26T05:30:00Z"), "America/Edmonton"), "2026-09-25");
+});
+
+test("keeps a rolling window at exactly thirty calendar days", () => {
+  assert.deepEqual(getReconciliationRange("2026-09-29", 30), {
+    startDate: "2026-09-29",
+    endDate: "2026-10-28",
+    horizonDays: 30
+  });
+  assert.deepEqual(getDailyReconciliationWindows("2026-09-29", 30), [
+    { startDate: "2026-09-29", horizonDays: 1, purpose: "today" },
+    { startDate: "2026-10-28", horizonDays: 1, purpose: "rolling_edge" }
+  ]);
+  assert.deepEqual(getDailyReconciliationWindows("2026-09-29", 1), [
+    { startDate: "2026-09-29", horizonDays: 1, purpose: "today" }
+  ]);
 });
 
 test("expands active weekly off-work rules and honors start and end dates", () => {
@@ -171,6 +208,30 @@ test("uses distinct titles for ongoing Dash cancellation and reschedule events",
     ...base,
     eventType: "dash_appointment_rescheduled"
   }).title, "Dash Booking rescheduled");
+  assert.equal(buildDashMessageDoc({
+    ...base,
+    eventType: "dash_appointment_time_mismatch",
+    conflict: true
+  }).title, "Dash Booking time mismatch");
+});
+
+test("warns about a shorter Rose interval without instructing the bridge to edit Dash", () => {
+  const message = buildDashOutboundMismatchMessage({
+    client: "Prit",
+    date: "2026-09-28",
+    start: 30,
+    duration: 10,
+    dashOriginDate: "2026-09-28",
+    dashOriginStart: 30,
+    dashOriginDuration: 12,
+    dashOriginStaffName: "Olha"
+  }, { name: "Olha" }, "dash-origin-shorter");
+
+  assert.match(message, /DASH BOOKING TIME MISMATCH/);
+  assert.match(message, /Rose Calendar: 2026-09-28, 15:30-18:00/);
+  assert.match(message, /Dash Booking: 2026-09-28, 15:30-18:30/);
+  assert.match(message, /Dash Booking was not changed/);
+  assert.doesNotMatch(message, /updated automatically|shorten/i);
 });
 
 test("builds a phone-free Dash activity log entry", () => {
