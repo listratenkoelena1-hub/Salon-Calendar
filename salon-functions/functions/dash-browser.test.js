@@ -5,7 +5,6 @@ const assert = require("node:assert/strict");
 
 const {
   buildAppointmentsDateUrl,
-  buildDashAuditAppointmentFromCard,
   buildCreateBlockUrl,
   buildEditBlockUrl,
   buildNotificationCandidates,
@@ -16,7 +15,6 @@ const {
   getDashStaffIdFromUrl,
   getStaticNotificationTime,
   isRetryableNavigationError,
-  readDashCalendarRangeForAudit,
   toTwelveHour
 } = require("./dash-browser");
 
@@ -126,76 +124,5 @@ test("retries only transient Chromium navigation failures", () => {
       "https://www.partnersdash.com/appointments?date=2026-09-26"
     ),
     false
-  );
-});
-
-test("builds a read-only audit appointment directly from a visible calendar card", () => {
-  const appointment = buildDashAuditAppointmentFromCard({
-    cardKey: "style|Sample Client\\nPedicure",
-    date: "2026-09-27",
-    lines: ["Sample Client", "Pedicure"],
-    isBlock: false,
-    dashStaffName: "Lan",
-    startMinutes: 10 * 60,
-    endMinutes: 11 * 60
-  });
-
-  assert.equal(appointment.date, "2026-09-27");
-  assert.equal(appointment.start, 8);
-  assert.equal(appointment.duration, 4);
-  assert.equal(appointment.client, "Sample Client");
-  assert.equal(appointment.service, "Pedicure");
-  assert.equal(appointment.staffName, "Lan");
-  assert.equal(appointment.auditSummaryOnly, true);
-  assert.match(appointment.dashBookingId, /^audit_[a-f0-9]{40}$/);
-});
-
-test("reads a multi-day audit by reusing one authenticated page", async () => {
-  let currentDate = "";
-  const page = {
-    goto: async url => {
-      currentDate = new URL(url).searchParams.get("date");
-    },
-    url: () => buildAppointmentsDateUrl(currentDate),
-    isClosed: () => false,
-    waitForSelector: async () => {},
-    waitForFunction: async () => {},
-    evaluate: async (_fn, date) => date === "2026-09-27"
-      ? [{
-          cardKey: "style|Sample Client\nPedicure",
-          date,
-          lines: ["Sample Client", "Pedicure"],
-          isBlock: false,
-          dashStaffName: "Lan",
-          startMinutes: 10 * 60,
-          endMinutes: 11 * 60
-        }]
-      : [{
-          cardKey: "style|Blocked Time\n11:00 - 12:00\nBusy",
-          date,
-          lines: ["Blocked Time", "11:00 - 12:00", "Busy"],
-          isBlock: true,
-          dashStaffName: "Lan",
-          startMinutes: 11 * 60,
-          endMinutes: 12 * 60,
-          description: "Busy"
-        }]
-  };
-
-  const result = await readDashCalendarRangeForAudit(page, {
-    startDate: "2026-09-27",
-    endDate: "2026-09-28"
-  });
-
-  assert.equal(result.days.length, 2);
-  assert.equal(result.appointments.length, 1);
-  assert.equal(result.blocks.length, 1);
-  assert.equal(result.days[1].date, "2026-09-28");
-  await assert.rejects(
-    readDashCalendarRangeForAudit(page, {
-      startDate: "2026-09-27",
-      endDate: "2026-10-27"
-    }),
-    /cannot exceed 30 calendar days/
   );
 });

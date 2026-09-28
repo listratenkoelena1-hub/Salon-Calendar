@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const functionsSource = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
+const runnerSource = fs.readFileSync(path.join(__dirname, "dash-sync-runner.js"), "utf8");
 
 test("registers disabled-by-default Dash triggers and protected scheduled credentials", () => {
   assert.match(functionsSource, /exports\.dashAppointmentWritten = onDocumentWritten/);
@@ -26,4 +27,6 @@ test("does not expose the retired in-calendar Dash audit callables", () => {
   assert.doesNotMatch(functionsSource, /exports\.managerRunDashBookingAudit/);
   assert.doesNotMatch(functionsSource, /exports\.managerGetLatestDashBookingAudit/);
   assert.doesNotMatch(functionsSource, /exports\.managerApplyDashBookingAudit/);
+  assert.doesNotMatch(runnerSource, /auditSummaryOnly/);
+  assert.match(runnerSource, /createDashBrowserClient\(page, \{ dryRun: true \}\)/);
 });

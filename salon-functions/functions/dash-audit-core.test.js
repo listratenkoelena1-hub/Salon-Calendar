@@ -143,3 +143,26 @@ test("updates an integration-owned block when its time changed", () => {
   assert.equal(plan.summary.updateDashBlocks, 1);
   assert.equal(plan.rows[0].action, "update_dash_block");
 });
+
+test("does not create redundant blocks for a technician already off in the Dash working schedule", () => {
+  const plan = buildDashAuditPlan({
+    desiredBlocks: [{
+      sourceType: "off_work",
+      sourceId: "off-luba",
+      date: "2026-09-28",
+      start: "10:00",
+      end: "20:00",
+      dashStaffId: "dash-luba",
+      dashStaffName: "Luba",
+      description: "Rose Calendar | off:off-luba"
+    }],
+    dashWorkingStaffByDate: {
+      "2026-09-28": ["Olha", "Olena", "Iryna", "Natalia", "Cindy", "Lan"]
+    }
+  });
+
+  assert.equal(plan.rows[0].action, "covered_by_dash_schedule");
+  assert.equal(plan.rows[0].reason, "staff_not_working_in_dash");
+  assert.equal(plan.summary.alreadyMatched, 1);
+  assert.equal(plan.summary.createDashBlocks, 0);
+});

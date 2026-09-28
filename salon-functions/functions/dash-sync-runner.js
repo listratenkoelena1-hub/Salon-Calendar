@@ -563,7 +563,11 @@ async function runDashAudit({
     localAppointments: local.localAppointments,
     desiredBlocks: local.desiredBlocks,
     dashAppointments,
-    dashBlocks
+    dashBlocks,
+    dashWorkingStaffByDate: Object.fromEntries((observed.days || []).map(day => [
+      String(day.date || ""),
+      Array.isArray(day.workingStaffNames) ? day.workingStaffNames : []
+    ]))
   });
   const auditRef = db.collection(DASH_AUDIT_COLLECTION).doc();
   const report = {
@@ -598,7 +602,7 @@ async function runDashAuditWithBrowser({
   const browser = await launchDashBrowser({ executablePath });
   try {
     const page = await createAuthenticatedDashPage(browser, { email, password });
-    const client = createDashBrowserClient(page, { dryRun: true, auditSummaryOnly: true });
+    const client = createDashBrowserClient(page, { dryRun: true });
     return runDashAudit({
       db,
       FieldValue,

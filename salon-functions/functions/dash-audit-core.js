@@ -138,6 +138,14 @@ function desiredBlockOverlapsDashAppointment(desired, appointment) {
   );
 }
 
+function isCoveredByDashWorkingSchedule(desired, dashWorkingStaffByDate) {
+  const workingNames = dashWorkingStaffByDate?.[String(desired?.date || "")];
+  if (!Array.isArray(workingNames) || !workingNames.length) return false;
+  const wanted = normalizeStaffName(desired?.dashStaffName || "");
+  if (!wanted) return false;
+  return !workingNames.some(name => normalizeStaffName(name) === wanted);
+}
+
 function buildSummary(rows) {
   const summary = {
     roseAppointments: 0,
@@ -158,7 +166,9 @@ function buildSummary(rows) {
   for (const row of rows) {
     if (row.kind === "dash_appointment") summary.dashAppointments += 1;
     if (row.kind === "rose_block") summary.roseBlocks += 1;
-    if (row.action === "already_matched" || row.action === "already_blocked") summary.alreadyMatched += 1;
+    if (["already_matched", "already_blocked", "covered_by_dash_schedule"].includes(row.action)) {
+      summary.alreadyMatched += 1;
+    }
     else if (row.action === "add_to_calendar") summary.addToCalendar += 1;
     else if (row.action === "update_local") summary.updateCalendar += 1;
     else if (row.action === "link_local") summary.linkLocal += 1;
@@ -177,7 +187,8 @@ function buildDashAuditPlan({
   localAppointments = [],
   desiredBlocks = [],
   dashAppointments = [],
-  dashBlocks = []
+  dashBlocks = [],
+  dashWorkingStaffByDate = {}
 } = {}) {
   const rows = [];
   const matchedLocalIds = new Set();
@@ -275,6 +286,14 @@ function buildDashAuditPlan({
       });
       continue;
     }
+    if (isCoveredByDashWorkingSchedule(desired, dashWorkingStaffByDate)) {
+      rows.push({
+        ...base,
+        action: "covered_by_dash_schedule",
+        reason: "staff_not_working_in_dash"
+      });
+      continue;
+    }
     const appointmentConflict = dashAppointments.find(appointment => desiredBlockOverlapsDashAppointment(desired, appointment));
     if (appointmentConflict) {
       rows.push({
@@ -333,6 +352,7 @@ module.exports = {
   buildDashAuditPlan,
   dedupeDesiredBlocks,
   exactBlockCoverage,
+  isCoveredByDashWorkingSchedule,
   isIntegrationBlock,
   normalizeClient,
   strictLocalMatch

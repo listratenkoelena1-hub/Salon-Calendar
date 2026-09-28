@@ -952,87 +952,6 @@ async function readDashCalendarCards(page, date) {
   return collectDashCalendarCards(page, date);
 }
 
-function buildDashAuditAppointmentFromCard(card) {
-  const startMinutes = Number(card?.startMinutes);
-  const endMinutes = Number(card?.endMinutes);
-  const start = Math.round((startMinutes - 8 * 60) / 15);
-  const duration = Math.round((endMinutes - startMinutes) / 15);
-  const lines = Array.isArray(card?.lines) ? card.lines.map(line => String(line || "").trim()).filter(Boolean) : [];
-  if (
-    card?.isBlock === true || !String(card?.date || "") || !String(card?.dashStaffName || "").trim() ||
-    !Number.isInteger(start) || start < 0 || !Number.isInteger(duration) || duration < 1 || lines.length < 1
-  ) return null;
-  return {
-    dashBookingId: `audit_${stableHash(String(card.cardKey || "")).slice(0, 40)}`,
-    client: lines[0],
-    date: String(card.date),
-    start,
-    duration,
-    service: String(lines.slice(1).join(" ") || "Dash Booking appointment"),
-    staffName: String(card.dashStaffName).trim(),
-    sourceUrl: buildAppointmentsDateUrl(card.date),
-    dashStatus: "confirmed",
-    canceledByClient: false,
-    cancellationReason: "",
-    previousDate: "",
-    previousTime: "",
-    rescheduledDate: "",
-    rescheduledTime: "",
-    auditSummaryOnly: true
-  };
-}
-
-async function readDashCalendarRangeForAudit(page, { startDate, endDate } = {}) {
-  const first = String(startDate || "");
-  const last = String(endDate || "");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(first) || !/^\d{4}-\d{2}-\d{2}$/.test(last) || last < first) {
-    throw new Error("Dash audit dates must be a valid ascending YYYY-MM-DD range.");
-  }
-  const totalDays = Math.round(
-    (Date.parse(`${last}T12:00:00Z`) - Date.parse(`${first}T12:00:00Z`)) / 86400000
-  ) + 1;
-  if (!Number.isInteger(totalDays) || totalDays < 1 || totalDays > 30) {
-    throw new Error("Dash audit range cannot exceed 30 calendar days.");
-  }
-
-  // Keep one authenticated Chromium page and navigate it day by day. This
-  // avoids Target.createTarget (the operation that failed in Cloud Functions)
-  // while still allowing the complete reviewed horizon.
-  const appointments = [];
-  const blocks = [];
-  const days = [];
-  for (let offset = 0; offset < totalDays; offset += 1) {
-    const date = addDateDays(first, offset);
-    const cards = await readDashCalendarCards(page, date);
-    const dayBlocks = cards.filter(item => item.isBlock).map(item => ({
-      date,
-      start: minutesToTime(item.startMinutes),
-      end: minutesToTime(item.endMinutes),
-      dashStaffName: item.dashStaffName,
-      description: item.description,
-      observedKey: stableHash(item.cardKey)
-    })).filter(item => item.start && item.end && item.dashStaffName);
-    const dayAppointments = cards
-      .map(buildDashAuditAppointmentFromCard)
-      .filter(Boolean);
-    blocks.push(...dayBlocks);
-    appointments.push(...dayAppointments);
-    days.push({
-      date,
-      appointments: dayAppointments.length,
-      blocks: dayBlocks.length,
-      cards: cards.length
-    });
-  }
-  return {
-    startDate: first,
-    endDate: last,
-    appointments,
-    blocks,
-    days
-  };
-}
-
 async function openDashCalendarCard(page, date, cardKey) {
   const cards = await readDashCalendarCards(page, date);
   const candidate = cards.find(item => item.cardKey === cardKey);
@@ -1054,6 +973,14 @@ async function openDashCalendarCard(page, date, cardKey) {
 
 async function readDashCalendarDay(page, date) {
   const cards = await readDashCalendarCards(page, date);
+  const workingStaffNames = await page.evaluate(() => Array.from(document.querySelectorAll("h4"))
+    .map(element => ({
+      name: String(element.textContent || "").replace(/\s+/g, " ").trim(),
+      rect: element.getBoundingClientRect()
+    }))
+    .filter(item => item.name && item.rect.width > 100 && item.rect.height > 0)
+    .sort((left, right) => left.rect.x - right.rect.x)
+    .map(item => item.name));
   const blocks = cards.filter(item => item.isBlock).map(item => ({
     date,
     start: minutesToTime(item.startMinutes),
@@ -1070,7 +997,7 @@ async function readDashCalendarDay(page, date) {
     seen.add(detail.dashBookingId);
     appointments.push(detail);
   }
-  return { date, appointments, blocks, cardCount: cards.length };
+  return { date, appointments, blocks, cardCount: cards.length, workingStaffNames };
 }
 
 async function readDashCalendarRange(page, { startDate, endDate } = {}) {
@@ -1087,7 +1014,8 @@ async function readDashCalendarRange(page, { startDate, endDate } = {}) {
       date,
       appointments: day.appointments.length,
       blocks: day.blocks.length,
-      cards: day.cardCount
+      cards: day.cardCount,
+      workingStaffNames: day.workingStaffNames
     });
     date = addDateDays(date, 1);
   }
@@ -1096,16 +1024,13 @@ async function readDashCalendarRange(page, { startDate, endDate } = {}) {
 
 function createDashBrowserClient(page, options = {}) {
   const dryRun = options.dryRun === true;
-  const auditSummaryOnly = options.auditSummaryOnly === true;
   return {
     createBlock: block => createBlock(page, block, { dryRun }),
     updateBlock: (link, block) => updateBlock(page, link, block, { dryRun }),
     deleteBlock: link => deleteBlock(page, link, { dryRun }),
     readNewDashAppointments: input => readNewDashAppointments(page, input),
     readDashEvents: input => readNewDashAppointments(page, input),
-    readCalendarRange: input => auditSummaryOnly
-      ? readDashCalendarRangeForAudit(page, input)
-      : readDashCalendarRange(page, input)
+    readCalendarRange: input => readDashCalendarRange(page, input)
   };
 }
 
@@ -1116,7 +1041,6 @@ module.exports = {
   buildCreateBlockUrl,
   buildEditBlockUrl,
   buildAppointmentsDateUrl,
-  buildDashAuditAppointmentFromCard,
   classifyDashCalendarConflicts,
   createBlock,
   createAuthenticatedDashPage,
@@ -1137,7 +1061,6 @@ module.exports = {
   readDashCalendarCards,
   readDashCalendarDay,
   readDashCalendarRange,
-  readDashCalendarRangeForAudit,
   readNewDashAppointments,
   readSelectedAntLabel,
   selectAntValue,
