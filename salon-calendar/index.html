@@ -2656,6 +2656,12 @@ body.modal-open{
   max-width: calc(100vw - 24px);
 }
 
+#staffModal .staff-modal-content{
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 /* Staff: compact */
 #staffModal.staff-view .staff-modal-content{
   width: 92vw;
@@ -2681,6 +2687,7 @@ body.modal-open{
     110px   /* role */
     78px    /* anyone */
     124px   /* notifications */
+    104px   /* online booking */
     64px    /* save */
     32px    /* up */
     32px    /* down */
@@ -2709,6 +2716,8 @@ body.modal-open{
     132px
     110px
     78px
+    124px
+    104px
     64px;
 }
 
@@ -2812,6 +2821,7 @@ body.modal-open{
 #staffModal.staff-view .staff-services,
 #staffModal.staff-view .staff-role,
 #staffModal.staff-view .staff-anyone,
+#staffModal.staff-view .staff-online-booking,
 #staffModal.staff-view .staff-move-btn,
 #staffModal.staff-view .staff-remove-btn,
 #staffModal.staff-view hr,
@@ -2854,7 +2864,21 @@ body.modal-open{
   text-align: center;
   white-space: nowrap;
 }
-#staffModal .staff-anyone input{
+#staffModal .staff-online-booking{
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #555;
+  line-height: 1.05;
+  text-align: center;
+  white-space: nowrap;
+}
+#staffModal .staff-anyone input,
+#staffModal .staff-online-booking input{
   width: 16px;
   height: 16px;
   margin: 0;
@@ -2868,15 +2892,23 @@ body.modal-open{
   max-width: 110px;
 }    
 
- /* Staff modal horizontal scroll (includes Close button) */
+ /* Staff table scrolls independently; footer actions always stay visible. */
 #staffModal #staffScroll{
-  overflow-x: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   -webkit-overflow-scrolling: touch;
 }
 
 /* This sets the "real" width of the staff modal content for manager */
 #staffModal:not(.staff-view) #staffScrollInner{
   min-width: max-content;
+}
+
+#staffModal .staff-modal-actions{
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 
 
@@ -4170,7 +4202,7 @@ stroke-linejoin="round">
 </button>
 </div>
   <div id="topMenu" class="bottom-popup-menu hidden">
-  <div id="staffMenuItem" onclick="openStaff(); closeMenu()">Staff</div>
+  <div id="staffMenuItem" onclick="openStaff(); closeMenu()">Staff Settings</div>
   <div id="analyticsMenuItem" onclick="openAnalytics(); closeMenu()">Analytics</div>
   <div onclick="logout(); closeMenu()">Logout</div>
 </div>    
@@ -4735,7 +4767,7 @@ stroke-linejoin="round">
 
 
 
-<h3>Staff</h3>
+<h3>Staff Settings</h3>
 
 <!-- HORIZONTAL SCROLL WRAPPER -->
 <div id="staffScroll">
@@ -4793,16 +4825,21 @@ stroke-linejoin="round">
           <input type="checkbox" id="newStaffAvailableForAnyone" checked>
         </label>
 
+        <span class="staff-add-notifications-spacer" aria-hidden="true"></span>
+
+        <label class="staff-online-booking" title="Show this technician in Online Booking">
+          <input type="checkbox" id="newStaffOnlineBooking" checked>
+        </label>
+
         <button class="staff-btn primary" onclick="addStaff()">Add</button>
       </div>
     </div>
-
-    <div class="modal-actions">
-      <button id="staffPersonalSaveBtn" class="btn-primary staff-personal-save-action" onclick="saveCurrentStaffMeta()">Save</button>
-      <button onclick="closeStaff()">Close</button>
-    </div>
-
   </div>
+</div>
+
+<div class="modal-actions staff-modal-actions">
+  <button id="staffPersonalSaveBtn" class="btn-primary staff-personal-save-action" onclick="saveCurrentStaffMeta()">Save</button>
+  <button onclick="closeStaff()">Close</button>
 </div>
 </div>
 </div>
@@ -5302,6 +5339,7 @@ const newStaffColor = document.getElementById('newStaffColor');
   const newStaffEmail = document.getElementById('newStaffEmail');
 const newStaffRole = document.getElementById('newStaffRole');
 const newStaffAvailableForAnyone = document.getElementById('newStaffAvailableForAnyone');
+const newStaffOnlineBooking = document.getElementById('newStaffOnlineBooking');
 
 const BOOKING_SERVICE_OPTIONS = [
   { value: 'manicure', label: 'Manicure' },
@@ -5365,6 +5403,10 @@ function normalizeStaffServiceGroups(value) {
 
 function isStaffAvailableForAnyone(staffMember) {
   return staffMember?.availableForAnyone !== false;
+}
+
+function isStaffOnlineBookingEnabled(staffMember) {
+  return staffMember?.bookingEnabled !== false;
 }
 
 function getStaffBookingServiceGroups(staffMember) {
@@ -5506,7 +5548,7 @@ function buildStaffHeaderRow() {
   const durationCells = isStaffDurationView
     ? STAFF_BOOKING_DURATION_SERVICES.map(service => `<span>${escapeHtml(service.label)}</span>`).join('')
     : '';
-  const managerTail = isStaffDurationView ? '' : '<span>Role</span><span>Anyone</span><span>Notifications</span>';
+  const managerTail = isStaffDurationView ? '' : '<span>Role</span><span>Anyone</span><span>Notifications</span><span>Online Booking</span>';
   const actionTail = isStaffDurationView
     ? '<span>Save</span><span></span>'
     : '<span>Save</span><span></span><span></span><span></span><span></span>';
@@ -12715,6 +12757,9 @@ function renderStaff() {
           <input type="checkbox" data-staff-anyone="${s.id}" ${isStaffAvailableForAnyone(s) ? 'checked' : ''}>
         </label>
         ${buildStaffPushStatus(s.id)}
+        <label class="staff-online-booking" title="Show this technician in Online Booking">
+          <input type="checkbox" data-staff-online-booking="${s.id}" ${isStaffOnlineBookingEnabled(s) ? 'checked' : ''}>
+        </label>
         <button class="staff-btn staff-save-btn primary" data-staff-save="${s.id}" onclick="saveStaffMeta('${s.id}')">Save</button>
         <button class="staff-btn staff-move-btn" onclick="moveStaff(${originalIndex}, -1)">^</button>
         <button class="staff-btn staff-move-btn" onclick="moveStaff(${originalIndex}, 1)">v</button>
@@ -12809,6 +12854,7 @@ window.addStaff = async () => {
   role: role,
   bookingServiceGroups: bookingServiceGroups.length ? bookingServiceGroups : [...DEFAULT_STAFF_SERVICE_GROUPS],
   availableForAnyone: newStaffAvailableForAnyone ? newStaffAvailableForAnyone.checked : true,
+  bookingEnabled: newStaffOnlineBooking ? newStaffOnlineBooking.checked : true,
   active: true,
   order: getActiveStaffList({ includeAnyone: false }).length
 });
@@ -12823,6 +12869,7 @@ await ensureAuthUser(email, role, docRef.id, name);
   newStaffColor.value = '#cce5ff';
   resetNewStaffServiceGroups();
   if (newStaffAvailableForAnyone) newStaffAvailableForAnyone.checked = true;
+  if (newStaffOnlineBooking) newStaffOnlineBooking.checked = true;
 
   showToast("Staff added", "success");
 };
@@ -12850,16 +12897,19 @@ window.saveStaffMeta = async (staffId) => {
     const emailInput = document.querySelector(`[data-staff-email="${staffId}"]`);
     const roleSelect = document.querySelector(`[data-staff-role="${staffId}"]`);
     const anyoneInput = document.querySelector(`[data-staff-anyone="${staffId}"]`);
+    const onlineBookingInput = document.querySelector(`[data-staff-online-booking="${staffId}"]`);
 
     email = (emailInput?.value || '').trim();
     role = roleSelect?.value || 'staff';
     const availableForAnyone = anyoneInput ? anyoneInput.checked : true;
+    const bookingEnabled = onlineBookingInput ? onlineBookingInput.checked : true;
     const bookingServiceGroups = getSelectedStaffServiceGroups(staffId);
 
     payload.email = email || null;
     payload.role = role;
     payload.bookingServiceGroups = bookingServiceGroups.length ? bookingServiceGroups : [...DEFAULT_STAFF_SERVICE_GROUPS];
     payload.availableForAnyone = availableForAnyone;
+    payload.bookingEnabled = bookingEnabled;
   }
 
   await updateDoc(doc(db, "staff", staffId), payload);
