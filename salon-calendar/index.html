@@ -992,8 +992,11 @@ padding:10px 14px;
 
 #calendarUpdateBtn {
   position: fixed;
-  left: 16px;
+  left: 16px !important;
+  right: auto !important;
   bottom: 90px;
+  transform: none !important;
+  margin: 0 !important;
   min-width: 112px;
   height: 42px;
   padding: 0 20px;
@@ -2083,7 +2086,7 @@ body.modal-open #calendarUpdateBtn {
 }
 
 .appointment-group-wrap {
-  flex: 0 1 auto;
+  width: 100%;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -2094,6 +2097,13 @@ body.modal-open #calendarUpdateBtn {
 .appointment-group-row,
 .client-history-link-row {
   margin-top: 8px;
+}
+
+.appointment-group-row {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  flex-wrap: nowrap;
 }
 
 .appointment-group-row.is-hidden,
@@ -2277,8 +2287,8 @@ body.modal-open #calendarUpdateBtn {
 
 .appointment-group-select {
   flex: 0 1 auto;
-  width: auto;
-  max-width: min(230px, calc(100vw - 160px));
+  width: max-content;
+  max-width: calc(100% - 44px);
   min-width: 94px;
   height: 30px;
   padding: 2px 4px;
@@ -2288,6 +2298,11 @@ body.modal-open #calendarUpdateBtn {
   font-size: 12px !important;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.appointment-group-select.has-overflow {
+  mask-image: linear-gradient(to right, black 0, black calc(100% - 44px), transparent calc(100% - 27px), black calc(100% - 26px), black 100%);
+  -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 44px), transparent calc(100% - 27px), black calc(100% - 26px), black 100%);
 }
 
 .appointment-group-select.is-hidden,
@@ -4500,7 +4515,6 @@ stroke-linejoin="round">
       </span>
     </label>
     <select id="appointmentGroupSelect" class="appointment-group-select"></select>
-    <span id="appointmentGroupReadonly" class="appointment-group-readonly"></span>
   </div>
 </div>
 
@@ -5485,7 +5499,6 @@ const appointmentGroupRow = document.getElementById('appointmentGroupRow');
 const appointmentGroupToggleWrap = document.getElementById('appointmentGroupToggleWrap');
 const appointmentGroupToggle = document.getElementById('appointmentGroupToggle');
 const appointmentGroupSelect = document.getElementById('appointmentGroupSelect');
-const appointmentGroupReadonly = document.getElementById('appointmentGroupReadonly');
 const appointmentGroupStaffReadonly = document.getElementById('appointmentGroupStaffReadonly');
 const clientHistoryLinkRow = document.getElementById('clientHistoryLinkRow');
 const clientHistoryLink = document.getElementById('clientHistoryLink');
@@ -7608,7 +7621,7 @@ function getGroupOptionLabel(group, dateStr, excludeId = null) {
     )
     .map(item => String(item.client || '').trim())
     .filter(Boolean);
-  const suffix = names.length ? ' - ' + fitGroupNames(names, 18) : '';
+  const suffix = names.length ? ' - ' + names.join(', ') : '';
   return `${group.optionDot} ${group.label}${suffix}`;
 }
 
@@ -7637,12 +7650,28 @@ function updateAppointmentGroupOptions(excludeId = editId) {
 
 function updateAppointmentGroupReadonlyOverflow() {
   requestAnimationFrame(() => {
-    [appointmentGroupReadonly, appointmentGroupStaffReadonly].forEach(element => {
+    [appointmentGroupStaffReadonly].forEach(element => {
       if (!element) return;
       const hidden = element.classList.contains('is-hidden') || element.offsetParent === null;
       const overflowing = !hidden && element.scrollWidth > element.clientWidth + 1;
       element.classList.toggle('has-overflow', overflowing);
     });
+  });
+}
+
+function updateAppointmentGroupSelectOverflow() {
+  if (!appointmentGroupSelect) return;
+  requestAnimationFrame(() => {
+    const selectedText = appointmentGroupSelect.selectedOptions?.[0]?.textContent || '';
+    appointmentGroupSelect.title = selectedText;
+    const style = window.getComputedStyle(appointmentGroupSelect);
+    const canvas = updateAppointmentGroupSelectOverflow.canvas ||
+      (updateAppointmentGroupSelectOverflow.canvas = document.createElement('canvas'));
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.font = style.font || `${style.fontSize} ${style.fontFamily}`;
+    const textWidth = context.measureText(selectedText).width + 34;
+    appointmentGroupSelect.classList.toggle('has-overflow', textWidth > appointmentGroupSelect.clientWidth + 1);
   });
 }
 
@@ -7679,18 +7708,13 @@ function updateAppointmentGroupControls() {
   if (appointmentGroupToggleWrap) appointmentGroupToggleWrap.classList.toggle('is-hidden', !canEditGroup);
   if (appointmentGroupSelect) appointmentGroupSelect.classList.toggle('is-hidden', !canEditGroup || !appointmentGroupToggle?.checked);
 
-  if (appointmentGroupReadonly) {
-    appointmentGroupReadonly.classList.toggle('is-hidden', !canEditGroup || !text);
-    appointmentGroupReadonly.innerHTML = meta && text
-      ? `<span class="appointment-group-dot" style="background:${meta.color}"></span>${escapeHtml(text)}`
-      : '';
-  }
   if (appointmentGroupStaffReadonly) {
     appointmentGroupStaffReadonly.classList.toggle('is-hidden', canEditGroup || !text);
     appointmentGroupStaffReadonly.innerHTML = meta && text
       ? `<span class="appointment-group-dot" style="background:${meta.color}"></span>${escapeHtml(text)}`
       : '';
   }
+  updateAppointmentGroupSelectOverflow();
   updateAppointmentGroupReadonlyOverflow();
 }
 
@@ -15517,7 +15541,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-06.4';
+const CALENDAR_APP_VERSION = '2026-10-06.5';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';

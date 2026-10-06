@@ -34,7 +34,10 @@ test("appointment group stays beside Client for staff and on its own row for man
   );
   assert.match(calendarHtml, /grid-template-columns: max-content minmax\(0, 2fr\) minmax\(0, 1fr\)/);
   assert.match(calendarHtml, /appointmentGroupStaffReadonly\.classList\.toggle\('is-hidden', canEditGroup \|\| !text\)/);
-  assert.match(calendarHtml, /appointmentGroupReadonly\.classList\.toggle\('is-hidden', !canEditGroup \|\| !text\)/);
+  assert.doesNotMatch(calendarHtml, /id="appointmentGroupReadonly"/);
+  assert.match(calendarHtml, /const suffix = names\.length \? ' - ' \+ names\.join\(', '\) : '';/);
+  assert.match(calendarHtml, /\.appointment-group-select \{[\s\S]*?max-width: calc\(100% - 44px\);/);
+  assert.match(calendarHtml, /function updateAppointmentGroupSelectOverflow\(\)/);
 });
 
 test("Client History uses stacked modals and preserves the appointment editor", () => {
