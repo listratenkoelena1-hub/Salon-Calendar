@@ -31,6 +31,19 @@ test("Client History uses stacked modals and preserves the appointment editor", 
   assert.match(calendarHtml, /getAppointmentClientHistory\(\{ appointmentId: appointment\.id \}\)/);
 });
 
+test("Client History uses the compact minimal table treatment", () => {
+  const historyModalStart = calendarHtml.indexOf('id="clientHistoryModal"');
+  const historyDetailStart = calendarHtml.indexOf('id="clientHistoryDetailModal"');
+  const historyModalHtml = calendarHtml.slice(historyModalStart, historyDetailStart);
+
+  assert.doesNotMatch(historyModalHtml, /aria-label="Close Client History">×<\/button>/);
+  assert.match(historyModalHtml, /Details<span class="client-history-header-note">\(Tap to Open\)<\/span>/);
+  assert.match(calendarHtml, /\.client-history-client-name \{\s*font-weight: 700;/);
+  assert.match(calendarHtml, /\.client-history-table-wrap \{[\s\S]*?overflow: auto;[\s\S]*?margin-top: 10px;[\s\S]*?-webkit-overflow-scrolling: touch;/);
+  assert.match(calendarHtml, /\.client-history-table \{[\s\S]*?width: max-content;[\s\S]*?min-width: 0;/);
+  assert.match(calendarHtml, /\.client-history-details-link \{[\s\S]*?text-decoration: none;/);
+});
+
 test("Client History phone is conditionally returned only to a manager", () => {
   assert.match(functionsSource, /\["manager", "staff"\]\.includes\(actor\.role\)/);
   assert.match(functionsSource, /actor\.role === "manager"[\s\S]*?\? \{ phone:/);

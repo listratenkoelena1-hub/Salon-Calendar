@@ -2132,6 +2132,10 @@ body.modal-open #calendarUpdateBtn {
   overflow-wrap: anywhere;
 }
 
+.client-history-client-name {
+  font-weight: 700;
+}
+
 .client-history-state {
   margin: 14px 0 8px;
   color: rgba(0,0,0,0.66);
@@ -2144,32 +2148,73 @@ body.modal-open #calendarUpdateBtn {
   flex: 1 1 auto;
   overflow: auto;
   margin-top: 10px;
-  border: 1px solid rgba(0,0,0,0.13);
-  border-radius: 10px;
   -webkit-overflow-scrolling: touch;
 }
 
 .client-history-table {
-  width: 100%;
-  min-width: 650px;
+  width: max-content;
+  min-width: 0;
   border-collapse: collapse;
   font-size: 14px;
+  table-layout: auto;
 }
 
 .client-history-table th,
 .client-history-table td {
-  padding: 10px 9px;
+  width: auto;
+  max-width: 240px;
+  height: auto;
+  padding: 5px 6px;
+  border: 0;
+  border-right: 1px solid rgba(0,0,0,0.10);
   border-bottom: 1px solid rgba(0,0,0,0.10);
   text-align: left;
   vertical-align: top;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .client-history-table th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #f5f7f7;
+  background: #fff;
   white-space: nowrap;
+  line-height: 1.15;
+}
+
+.client-history-table th:last-child,
+.client-history-table td:last-child {
+  border-right: 0;
+}
+
+.client-history-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.client-history-table th:nth-child(-n+3),
+.client-history-table td:nth-child(-n+3) {
+  white-space: nowrap;
+}
+
+.client-history-table th:nth-child(4),
+.client-history-table td:nth-child(4) {
+  max-width: 120px;
+  white-space: normal;
+}
+
+.client-history-table th:nth-child(5),
+.client-history-table td:nth-child(5) {
+  max-width: 240px;
+  white-space: normal;
+}
+
+.client-history-header-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1;
 }
 
 .client-history-details-link {
@@ -2180,8 +2225,7 @@ body.modal-open #calendarUpdateBtn {
   color: #263b38;
   font: inherit;
   text-align: left;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration: none;
   cursor: pointer;
 }
 
@@ -4517,12 +4561,11 @@ stroke-linejoin="round">
 
 <div id="clientHistoryModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="clientHistoryTitle">
   <div class="modal-content client-history-content">
-    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+    <div>
       <div>
         <h3 id="clientHistoryTitle" style="margin:0;">Client History</h3>
         <div id="clientHistorySubtitle" class="client-history-subtitle"></div>
       </div>
-      <button type="button" class="ap-btn-small" onclick="closeClientHistory()" aria-label="Close Client History">×</button>
     </div>
     <div id="clientHistoryState" class="client-history-state">Loading Client History…</div>
     <div id="clientHistoryTableWrap" class="client-history-table-wrap hidden">
@@ -4533,7 +4576,7 @@ stroke-linejoin="round">
             <th>Staff</th>
             <th>Changed by</th>
             <th>Event</th>
-            <th>Details</th>
+            <th>Details<span class="client-history-header-note">(Tap to Open)</span></th>
           </tr>
         </thead>
         <tbody id="clientHistoryTableBody"></tbody>
@@ -7679,13 +7722,21 @@ function renderClientHistoryRows(rows) {
   }).join('');
 }
 
+function renderClientHistorySubtitle(clientName, phone = '') {
+  if (!clientHistorySubtitle) return;
+  const safeName = escapeHtml(String(clientName || '').trim());
+  const safePhone = escapeHtml(String(phone || '').trim());
+  clientHistorySubtitle.innerHTML = `<span class="client-history-client-name">${safeName}</span>` +
+    (safePhone ? ` <span class="client-history-phone">— ${safePhone}</span>` : '');
+}
+
 window.openClientHistory = async () => {
   const appointment = editId ? appointments.find(item => item.id === editId) : null;
   if (!appointment?.id || appointment.hasClientHistory !== true) return;
 
   const runId = ++clientHistoryLoadRunId;
   clientHistoryAppointmentsById = new Map();
-  if (clientHistorySubtitle) clientHistorySubtitle.textContent = appointment.client || '';
+  renderClientHistorySubtitle(appointment.client || '');
   if (clientHistoryState) {
     clientHistoryState.textContent = 'Loading Client History…';
     clientHistoryState.classList.remove('is-error');
@@ -7704,9 +7755,8 @@ window.openClientHistory = async () => {
       if (clientHistoryState) clientHistoryState.textContent = 'No Client History is available for this appointment.';
       return;
     }
-    const subtitleParts = [String(result.clientName || appointment.client || '').trim()];
-    if (currentUserRole === 'manager' && result.phone) subtitleParts.push(String(result.phone));
-    if (clientHistorySubtitle) clientHistorySubtitle.textContent = subtitleParts.filter(Boolean).join(' — ');
+    const historyPhone = currentUserRole === 'manager' && result.phone ? String(result.phone) : '';
+    renderClientHistorySubtitle(result.clientName || appointment.client || '', historyPhone);
     clientHistoryAppointmentsById = new Map(
       (Array.isArray(result.appointments) ? result.appointments : [])
         .map(item => [String(item?.id || ''), item])
