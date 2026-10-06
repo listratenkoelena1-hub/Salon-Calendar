@@ -992,9 +992,8 @@ padding:10px 14px;
 
 #calendarUpdateBtn {
   position: fixed;
-  left: 50%;
+  left: 16px;
   bottom: 90px;
-  transform: translateX(-50%);
   min-width: 112px;
   height: 42px;
   padding: 0 20px;
@@ -2071,18 +2070,20 @@ body.modal-open #calendarUpdateBtn {
 }
 
 .ap-client-row {
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 2fr) minmax(0, 1fr);
   gap: 6px;
 }
 
 .ap-client-input {
-  flex: 1 1 auto;
+  width: 100%;
   min-width: 160px;
-  max-width: none;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .appointment-group-wrap {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -2261,7 +2262,8 @@ body.modal-open #calendarUpdateBtn {
   align-items: flex-start;
   justify-content: center;
   gap: 1px;
-  flex: 0 0 36px;
+  flex: 0 0 auto;
+  margin-top: 0 !important;
   font-size: 10px;
   color: rgba(0,0,0,0.62);
   line-height: 1;
@@ -2274,7 +2276,9 @@ body.modal-open #calendarUpdateBtn {
 }
 
 .appointment-group-select {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  width: auto;
+  max-width: min(230px, calc(100vw - 160px));
   min-width: 94px;
   height: 30px;
   padding: 2px 4px;
@@ -2299,6 +2303,12 @@ body.modal-open #calendarUpdateBtn {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: clip;
+}
+
+.appointment-group-staff-readonly {
+  width: 100%;
+  min-width: 0;
+  align-self: center;
 }
 
 .appointment-group-readonly.has-overflow {
@@ -4477,12 +4487,13 @@ stroke-linejoin="round">
 <div class="ap-row ap-client-row">
   <span class="ap-label">Client</span>
   <input id="aClient" class="ap-input-medium ap-client-input">
+  <span id="appointmentGroupStaffReadonly" class="appointment-group-readonly appointment-group-staff-readonly is-hidden"></span>
 </div>
 
 <div id="appointmentGroupRow" class="ap-row appointment-group-row">
+  <span class="ap-label">Group</span>
   <div id="appointmentGroupWrap" class="appointment-group-wrap">
     <label id="appointmentGroupToggleWrap" class="appointment-group-toggle-wrap">
-      <span class="appointment-group-toggle-label">Group</span>
       <span class="switch appointment-group-switch">
         <input type="checkbox" id="appointmentGroupToggle">
         <span class="slider"></span>
@@ -5475,6 +5486,7 @@ const appointmentGroupToggleWrap = document.getElementById('appointmentGroupTogg
 const appointmentGroupToggle = document.getElementById('appointmentGroupToggle');
 const appointmentGroupSelect = document.getElementById('appointmentGroupSelect');
 const appointmentGroupReadonly = document.getElementById('appointmentGroupReadonly');
+const appointmentGroupStaffReadonly = document.getElementById('appointmentGroupStaffReadonly');
 const clientHistoryLinkRow = document.getElementById('clientHistoryLinkRow');
 const clientHistoryLink = document.getElementById('clientHistoryLink');
 const clientHistoryModal = document.getElementById('clientHistoryModal');
@@ -7624,11 +7636,13 @@ function updateAppointmentGroupOptions(excludeId = editId) {
 }
 
 function updateAppointmentGroupReadonlyOverflow() {
-  if (!appointmentGroupReadonly) return;
   requestAnimationFrame(() => {
-    const hidden = appointmentGroupReadonly.classList.contains('is-hidden') || appointmentGroupReadonly.offsetParent === null;
-    const overflowing = !hidden && appointmentGroupReadonly.scrollWidth > appointmentGroupReadonly.clientWidth + 1;
-    appointmentGroupReadonly.classList.toggle('has-overflow', overflowing);
+    [appointmentGroupReadonly, appointmentGroupStaffReadonly].forEach(element => {
+      if (!element) return;
+      const hidden = element.classList.contains('is-hidden') || element.offsetParent === null;
+      const overflowing = !hidden && element.scrollWidth > element.clientWidth + 1;
+      element.classList.toggle('has-overflow', overflowing);
+    });
   });
 }
 
@@ -7666,12 +7680,18 @@ function updateAppointmentGroupControls() {
   if (appointmentGroupSelect) appointmentGroupSelect.classList.toggle('is-hidden', !canEditGroup || !appointmentGroupToggle?.checked);
 
   if (appointmentGroupReadonly) {
-    appointmentGroupReadonly.classList.toggle('is-hidden', canEditGroup ? !text : !text);
+    appointmentGroupReadonly.classList.toggle('is-hidden', !canEditGroup || !text);
     appointmentGroupReadonly.innerHTML = meta && text
       ? `<span class="appointment-group-dot" style="background:${meta.color}"></span>${escapeHtml(text)}`
       : '';
-    updateAppointmentGroupReadonlyOverflow();
   }
+  if (appointmentGroupStaffReadonly) {
+    appointmentGroupStaffReadonly.classList.toggle('is-hidden', canEditGroup || !text);
+    appointmentGroupStaffReadonly.innerHTML = meta && text
+      ? `<span class="appointment-group-dot" style="background:${meta.color}"></span>${escapeHtml(text)}`
+      : '';
+  }
+  updateAppointmentGroupReadonlyOverflow();
 }
 
 function updateClientHistoryLink(appointment = null) {
@@ -15497,7 +15517,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-06.3';
+const CALENDAR_APP_VERSION = '2026-10-06.4';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';

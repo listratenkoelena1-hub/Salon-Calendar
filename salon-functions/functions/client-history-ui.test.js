@@ -23,6 +23,20 @@ test("appointment layout separates Client, Group, and Client History", () => {
   assert.match(calendarHtml, /appointmentGroupRow\?\.classList\.toggle\('is-hidden', !canEditGroup\)/);
 });
 
+test("appointment group stays beside Client for staff and on its own row for managers", () => {
+  assert.match(
+    calendarHtml,
+    /class="ap-row ap-client-row"[\s\S]*?id="aClient"[\s\S]*?id="appointmentGroupStaffReadonly"/
+  );
+  assert.match(
+    calendarHtml,
+    /id="appointmentGroupRow"[\s\S]*?<span class="ap-label">Group<\/span>[\s\S]*?id="appointmentGroupWrap"/
+  );
+  assert.match(calendarHtml, /grid-template-columns: max-content minmax\(0, 2fr\) minmax\(0, 1fr\)/);
+  assert.match(calendarHtml, /appointmentGroupStaffReadonly\.classList\.toggle\('is-hidden', canEditGroup \|\| !text\)/);
+  assert.match(calendarHtml, /appointmentGroupReadonly\.classList\.toggle\('is-hidden', !canEditGroup \|\| !text\)/);
+});
+
 test("Client History uses stacked modals and preserves the appointment editor", () => {
   assert.match(calendarHtml, /id="clientHistoryModal" class="modal hidden"/);
   assert.match(calendarHtml, /id="clientHistoryDetailModal" class="modal hidden"/);

@@ -25,6 +25,13 @@ test("calendar update control is hidden until a new version is ready", () => {
   assert.match(calendarHtml, /newWorker\.state === 'installed' && navigator\.serviceWorker\.controller/);
 });
 
+test("calendar update control stays at the lower-left edge", () => {
+  const updateButtonCss = calendarHtml.match(/#calendarUpdateBtn \{([^}]+)\}/)?.[1] || '';
+  assert.match(updateButtonCss, /left: 16px;/);
+  assert.match(updateButtonCss, /bottom: 90px;/);
+  assert.doesNotMatch(updateButtonCss, /transform: translateX\(-50%\)/);
+});
+
 test("Update activates the waiting worker and reloads after controller change", () => {
   assert.match(calendarHtml, /function applyCalendarUpdate\(\)/);
   assert.match(calendarHtml, /waitingWorker\.postMessage\(\{ type: 'SKIP_WAITING' \}\)/);
