@@ -45,11 +45,7 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-﻿const CACHE_NAME = 'salon-cache-v4';
-
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
-});
+﻿const CACHE_NAME = 'salon-cache-v5';
 
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {

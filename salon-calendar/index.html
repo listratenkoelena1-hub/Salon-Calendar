@@ -990,6 +990,37 @@ padding:10px 14px;
   box-sizing: border-box;
 }
 
+#calendarUpdateBtn {
+  position: fixed;
+  left: 50%;
+  bottom: 90px;
+  transform: translateX(-50%);
+  min-width: 112px;
+  height: 42px;
+  padding: 0 20px;
+  border: 1px solid rgba(47, 96, 89, 0.28);
+  border-radius: 999px;
+  background: #2f6059;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.22);
+  z-index: 3450;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+}
+
+#calendarUpdateBtn.hidden,
+body.modal-open #calendarUpdateBtn {
+  display: none;
+}
+
+#calendarUpdateBtn:disabled {
+  opacity: 0.78;
+  cursor: wait;
+}
+
 .bottom-tool-btn {
   border: none;
   background: transparent;
@@ -15387,6 +15418,14 @@ window.addEventListener('DOMContentLoaded', () => {
 
 </div>
 
+<button
+  id="calendarUpdateBtn"
+  class="hidden"
+  type="button"
+  aria-live="polite"
+  onclick="applyCalendarUpdate()"
+>Update</button>
+
 <button id="todayBtn" onclick="goToday()" class="hidden">Today</button>
 <button id="walkInBtn" onclick="openWalkIn()" class="hidden">
   Walk-in
@@ -15408,6 +15447,38 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
+let calendarServiceWorkerRegistration = null;
+let calendarUpdateReloadRequested = false;
+
+function showCalendarUpdateButton() {
+  const button = document.getElementById('calendarUpdateBtn');
+  if (!button) return;
+  button.disabled = false;
+  button.textContent = 'Update';
+  button.classList.remove('hidden');
+}
+
+function applyCalendarUpdate() {
+  const button = document.getElementById('calendarUpdateBtn');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Updating…';
+  }
+
+  const waitingWorker = calendarServiceWorkerRegistration?.waiting;
+  if (!waitingWorker) {
+    window.location.reload();
+    return;
+  }
+
+  calendarUpdateReloadRequested = true;
+  waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+
+  window.setTimeout(function() {
+    if (calendarUpdateReloadRequested) window.location.reload();
+  }, 5000);
+}
+
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', function(event) {
     if (event.data?.type !== 'OPEN_APPOINTMENT_FROM_PUSH') return;
@@ -15417,13 +15488,23 @@ if ('serviceWorker' in navigator) {
     }
   });
 
+  navigator.serviceWorker.addEventListener('controllerchange', function() {
+    if (calendarUpdateReloadRequested) {
+      calendarUpdateReloadRequested = false;
+      window.location.reload();
+      return;
+    }
+    showCalendarUpdateButton();
+  });
+
   window.addEventListener('load', function() {
     navigator.serviceWorker.register('./sw.js')
       .then(function(registration) {
+        calendarServiceWorkerRegistration = registration;
         registration.update();
 
-        if (registration.waiting) {
-          registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+        if (registration.waiting && navigator.serviceWorker.controller) {
+          showCalendarUpdateButton();
         }
 
         registration.addEventListener('updatefound', function() {
@@ -15432,10 +15513,14 @@ if ('serviceWorker' in navigator) {
 
           newWorker.addEventListener('statechange', function() {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              newWorker.postMessage({ type: 'SKIP_WAITING' });
+              showCalendarUpdateButton();
             }
           });
         });
+
+        window.setInterval(function() {
+          registration.update();
+        }, 30 * 60 * 1000);
 
         console.log('Service Worker registered');
       })
