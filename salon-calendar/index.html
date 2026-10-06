@@ -15497,8 +15497,10 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
+const CALENDAR_APP_VERSION = '2026-10-06.3';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
+let calendarAvailableVersion = '';
 
 function showCalendarUpdateButton() {
   const button = document.getElementById('calendarUpdateBtn');
@@ -15506,6 +15508,26 @@ function showCalendarUpdateButton() {
   button.disabled = false;
   button.textContent = 'Update';
   button.classList.remove('hidden');
+}
+
+function reloadCalendarForUpdate() {
+  const url = new URL(window.location.href);
+  url.searchParams.set('release', calendarAvailableVersion || String(Date.now()));
+  window.location.replace(url.toString());
+}
+
+async function checkCalendarAppVersion() {
+  try {
+    const response = await fetch(`./version.json?check=${Date.now()}`, { cache: 'no-store' });
+    if (!response.ok) return;
+    const payload = await response.json();
+    const availableVersion = String(payload?.version || '').trim();
+    if (!availableVersion || availableVersion === CALENDAR_APP_VERSION) return;
+    calendarAvailableVersion = availableVersion;
+    showCalendarUpdateButton();
+  } catch (error) {
+    console.log('Calendar version check skipped:', error);
+  }
 }
 
 function applyCalendarUpdate() {
@@ -15517,7 +15539,7 @@ function applyCalendarUpdate() {
 
   const waitingWorker = calendarServiceWorkerRegistration?.waiting;
   if (!waitingWorker) {
-    window.location.reload();
+    reloadCalendarForUpdate();
     return;
   }
 
@@ -15525,9 +15547,18 @@ function applyCalendarUpdate() {
   waitingWorker.postMessage({ type: 'SKIP_WAITING' });
 
   window.setTimeout(function() {
-    if (calendarUpdateReloadRequested) window.location.reload();
+    if (calendarUpdateReloadRequested) reloadCalendarForUpdate();
   }, 5000);
 }
+
+window.addEventListener('load', function() {
+  checkCalendarAppVersion();
+  window.setInterval(checkCalendarAppVersion, 10 * 60 * 1000);
+});
+
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'visible') checkCalendarAppVersion();
+});
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', function(event) {
@@ -15541,7 +15572,7 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('controllerchange', function() {
     if (calendarUpdateReloadRequested) {
       calendarUpdateReloadRequested = false;
-      window.location.reload();
+      reloadCalendarForUpdate();
       return;
     }
     showCalendarUpdateButton();
