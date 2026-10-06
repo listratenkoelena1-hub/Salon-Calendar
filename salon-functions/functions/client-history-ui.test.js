@@ -37,7 +37,9 @@ test("appointment group stays beside Client for staff and on its own row for man
   assert.doesNotMatch(calendarHtml, /id="appointmentGroupReadonly"/);
   assert.match(calendarHtml, /const suffix = names\.length \? ' - ' \+ names\.join\(', '\) : '';/);
   assert.match(calendarHtml, /\.appointment-group-select \{[\s\S]*?max-width: calc\(100% - 44px\);/);
-  assert.match(calendarHtml, /function updateAppointmentGroupSelectOverflow\(\)/);
+  assert.match(calendarHtml, /\.appointment-group-select \{[\s\S]*?text-overflow: ellipsis;/);
+  assert.doesNotMatch(calendarHtml, /\.appointment-group-select\.has-overflow/);
+  assert.doesNotMatch(calendarHtml, /updateAppointmentGroupSelectOverflow/);
 });
 
 test("Client History uses stacked modals and preserves the appointment editor", () => {

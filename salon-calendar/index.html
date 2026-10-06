@@ -2300,11 +2300,6 @@ body.modal-open #calendarUpdateBtn {
   text-overflow: ellipsis;
 }
 
-.appointment-group-select.has-overflow {
-  mask-image: linear-gradient(to right, black 0, black calc(100% - 44px), transparent calc(100% - 27px), black calc(100% - 26px), black 100%);
-  -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 44px), transparent calc(100% - 27px), black calc(100% - 26px), black 100%);
-}
-
 .appointment-group-select.is-hidden,
 .appointment-group-readonly.is-hidden {
   display: none;
@@ -7659,22 +7654,6 @@ function updateAppointmentGroupReadonlyOverflow() {
   });
 }
 
-function updateAppointmentGroupSelectOverflow() {
-  if (!appointmentGroupSelect) return;
-  requestAnimationFrame(() => {
-    const selectedText = appointmentGroupSelect.selectedOptions?.[0]?.textContent || '';
-    appointmentGroupSelect.title = selectedText;
-    const style = window.getComputedStyle(appointmentGroupSelect);
-    const canvas = updateAppointmentGroupSelectOverflow.canvas ||
-      (updateAppointmentGroupSelectOverflow.canvas = document.createElement('canvas'));
-    const context = canvas.getContext('2d');
-    if (!context) return;
-    context.font = style.font || `${style.fontSize} ${style.fontFamily}`;
-    const textWidth = context.measureText(selectedText).width + 34;
-    appointmentGroupSelect.classList.toggle('has-overflow', textWidth > appointmentGroupSelect.clientWidth + 1);
-  });
-}
-
 function updateAppointmentCardOverflowFades() {
   document.querySelectorAll('.app-note-wrap').forEach(wrap => {
     const overflowing = wrap.scrollHeight > wrap.clientHeight + 1 || wrap.scrollWidth > wrap.clientWidth + 1;
@@ -7714,7 +7693,9 @@ function updateAppointmentGroupControls() {
       ? `<span class="appointment-group-dot" style="background:${meta.color}"></span>${escapeHtml(text)}`
       : '';
   }
-  updateAppointmentGroupSelectOverflow();
+  if (appointmentGroupSelect) {
+    appointmentGroupSelect.title = appointmentGroupSelect.selectedOptions?.[0]?.textContent || '';
+  }
   updateAppointmentGroupReadonlyOverflow();
 }
 
@@ -15541,7 +15522,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-06.5';
+const CALENDAR_APP_VERSION = '2026-10-06.6';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';
