@@ -143,6 +143,13 @@ test("two real emulator managers get private contacts while staff sees only publ
       assert.equal(history.phone, phone);
       assert.equal(history.past.length, 1);
       assert.equal(history.past[0].id, pastId);
+      const roleAwareHistory = (await httpsCallable(manager.functions,
+        "getAppointmentClientHistory")({ appointmentId })).data;
+      assert.equal(roleAwareHistory.available, true);
+      assert.equal(roleAwareHistory.phone, phone);
+      assert.equal(roleAwareHistory.clientName, "Naomi");
+      assert.equal(roleAwareHistory.appointments.length, 2);
+      assert.ok(roleAwareHistory.rows.some(row => row.appointmentId === appointmentId));
       await assert.rejects(httpsCallable(manager.functions, "managerLookupClientByPhone")({
         phone: "780"
       }));
@@ -156,6 +163,12 @@ test("two real emulator managers get private contacts while staff sees only publ
     await assert.rejects(httpsCallable(clients[2].functions, "managerGetClientHistory")({
       appointmentId
     }), /Manager access is required/);
+    const staffHistory = (await httpsCallable(clients[2].functions,
+      "getAppointmentClientHistory")({ appointmentId })).data;
+    assert.equal(staffHistory.available, true);
+    assert.equal(staffHistory.phone, undefined);
+    assert.equal(staffHistory.clientName, "Naomi");
+    assert.ok(staffHistory.rows.length >= 2);
 
     await assert.rejects(getDoc(doc(clients[2].firestore,
       "activityLog", "staff-visible-log")));
@@ -231,6 +244,34 @@ test("two real emulator managers get private contacts while staff sees only publ
     })).data;
     assert.equal(duplicateBookingResult.duplicate, true);
     assert.equal(duplicateBookingResult.appointmentId, publicBookingResult.appointmentId);
+    const anyoneBookingResult = (await httpsCallable(booking.functions,
+      "createOnlineBookingRequest")({
+      requestId: "synthetic-online-anyone-one",
+      client: "Naomi",
+      phone,
+      date: "2026-11-21",
+      start: 24,
+      staffId: "anyone",
+      serviceDetails: "hard gel refill",
+      selectedServices: [],
+      consentAccepted: true,
+      consentVersion: "privacy-consent-v3-2026-09-06"
+    })).data;
+    assert.equal(anyoneBookingResult.ok, true);
+    assert.equal(anyoneBookingResult.assignedStaffId, "tech-one");
+    const anyoneAppointment = (await db.collection("appointments")
+      .doc(anyoneBookingResult.appointmentId).get()).data();
+    assert.equal(anyoneAppointment.staffId, "tech-one");
+    assert.equal(anyoneAppointment.requestedStaffId, "anyone");
+    assert.equal(anyoneAppointment.autoAssignedFromAnyone, true);
+    assert.ok(anyoneAppointment.duration >= 1);
+    const anyoneState = (await db.collection("onlineBookingAssignmentState").doc("anyone").get()).data();
+    assert.equal(anyoneState.lastAssignedStaffId, "tech-one");
+    const anyoneMessages = await db.collection("staffMessages")
+      .where("entityId", "==", anyoneBookingResult.appointmentId).get();
+    assert.equal(anyoneMessages.size, 1);
+    assert.match(anyoneMessages.docs[0].data().body, /requested ANYONE/);
+    assert.match(anyoneMessages.docs[0].data().body, /Assigned to Synthetic Tech by the Anyone rotation\./);
     const onlineRef = db.collection("appointments").doc(publicBookingResult.appointmentId);
     const onlinePrivateRef = db.collection("appointmentPrivate").doc(publicBookingResult.appointmentId);
     const onlineHistoryRef = db.collection("clientAppointmentHistory")

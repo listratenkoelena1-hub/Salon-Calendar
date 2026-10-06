@@ -27,6 +27,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // The Anyone rotation pointer is updated atomically by Cloud Functions.
+    // Browsers must not inspect or move the queue themselves.
+    match /onlineBookingAssignmentState/{document=**} {
+      allow read, write: if false;
+    }
+
     // Contacts and client-history indexes are server-only. Managers receive
     // one operational result at a time through authenticated callable
     // functions; no browser role can enumerate these collections directly.
@@ -152,6 +158,7 @@ service cloud.firestore {
       allow read, write: if signedIn()
         && collection != 'appointments'
         && collection != 'appointmentSchedules'
+        && collection != 'onlineBookingAssignmentState'
         && collection != 'appointmentPrivate'
         && collection != 'clientLookup'
         && collection != 'clientProfiles'

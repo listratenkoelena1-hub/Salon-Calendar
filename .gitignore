@@ -3,3 +3,4 @@ node_modules/
 .firebase-preview-config/
 .DS_Store
 *.log
+.firebase-cli-config/

@@ -2045,18 +2045,134 @@ padding:10px 14px;
 }
 
 .ap-client-input {
-  flex: 0 1 55%;
-  min-width: 92px;
-  max-width: 55%;
+  flex: 1 1 auto;
+  min-width: 160px;
+  max-width: none;
 }
 
 .appointment-group-wrap {
-  flex: 1 1 190px;
-  min-width: 128px;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   overflow: hidden;
+}
+
+.appointment-group-row,
+.client-history-link-row {
+  margin-top: 8px;
+}
+
+.appointment-group-row.is-hidden,
+.client-history-link-row.is-hidden {
+  display: none;
+}
+
+.client-history-link {
+  appearance: none;
+  border: 0;
+  padding: 2px 0;
+  background: transparent;
+  color: #263b38;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+#clientHistoryModal { z-index: 13100; }
+#clientHistoryDetailModal { z-index: 13200; }
+
+.client-history-content {
+  width: min(760px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.client-history-subtitle {
+  margin-top: 4px;
+  color: rgba(0,0,0,0.68);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.client-history-state {
+  margin: 14px 0 8px;
+  color: rgba(0,0,0,0.66);
+  font-size: 14px;
+}
+
+.client-history-state.is-error { color: #b3261e; }
+
+.client-history-table-wrap {
+  flex: 1 1 auto;
+  overflow: auto;
+  margin-top: 10px;
+  border: 1px solid rgba(0,0,0,0.13);
+  border-radius: 10px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.client-history-table {
+  width: 100%;
+  min-width: 650px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.client-history-table th,
+.client-history-table td {
+  padding: 10px 9px;
+  border-bottom: 1px solid rgba(0,0,0,0.10);
+  text-align: left;
+  vertical-align: top;
+}
+
+.client-history-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f5f7f7;
+  white-space: nowrap;
+}
+
+.client-history-details-link {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #263b38;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.client-history-detail-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 10px 14px;
+  margin-top: 14px;
+  font-size: 14px;
+}
+
+.client-history-detail-grid dt { font-weight: 700; }
+.client-history-detail-grid dd { margin: 0; overflow-wrap: anywhere; }
+
+@media (max-width: 640px) {
+  .client-history-content {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    padding: 13px;
+  }
+
+  .client-history-table { font-size: 13px; }
 }
 
 .appointment-group-wrap.is-hidden,
@@ -4286,6 +4402,9 @@ stroke-linejoin="round">
 <div class="ap-row ap-client-row">
   <span class="ap-label">Client</span>
   <input id="aClient" class="ap-input-medium ap-client-input">
+</div>
+
+<div id="appointmentGroupRow" class="ap-row appointment-group-row">
   <div id="appointmentGroupWrap" class="appointment-group-wrap">
     <label id="appointmentGroupToggleWrap" class="appointment-group-toggle-wrap">
       <span class="appointment-group-toggle-label">Group</span>
@@ -4297,6 +4416,10 @@ stroke-linejoin="round">
     <select id="appointmentGroupSelect" class="appointment-group-select"></select>
     <span id="appointmentGroupReadonly" class="appointment-group-readonly"></span>
   </div>
+</div>
+
+<div id="clientHistoryLinkRow" class="ap-row client-history-link-row is-hidden">
+  <button type="button" id="clientHistoryLink" class="client-history-link">Client History</button>
 </div>
 
 <div>
@@ -4360,6 +4483,46 @@ stroke-linejoin="round">
 <!-- 5. OFF WORK MODAL -->
 <!-- Single off, weekly off, vacation -->
 <!-- ===================== -->
+
+<div id="clientHistoryModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="clientHistoryTitle">
+  <div class="modal-content client-history-content">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+      <div>
+        <h3 id="clientHistoryTitle" style="margin:0;">Client History</h3>
+        <div id="clientHistorySubtitle" class="client-history-subtitle"></div>
+      </div>
+      <button type="button" class="ap-btn-small" onclick="closeClientHistory()" aria-label="Close Client History">×</button>
+    </div>
+    <div id="clientHistoryState" class="client-history-state">Loading Client History…</div>
+    <div id="clientHistoryTableWrap" class="client-history-table-wrap hidden">
+      <table class="client-history-table">
+        <thead>
+          <tr>
+            <th>Date / Time</th>
+            <th>Staff</th>
+            <th>Changed by</th>
+            <th>Event</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody id="clientHistoryTableBody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions" style="justify-content:flex-end;">
+      <button type="button" onclick="closeClientHistory()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="clientHistoryDetailModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="clientHistoryDetailTitle">
+  <div class="modal-content" style="width:min(460px, calc(100vw - 24px));">
+    <h3 id="clientHistoryDetailTitle" style="margin:0;">Appointment</h3>
+    <dl id="clientHistoryDetailGrid" class="client-history-detail-grid"></dl>
+    <div class="modal-actions" style="justify-content:flex-end;">
+      <button type="button" onclick="closeClientHistoryDetail()">Close</button>
+    </div>
+  </div>
+</div>
 
 <div id="offWorkModal" class="modal hidden">
 <div class="modal-content">
@@ -4996,6 +5159,7 @@ const managerGetAppointmentContact = httpsCallable(functions, "managerGetAppoint
 const managerLookupClientByPhone = httpsCallable(functions, "managerLookupClientByPhone");
 const managerGetActivityLogContacts = httpsCallable(functions, "managerGetActivityLogContacts");
 const getStaffActivityLog = httpsCallable(functions, "getStaffActivityLog");
+const getAppointmentClientHistory = httpsCallable(functions, "getAppointmentClientHistory");
 const FCM_VAPID_KEY = "";
 // Operational pause: keep Telegram code and data intact while staffMessages
 // remains the active internal notification channel. Set to false to resume.
@@ -5232,10 +5396,22 @@ const cancelCommentWrap = document.getElementById('cancelCommentWrap');
 const appointmentStatusBlock = document.getElementById('appointmentStatusBlock');      
 const aNote = document.getElementById('aNote');
 const appointmentGroupWrap = document.getElementById('appointmentGroupWrap');
+const appointmentGroupRow = document.getElementById('appointmentGroupRow');
 const appointmentGroupToggleWrap = document.getElementById('appointmentGroupToggleWrap');
 const appointmentGroupToggle = document.getElementById('appointmentGroupToggle');
 const appointmentGroupSelect = document.getElementById('appointmentGroupSelect');
 const appointmentGroupReadonly = document.getElementById('appointmentGroupReadonly');
+const clientHistoryLinkRow = document.getElementById('clientHistoryLinkRow');
+const clientHistoryLink = document.getElementById('clientHistoryLink');
+const clientHistoryModal = document.getElementById('clientHistoryModal');
+const clientHistorySubtitle = document.getElementById('clientHistorySubtitle');
+const clientHistoryState = document.getElementById('clientHistoryState');
+const clientHistoryTableWrap = document.getElementById('clientHistoryTableWrap');
+const clientHistoryTableBody = document.getElementById('clientHistoryTableBody');
+const clientHistoryDetailModal = document.getElementById('clientHistoryDetailModal');
+const clientHistoryDetailGrid = document.getElementById('clientHistoryDetailGrid');
+let clientHistoryLoadRunId = 0;
+let clientHistoryAppointmentsById = new Map();
 const changeDateBtn = document.getElementById('changeDateBtn');
       changeDateBtn.textContent = 'Move to other date';
 function setAppointmentChangeDateVisible(visible) {
@@ -7410,7 +7586,8 @@ function updateAppointmentGroupControls() {
   const meta = getAppointmentGroupMeta(selectedTag);
   const text = buildAppointmentGroupText(previewAppointment, 22);
 
-  appointmentGroupWrap.classList.toggle('is-hidden', !canEditGroup && !text);
+  appointmentGroupRow?.classList.toggle('is-hidden', !canEditGroup);
+  appointmentGroupWrap.classList.toggle('is-hidden', !canEditGroup);
   if (appointmentGroupToggleWrap) appointmentGroupToggleWrap.classList.toggle('is-hidden', !canEditGroup);
   if (appointmentGroupSelect) appointmentGroupSelect.classList.toggle('is-hidden', !canEditGroup || !appointmentGroupToggle?.checked);
 
@@ -7422,6 +7599,143 @@ function updateAppointmentGroupControls() {
     updateAppointmentGroupReadonlyOverflow();
   }
 }
+
+function updateClientHistoryLink(appointment = null) {
+  const roleCanView = currentUserRole === 'manager' || currentUserRole === 'staff';
+  const visible = Boolean(
+    roleCanView &&
+    appointment?.id &&
+    appointment.hasClientHistory === true
+  );
+  clientHistoryLinkRow?.classList.toggle('is-hidden', !visible);
+  if (clientHistoryLink) clientHistoryLink.disabled = !visible;
+}
+
+function formatClientHistoryRowDate(row) {
+  const millis = Number(row?.createdAtMillis);
+  if (Number.isFinite(millis) && millis > 0) {
+    return formatActivityLogDateTime(new Date(millis));
+  }
+  if (!row?.appointmentDate) return '-';
+  const [year, month, day] = String(row.appointmentDate).split('-').map(Number);
+  const date = new Date(year, (month || 1) - 1, day || 1);
+  const dateText = Number.isNaN(date.getTime())
+    ? String(row.appointmentDate)
+    : date.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit', year: 'numeric' });
+  return `${dateText} ${timeLabel(Number(row.appointmentStart) || 0)}`;
+}
+
+function renderClientHistoryRows(rows) {
+  if (!clientHistoryTableBody) return;
+  const safeRows = Array.isArray(rows) ? rows : [];
+  if (!safeRows.length) {
+    clientHistoryTableBody.innerHTML = '<tr><td colspan="5">No Client History entries yet</td></tr>';
+    return;
+  }
+  clientHistoryTableBody.innerHTML = safeRows.map(row => {
+    const appointmentId = String(row.appointmentId || '');
+    const details = String(row.details || 'Open appointment');
+    const detailsHtml = appointmentId && clientHistoryAppointmentsById.has(appointmentId)
+      ? `<button type="button" class="client-history-details-link" data-client-history-appointment="${escapeHtml(appointmentId)}">${escapeHtml(details)}</button>`
+      : escapeHtml(details);
+    return '<tr>' +
+      '<td>' + escapeHtml(formatClientHistoryRowDate(row)) + '</td>' +
+      '<td>' + escapeHtml(row.staffName || getActivityLogStaffName(row.staffId)) + '</td>' +
+      '<td>' + escapeHtml(formatActorLabel(row.actorLabel)) + '</td>' +
+      '<td>' + escapeHtml(getActivityLogEventLabel(row.eventType)) + '</td>' +
+      '<td>' + detailsHtml + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+window.openClientHistory = async () => {
+  const appointment = editId ? appointments.find(item => item.id === editId) : null;
+  if (!appointment?.id || appointment.hasClientHistory !== true) return;
+
+  const runId = ++clientHistoryLoadRunId;
+  clientHistoryAppointmentsById = new Map();
+  if (clientHistorySubtitle) clientHistorySubtitle.textContent = appointment.client || '';
+  if (clientHistoryState) {
+    clientHistoryState.textContent = 'Loading Client History…';
+    clientHistoryState.classList.remove('is-error');
+  }
+  clientHistoryTableWrap?.classList.add('hidden');
+  if (clientHistoryTableBody) clientHistoryTableBody.innerHTML = '';
+  appointmentModal.inert = true;
+  appointmentModal.setAttribute('aria-hidden', 'true');
+  clientHistoryModal?.classList.remove('hidden');
+
+  try {
+    const response = await getAppointmentClientHistory({ appointmentId: appointment.id });
+    if (runId !== clientHistoryLoadRunId || clientHistoryModal?.classList.contains('hidden')) return;
+    const result = response?.data || {};
+    if (result.available !== true) {
+      if (clientHistoryState) clientHistoryState.textContent = 'No Client History is available for this appointment.';
+      return;
+    }
+    const subtitleParts = [String(result.clientName || appointment.client || '').trim()];
+    if (currentUserRole === 'manager' && result.phone) subtitleParts.push(String(result.phone));
+    if (clientHistorySubtitle) clientHistorySubtitle.textContent = subtitleParts.filter(Boolean).join(' — ');
+    clientHistoryAppointmentsById = new Map(
+      (Array.isArray(result.appointments) ? result.appointments : [])
+        .map(item => [String(item?.id || ''), item])
+        .filter(([id]) => id)
+    );
+    renderClientHistoryRows(result.rows);
+    if (clientHistoryState) {
+      clientHistoryState.textContent = `${Number(result.totalCount) || clientHistoryAppointmentsById.size} appointment${Number(result.totalCount) === 1 ? '' : 's'}`;
+    }
+    clientHistoryTableWrap?.classList.remove('hidden');
+  } catch (error) {
+    console.error('Client History could not be loaded:', error);
+    if (runId !== clientHistoryLoadRunId) return;
+    if (clientHistoryState) {
+      clientHistoryState.textContent = error?.message || 'Client History could not be loaded.';
+      clientHistoryState.classList.add('is-error');
+    }
+  }
+};
+
+window.closeClientHistory = () => {
+  clientHistoryLoadRunId += 1;
+  window.closeClientHistoryDetail();
+  clientHistoryModal?.classList.add('hidden');
+  appointmentModal.inert = false;
+  appointmentModal.removeAttribute('aria-hidden');
+};
+
+window.openClientHistoryDetail = appointmentId => {
+  const appointment = clientHistoryAppointmentsById.get(String(appointmentId || ''));
+  if (!appointment || !clientHistoryDetailGrid) return;
+  const status = appointment.status || 'Active';
+  const source = appointment.source === 'online_booking'
+    ? 'Online Booking'
+    : (appointment.source === 'dash_booking' ? 'Dash Booking' : 'Calendar');
+  clientHistoryDetailGrid.innerHTML = [
+    ['Date', appointment.date || '-'],
+    ['Time', timeLabel(Number(appointment.start) || 0)],
+    ['Duration', `${Math.max(Number(appointment.duration) || 1, 1) * 15} min`],
+    ['Staff', appointment.staffName || getActivityLogStaffName(appointment.staffId)],
+    ['Status', status],
+    ['Source', source],
+    ['Service', appointment.note || '-']
+  ].map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd>`).join('');
+  clientHistoryModal.inert = true;
+  clientHistoryDetailModal?.classList.remove('hidden');
+};
+
+window.closeClientHistoryDetail = () => {
+  clientHistoryDetailModal?.classList.add('hidden');
+  if (clientHistoryModal) clientHistoryModal.inert = false;
+};
+
+clientHistoryLink?.addEventListener('click', window.openClientHistory);
+clientHistoryTableBody?.addEventListener('click', event => {
+  const trigger = event.target.closest('[data-client-history-appointment]');
+  if (!trigger) return;
+  window.openClientHistoryDetail(trigger.dataset.clientHistoryAppointment);
+});
+
 function buildAppointmentOverlay(a, color, pixelHeight = null, options = {}) {
   const slots = Math.max(a.duration || 1, 1);
   const isOnlineRequest = isPendingOnlineBookingRequest(a);
@@ -8043,6 +8357,7 @@ aCanceled.checked = false;
 aCancelComment.value = '';
 updateCancelUI();
 setAppointmentGroupValue(null);
+updateClientHistoryLink(null);
 appointmentModal.classList.remove('hidden');
   fillSelects();
   aDuration.value = '';
@@ -8070,6 +8385,7 @@ aNoShow.checked = false;
 aCancelComment.value = '';
 updateCancelUI();
 setAppointmentGroupValue(null);
+updateClientHistoryLink(null);
 handleAnyone();
 clearAppointmentEditorMeta();
 applyAppointmentTintNow();
@@ -8177,6 +8493,7 @@ aCanceled.checked = a.canceled === true || isDeclinedRequest;
 aCancelComment.value = a.cancelComment || (isDeclinedRequest ? 'Online booking request declined' : '');
 updateCancelUI();     
 setAppointmentGroupValue(a.groupTag || null);
+updateClientHistoryLink(a);
 handleAnyone();
 if (isRequestAppointment) {
   if (aStaff.value === ANYONE_ID) {
@@ -13017,6 +13334,7 @@ window.confirmStaffDelete = async () => {
 //====================================================================//
 
 window.closeAppointment = () => {
+   window.closeClientHistory();
    document.getElementById('appointmentStatusBlock').style.display = 'none';
    setAppointmentReadonly(false);
    
@@ -13025,6 +13343,7 @@ window.closeAppointment = () => {
   pendingCreateAppointmentId = null;
   pendingCreateMutationId = null;
   setOnlineRequestModalMode(false);
+  updateClientHistoryLink(null);
       resetAppointmentModalTint();
 
   // ===== RESET WALK-IN LOCKS =====
@@ -14761,6 +15080,7 @@ aCanceled.checked = false;
 aCancelComment.value = '';
 updateCancelUI();
 setAppointmentGroupValue(null);
+updateClientHistoryLink(null);
 handleAnyone();
 clearAppointmentEditorMeta();
   applyAppointmentTintNow();    

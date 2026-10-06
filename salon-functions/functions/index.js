@@ -64,11 +64,15 @@ const {
 } = require("./client-history-store");
 const {
   ACTIVITY_LOG_PAGE_LIMIT,
+  redactPhoneLikeText,
   serializeStaffActivityLogEntry
 } = require("./activity-log-access");
 const {
   getBookingDurationDecision
 } = require("./booking-duration");
+const {
+  selectAnyoneCandidate
+} = require("./anyone-rotation");
 const {
   enqueueDashReconciliation,
   enqueueDashSource,
@@ -86,6 +90,8 @@ const db = admin.firestore();
 
 const ANYONE_ID = "anyone";
 const APPOINTMENT_SCHEDULE_COLLECTION = "appointmentSchedules";
+const ANYONE_ASSIGNMENT_STATE_COLLECTION = "onlineBookingAssignmentState";
+const ANYONE_ASSIGNMENT_STATE_DOCUMENT = "anyone";
 const SLOT_COUNT = 49;
 const ANYONE_DISPLAY_DURATION = 1;
 const ANYONE_REQUIRED_DURATION = 4;
@@ -1256,9 +1262,13 @@ function buildCanonicalStaffMessageDoc({
 
 function buildOnlineBookingTelegramMessage(data, staffRecords) {
   const staffName = getStaffName(staffRecords, data.staffId);
+  const requestedStaffName = data.requestedStaffId === ANYONE_ID ? "ANYONE" : staffName;
   const noteLine = data.note ? `\n${data.note}` : "";
   const photoLine = data.photoReviewUrl ? `\nPhotos: <a href="${data.photoReviewUrl}">open temporary photos</a>` : "";
-  return `ONLINE BOOKING REQUEST\n${data.client} requested <b>${staffName}</b> - <u>${formatDate(data.date)}</u> at <i>${slotToTime(data.start)}</i>.${noteLine}${photoLine}`;
+  const assignmentLine = data.requestedStaffId === ANYONE_ID && data.staffId !== ANYONE_ID
+    ? `\nAssigned to <b>${staffName}</b> by the Anyone rotation.`
+    : "";
+  return `ONLINE BOOKING REQUEST\n${data.client} requested <b>${requestedStaffName}</b> - <u>${formatDate(data.date)}</u> at <i>${slotToTime(data.start)}</i>.${noteLine}${photoLine}${assignmentLine}`;
 }
 
 function buildAppointmentLogDetails(data, staffRecords) {
@@ -2233,6 +2243,167 @@ exports.managerGetClientHistory = onCall(
   }
 );
 
+function getClientHistoryFallbackEventType(appointment) {
+  if (appointment.status === "declined") return "online_request_declined";
+  if (appointment.noShow === true) return "no_show";
+  if (appointment.canceled === true) return "canceled";
+  if (appointment.type === "online_booking_request" && appointment.status === "request") {
+    return "online_request_created";
+  }
+  if (appointment.source === "dash_booking") return "dash_appointment_added";
+  return "new_app";
+}
+
+function getTimestampMillis(value) {
+  if (value?.toMillis) {
+    const millis = Number(value.toMillis());
+    return Number.isFinite(millis) ? millis : null;
+  }
+  return null;
+}
+
+function buildSafeClientHistoryAppointment(appointment, staffRecords) {
+  return {
+    id: String(appointment.id || ""),
+    date: String(appointment.date || ""),
+    start: Number(appointment.start) || 0,
+    duration: Math.max(Number(appointment.duration) || 1, 1),
+    staffId: String(appointment.staffId || ""),
+    staffName: getStaffName(staffRecords, appointment.staffId),
+    client: redactPhoneLikeText(appointment.client),
+    note: redactPhoneLikeText(appointment.note),
+    status: appointment.status === "declined"
+      ? "Declined"
+      : (appointment.noShow === true
+          ? "No-show"
+          : (appointment.canceled === true ? "Canceled" : "")),
+    source: String(appointment.source || "calendar")
+  };
+}
+
+// Role-aware, one-client-at-a-time history. Private collections remain
+// inaccessible to browsers; phone is included only in the manager response.
+exports.getAppointmentClientHistory = onCall(
+  {
+    region: "us-central1",
+    maxInstances: 8
+  },
+  async request => {
+    const actor = await getAuthorizedCalendarActor(request);
+    if (!["manager", "staff"].includes(actor.role)) {
+      throw new HttpsError("permission-denied", "Client History is available to managers and staff.");
+    }
+
+    const appointmentId = assertAppointmentToken(
+      request.data?.appointmentId,
+      "appointmentId",
+      { min: 12, max: 100 }
+    );
+    const privateSnapshot = await db.collection(APPOINTMENT_PRIVATE_COLLECTION).doc(appointmentId).get();
+    const privateData = privateSnapshot.exists ? privateSnapshot.data() || {} : {};
+    const clientProfileId = String(privateData.clientProfileId || "");
+    if (!clientProfileId) {
+      return { ok: true, appointmentId, available: false, clientName: "", rows: [], appointments: [] };
+    }
+
+    const [historySnapshot, staffSnapshot] = await Promise.all([
+      db.collection(CLIENT_HISTORY_COLLECTION)
+        .where("clientProfileId", "==", clientProfileId)
+        .limit(120)
+        .get(),
+      db.collection("staff").get()
+    ]);
+    const staffRecords = staffSnapshot.docs.map(document => ({ id: document.id, ...document.data() }));
+    const appointmentIds = [...new Set([
+      appointmentId,
+      ...historySnapshot.docs.map(document => String(document.data()?.appointmentId || document.id))
+    ].filter(Boolean))];
+
+    const appointments = [];
+    for (let index = 0; index < appointmentIds.length; index += 50) {
+      const snapshots = await db.getAll(
+        ...appointmentIds.slice(index, index + 50).map(id => db.collection("appointments").doc(id))
+      );
+      snapshots.forEach(snapshot => {
+        if (snapshot.exists) appointments.push({ id: snapshot.id, ...snapshot.data() });
+      });
+    }
+    const appointmentsById = new Map(appointments.map(appointment => [appointment.id, appointment]));
+
+    const logDocuments = [];
+    for (let index = 0; index < appointmentIds.length; index += 30) {
+      const ids = appointmentIds.slice(index, index + 30);
+      if (!ids.length) continue;
+      const snapshot = await db.collection("activityLog")
+        .where("entityId", "in", ids)
+        .limit(ACTIVITY_LOG_PAGE_LIMIT)
+        .get();
+      snapshot.docs.forEach(document => logDocuments.push(document));
+    }
+
+    const rows = logDocuments.map(document => {
+      const entry = serializeStaffActivityLogEntry(document);
+      const appointment = appointmentsById.get(entry.entityId);
+      return {
+        id: entry.id,
+        appointmentId: entry.entityId,
+        createdAtMillis: entry.createdAtMillis,
+        appointmentDate: String(appointment?.date || entry.logDate || ""),
+        appointmentStart: Number(appointment?.start) || 0,
+        staffId: entry.staffId || String(appointment?.staffId || ""),
+        staffName: entry.staffName || getStaffName(staffRecords, appointment?.staffId),
+        actorLabel: entry.actorLabel,
+        actorKey: entry.actorKey,
+        eventType: entry.eventType,
+        details: entry.service || redactPhoneLikeText(appointment?.note),
+        source: entry.source || String(appointment?.source || "")
+      };
+    });
+
+    const appointmentIdsWithLogs = new Set(rows.map(row => row.appointmentId));
+    appointments.forEach(appointment => {
+      if (appointmentIdsWithLogs.has(appointment.id)) return;
+      rows.push({
+        id: `appointment-${appointment.id}`,
+        appointmentId: appointment.id,
+        createdAtMillis: getTimestampMillis(appointment.lastActionAt) || getTimestampMillis(appointment.createdAt),
+        appointmentDate: String(appointment.date || ""),
+        appointmentStart: Number(appointment.start) || 0,
+        staffId: String(appointment.staffId || ""),
+        staffName: getStaffName(staffRecords, appointment.staffId),
+        actorLabel: String(appointment.lastEditedBy || (appointment.source === "online_booking" ? "Online Booking" : "Calendar")),
+        actorKey: String(appointment.source || "calendar"),
+        eventType: getClientHistoryFallbackEventType(appointment),
+        details: redactPhoneLikeText(appointment.note),
+        source: String(appointment.source || "")
+      });
+    });
+
+    rows.sort((left, right) => {
+      const leftFallback = Date.parse(`${left.appointmentDate || "1970-01-01"}T00:00:00Z`) + left.appointmentStart * 15 * 60000;
+      const rightFallback = Date.parse(`${right.appointmentDate || "1970-01-01"}T00:00:00Z`) + right.appointmentStart * 15 * 60000;
+      return (right.createdAtMillis || rightFallback || 0) - (left.createdAtMillis || leftFallback || 0);
+    });
+
+    const safeAppointments = appointments
+      .map(appointment => buildSafeClientHistoryAppointment(appointment, staffRecords))
+      .sort((left, right) => String(right.date).localeCompare(String(left.date)) || right.start - left.start);
+    const currentAppointment = appointmentsById.get(appointmentId) || appointments[0] || {};
+    return {
+      ok: true,
+      appointmentId,
+      available: true,
+      clientName: redactPhoneLikeText(currentAppointment.client),
+      ...(actor.role === "manager"
+        ? { phone: String(privateData.phoneDisplay || privateData.phoneNormalized || "") }
+        : {}),
+      rows: rows.slice(0, ACTIVITY_LOG_PAGE_LIMIT),
+      appointments: safeAppointments,
+      totalCount: safeAppointments.length
+    };
+  }
+);
+
 exports.clientHistorySummaryUpdated = onDocumentWritten(
   {
     document: `${CLIENT_HISTORY_COLLECTION}/{appointmentId}`,
@@ -2955,7 +3126,7 @@ exports.createOnlineBookingRequest = onCall(
     const email = normalizeOptionalEmail(input.email);
     const date = assertDate(input.date);
     const start = assertSlot(input.start);
-    const staffId = assertString(input.staffId || ANYONE_ID, "staffId", { min: 1, max: 80 });
+    const requestedStaffId = assertString(input.staffId || ANYONE_ID, "staffId", { min: 1, max: 80 });
     const selectedLanguage = assertString(input.selectedLanguage || "English", "selectedLanguage", { max: 40 });
     const serviceDetails = assertString(input.serviceDetails || "", "serviceDetails", { max: MAX_REQUEST_TEXT });
     const selectedServices = Array.isArray(input.selectedServices)
@@ -3050,13 +3221,14 @@ exports.createOnlineBookingRequest = onCall(
       })));
 
       const realStaffIds = new Set(staffRecords.map(s => s.id));
-      if (staffId !== ANYONE_ID && !realStaffIds.has(staffId)) {
+      if (requestedStaffId !== ANYONE_ID && !realStaffIds.has(requestedStaffId)) {
         throw new HttpsError("invalid-argument", "Selected technician is not available.");
       }
 
-      const selectedStaff = staffRecords.find(s => s.id === staffId);
+      let assignedStaffId = requestedStaffId;
+      let selectedStaff = staffRecords.find(s => s.id === requestedStaffId);
       if (
-        staffId !== ANYONE_ID &&
+        requestedStaffId !== ANYONE_ID &&
         (!selectedStaff || selectedStaff.bookingEnabled === false || !staffCanDoServiceGroups(selectedStaff, requestedGroups))
       ) {
         throw new HttpsError("failed-precondition", "Selected technician does not provide one of the requested services.");
@@ -3084,6 +3256,13 @@ exports.createOnlineBookingRequest = onCall(
         ...docSnap.data()
       }));
 
+      const anyoneAssignmentRef = requestedStaffId === ANYONE_ID
+        ? db.collection(ANYONE_ASSIGNMENT_STATE_COLLECTION).doc(ANYONE_ASSIGNMENT_STATE_DOCUMENT)
+        : null;
+      const anyoneAssignmentSnapshot = anyoneAssignmentRef
+        ? await tx.get(anyoneAssignmentRef)
+        : null;
+
       const requestedServiceIntent = parseServiceIntent({
         selectedServices,
         serviceDetails,
@@ -3094,8 +3273,8 @@ exports.createOnlineBookingRequest = onCall(
       let duration = BOOKING_DURATION;
       let standardDuration = BOOKING_DURATION;
       let onlineScheduleState = null;
-      if (staffId === ANYONE_ID) {
-        duration = ANYONE_DISPLAY_DURATION;
+      let anyoneAssignment = null;
+      if (requestedStaffId === ANYONE_ID) {
         if (!isBookableOnlineStart({ date, start, duration: ANYONE_REQUIRED_DURATION })) {
           throw new HttpsError("failed-precondition", "This time is no longer available.");
         }
@@ -3114,6 +3293,48 @@ exports.createOnlineBookingRequest = onCall(
         if (remainingCapacity <= 0) {
           throw new HttpsError("failed-precondition", "This time is no longer available.");
         }
+
+        const anyoneCandidates = staffRecords
+          .filter(staff => staff.id && staff.id !== ANYONE_ID)
+          .filter(staff => staff.bookingEnabled !== false)
+          .filter(staff => staff.availableForAnyone !== false)
+          .filter(staff => staffCanDoServiceGroups(staff, requestedGroups))
+          .map(staff => {
+            const durationDecision = getBookingDurationDecision({
+              selectedServices,
+              serviceDetails,
+              requestedGroups
+            }, staff, clientSummary);
+            const candidateDuration = durationDecision.duration;
+            return {
+              ...staff,
+              durationDecision,
+              available: isBookableOnlineStart({ date, start, duration: candidateDuration }) &&
+                realStaffAvailable({
+                  staffId: staff.id,
+                  date,
+                  start,
+                  end: start + candidateDuration,
+                  appointments,
+                  offWorkRecords,
+                  weeklyOffRecords
+                })
+            };
+          });
+        anyoneAssignment = selectAnyoneCandidate(
+          anyoneCandidates,
+          String(anyoneAssignmentSnapshot?.data()?.lastAssignedStaffId || "")
+        );
+        if (!anyoneAssignment) {
+          throw new HttpsError("failed-precondition", "This time is no longer available.");
+        }
+
+        assignedStaffId = anyoneAssignment.id;
+        selectedStaff = anyoneAssignment;
+        duration = anyoneAssignment.durationDecision.duration;
+        standardDuration = anyoneAssignment.durationDecision.standardDuration;
+        effectiveServiceIntent = anyoneAssignment.durationDecision.effectiveIntent;
+        serviceFingerprint = anyoneAssignment.durationDecision.serviceFingerprint;
       } else {
         const durationDecision = getBookingDurationDecision({
           selectedServices,
@@ -3129,7 +3350,7 @@ exports.createOnlineBookingRequest = onCall(
         }
         const end = start + duration;
         if (!realStaffAvailable({
-          staffId,
+          staffId: assignedStaffId,
           date,
           start,
           end,
@@ -3140,36 +3361,41 @@ exports.createOnlineBookingRequest = onCall(
           throw new HttpsError("failed-precondition", "This time is no longer available.");
         }
 
-        const scheduleRef = db.collection(APPOINTMENT_SCHEDULE_COLLECTION)
-          .doc(getScheduleId(date, staffId));
-        const scheduleSnap = await tx.get(scheduleRef);
-        const scheduleSlots = scheduleSnap.exists
-          ? cloneSlots(scheduleSnap.data()?.slots)
-          : buildScheduleSlots(appointments, { date, staffId, anyoneId: ANYONE_ID });
-        try {
-          onlineScheduleState = {
-            ref: scheduleRef,
-            slots: reserveAppointmentSlots(scheduleSlots, {
-              id: appointmentRef.id,
-              date,
-              staffId,
-              start,
-              duration,
-              canceled: false,
-              noShow: false
-            }, appointmentRef.id)
-          };
-        } catch (error) {
-          if (error?.code === "appointment-conflict") {
-            throw new HttpsError("failed-precondition", "This time is no longer available.");
-          }
-          throw error;
+      }
+
+      const scheduleRef = db.collection(APPOINTMENT_SCHEDULE_COLLECTION)
+        .doc(getScheduleId(date, assignedStaffId));
+      const scheduleSnap = await tx.get(scheduleRef);
+      const scheduleSlots = scheduleSnap.exists
+        ? cloneSlots(scheduleSnap.data()?.slots)
+        : buildScheduleSlots(appointments, { date, staffId: assignedStaffId, anyoneId: ANYONE_ID });
+      try {
+        onlineScheduleState = {
+          ref: scheduleRef,
+          slots: reserveAppointmentSlots(scheduleSlots, {
+            id: appointmentRef.id,
+            date,
+            staffId: assignedStaffId,
+            start,
+            duration,
+            canceled: false,
+            noShow: false
+          }, appointmentRef.id)
+        };
+      } catch (error) {
+        if (error?.code === "appointment-conflict") {
+          throw new HttpsError("failed-precondition", "This time is no longer available.");
         }
+        throw error;
       }
 
       const appointmentData = stripPrivateAppointmentFields({
         date,
-        staffId,
+        staffId: assignedStaffId,
+        requestedStaffId,
+        autoAssignedFromAnyone: requestedStaffId === ANYONE_ID,
+        anyoneAssignedStaffId: requestedStaffId === ANYONE_ID ? assignedStaffId : null,
+        anyoneAssignmentVersion: requestedStaffId === ANYONE_ID ? 1 : null,
         phone,
         phoneLookup: normalizePhoneDigits(phone),
         clientId: clientIdentity?.clientId || null,
@@ -3219,10 +3445,20 @@ exports.createOnlineBookingRequest = onCall(
         tx.set(onlineScheduleState.ref, {
           schemaVersion: SCHEDULE_SCHEMA_VERSION,
           date,
-          staffId,
+          staffId: assignedStaffId,
           slots: onlineScheduleState.slots,
           updatedAt: FieldValue.serverTimestamp()
         });
+      }
+
+      if (anyoneAssignmentRef && anyoneAssignment) {
+        tx.set(anyoneAssignmentRef, {
+          lastAssignedStaffId: assignedStaffId,
+          lastAppointmentId: appointmentRef.id,
+          lastAssignedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+          version: 1
+        }, { merge: true });
       }
 
       applyClientIdentityPlan(tx, clientIdentity, FieldValue);
@@ -3246,7 +3482,7 @@ exports.createOnlineBookingRequest = onCall(
         logDate: date,
         actorLabel: "Online Booking",
         actorKey: "online_booking",
-        staffId,
+        staffId: assignedStaffId,
         eventType: "online_request_created",
         entityType: "appointment",
         entityId: appointmentRef.id,
@@ -3284,8 +3520,8 @@ exports.createOnlineBookingRequest = onCall(
           eventType: "online_request_created",
           entityType: "appointment",
           entityId: appointmentRef.id,
-          staffId,
-          staffName: getStaffName(staffRecords, staffId),
+          staffId: assignedStaffId,
+          staffName: getStaffName(staffRecords, assignedStaffId),
           actorLabel: "Online Booking",
           actorKey: "online_booking",
           createdAt: FieldValue.serverTimestamp(),
@@ -3298,8 +3534,8 @@ exports.createOnlineBookingRequest = onCall(
         eventType: "online_request_created",
         entityType: "appointment",
         entityId: appointmentRef.id,
-        staffId,
-        staffName: getStaffName(staffRecords, staffId),
+        staffId: assignedStaffId,
+        staffName: getStaffName(staffRecords, assignedStaffId),
         staffRecords,
         photoReviewUrl: appointmentData.photoReviewUrl || "",
         source: "online_booking",
@@ -3309,7 +3545,8 @@ exports.createOnlineBookingRequest = onCall(
       return {
         ok: true,
         duplicate: false,
-        appointmentId: appointmentRef.id
+        appointmentId: appointmentRef.id,
+        assignedStaffId
       };
     });
       return result;

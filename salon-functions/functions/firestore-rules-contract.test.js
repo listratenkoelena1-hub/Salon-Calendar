@@ -11,6 +11,7 @@ const rules = fs.readFileSync(
 );
 
 const serverOnlyCollections = [
+  "onlineBookingAssignmentState",
   "appointmentPrivate",
   "clientLookup",
   "clientProfiles",
