@@ -7902,8 +7902,51 @@ function getVisibleAppointmentDuration(a) {
   return Math.max(0, visibleEnd - visibleStart);
 }
 
+function getCollapsedMorningAppointment(appointmentList) {
+  const candidates = appointmentList.filter(a => {
+    const start = Number(a?.start);
+    return start === -1 || (Number.isFinite(start) && start >= 0 && start < MORNING_SLOTS);
+  });
+
+  candidates.sort((a, b) => {
+    const aStart = Number(a.start);
+    const bStart = Number(b.start);
+    const aTimed = aStart >= 0;
+    const bTimed = bStart >= 0;
+    if (aTimed !== bTimed) return bTimed - aTimed;
+    if (!aTimed) return 0;
+
+    const aEnd = aStart + Math.max(Number(a.duration) || 1, 1);
+    const bEnd = bStart + Math.max(Number(b.duration) || 1, 1);
+    const aReachesTen = aEnd >= MORNING_SLOTS;
+    const bReachesTen = bEnd >= MORNING_SLOTS;
+
+    if (aReachesTen !== bReachesTen) return Number(bReachesTen) - Number(aReachesTen);
+    if (aReachesTen && aStart !== bStart) return bStart - aStart;
+    if (aEnd !== bEnd) return bEnd - aEnd;
+    return bStart - aStart;
+  });
+
+  return candidates[0] || null;
+}
+
 function drawCollapsedMorningAppointment(cell, a, color) {
   if (!cell) return;
+
+  if (Number(a.start) === -1) {
+    cell.classList.add('busy', 'block-start', 'block-end');
+    cell.style.background = color;
+    cell.innerHTML = `
+      <div class="app-client ${a.noShow ? 'no-show-text' : ''}">
+        ${a.noShow ? '<span class="no-show-dot"></span>' : ''}
+        ${a.client || ''}
+      </div>
+      <div class="app-service">${getAppointmentNote(a)}</div>
+      ${buildAppointmentGroupHtml(a)}
+    `;
+    cell.onclick = null;
+    return;
+  }
 
   const fullDuration = Math.max(a.duration || 1, 1);
   const appointmentEnd = a.start + fullDuration;
@@ -8037,6 +8080,7 @@ if (slot === -1) {
     });
 
 Object.entries(anyoneGroups).forEach(([start, group]) => {
+  if (!morningExpanded && Number(start) < MORNING_SLOTS) return;
   const si = staff.findIndex(s => s.id === ANYONE_ID);
   if (si === -1) return;
   const cell = document.querySelector(
@@ -8076,6 +8120,24 @@ Object.entries(anyoneGroups).forEach(([start, group]) => {
     };
   }
 });
+
+if (!morningExpanded) {
+  staff.forEach((person, staffIndex) => {
+    const morningAppointment = getCollapsedMorningAppointment(
+      dayAppointments.filter(a => a.staffId === person.id)
+    );
+    if (!morningAppointment) return;
+
+    const morningCell = document.querySelector(
+      `.slot[data-slot="-1"][data-staff="${staffIndex}"]`
+    );
+    drawCollapsedMorningAppointment(
+      morningCell,
+      morningAppointment,
+      getAppointmentRenderColor(morningAppointment, person.color)
+    );
+  });
+}
 
 function getAnyoneCellText(a) {
   const client = (a.client || '').trim();
@@ -8126,6 +8188,7 @@ dayAppointments
 
     // ===== MORNING ROW APPOINTMENT =====
     if (a.start === -1) {
+      if (!morningExpanded) return;
       const cell = document.querySelector(
         `.slot[data-slot="-1"][data-staff="${si}"]`
       );
@@ -8153,13 +8216,6 @@ dayAppointments
     const visibleDuration = getVisibleAppointmentDuration(a);
     const continuesFromMorning = !morningExpanded && a.start < MORNING_SLOTS && visibleDuration > 0;
     const appointmentEnd = a.start + fullDuration;
-
-    if (!morningExpanded && a.start < MORNING_SLOTS) {
-      const morningCell = document.querySelector(
-        `.slot[data-slot="-1"][data-staff="${si}"]`
-      );
-      drawCollapsedMorningAppointment(morningCell, a, color);
-    }
 
     if (visibleDuration === 0) return;
 
@@ -8278,6 +8334,29 @@ function drawAppointmentsWeek() {
     });
   });
 
+  if (!morningExpanded) {
+    weekDateStrings.forEach(dateStr => {
+      const morningAppointment = getCollapsedMorningAppointment(
+        appointments.filter(a =>
+          a.date === dateStr &&
+          a.staffId === currentStaff.id &&
+          a.noShow !== true &&
+          a.canceled !== true
+        )
+      );
+      if (!morningAppointment) return;
+
+      const morningCell = document.querySelector(
+        `.slot[data-slot="-1"][data-date="${dateStr}"][data-staff-id="${currentStaff.id}"]`
+      );
+      drawCollapsedMorningAppointment(
+        morningCell,
+        morningAppointment,
+        getAppointmentRenderColor(morningAppointment, currentStaff.color)
+      );
+    });
+  }
+
   appointments
     .filter(a =>
       a.staffId === currentStaff.id &&
@@ -8287,6 +8366,7 @@ function drawAppointmentsWeek() {
     )
     .forEach(a => {
       if (a.start === -1) {
+        if (!morningExpanded) return;
         const cell = document.querySelector(
           `.slot[data-slot="-1"][data-date="${a.date}"][data-staff-id="${currentStaff.id}"]`
         );
@@ -8311,13 +8391,6 @@ function drawAppointmentsWeek() {
       const visibleDuration = getVisibleAppointmentDuration(a);
       const continuesFromMorning = !morningExpanded && a.start < MORNING_SLOTS && visibleDuration > 0;
       const appointmentEnd = a.start + fullDuration;
-
-      if (!morningExpanded && a.start < MORNING_SLOTS) {
-        const morningCell = document.querySelector(
-          `.slot[data-slot="-1"][data-date="${a.date}"][data-staff-id="${currentStaff.id}"]`
-        );
-        drawCollapsedMorningAppointment(morningCell, a, color);
-      }
 
       if (visibleDuration === 0) return;
 
