@@ -48,10 +48,19 @@ test("service worker waits for the user's update action", () => {
 });
 
 test("calendar checks a no-cache release manifest independently of the service worker", () => {
-  assert.match(calendarHtml, /function checkCalendarAppVersion\(\)/);
+  assert.match(calendarHtml, /function checkCalendarAppVersion\(\{ autoApply = false \} = \{\}\)/);
   assert.match(calendarHtml, /fetch\(`\.\/version\.json\?check=\$\{Date\.now\(\)\}`,[\s\S]*?cache: 'no-store'/);
   assert.match(calendarHtml, /window\.setInterval\(checkCalendarAppVersion, 10 \* 60 \* 1000\)/);
   assert.match(calendarHtml, /visibilityState === 'visible'/);
   const embeddedVersion = calendarHtml.match(/const CALENDAR_APP_VERSION = '([^']+)'/)?.[1];
   assert.equal(embeddedVersion, versionManifest.version);
+});
+
+test("a reopened or foregrounded calendar applies a pending update automatically", () => {
+  assert.match(calendarHtml, /checkCalendarAppVersion\(\{ autoApply: true \}\)/);
+  assert.match(calendarHtml, /visibilityState === 'visible'[\s\S]*?checkCalendarAppVersion\(\{ autoApply: true \}\)/);
+  assert.match(calendarHtml, /function canApplyCalendarUpdateAutomatically\(\)/);
+  assert.match(calendarHtml, /!document\.body\.classList\.contains\('modal-open'\)/);
+  assert.match(calendarHtml, /!appointmentActionInProgress/);
+  assert.match(calendarHtml, /autoApply && canApplyCalendarUpdateAutomatically\(\)[\s\S]*?applyCalendarUpdate\(\)/);
 });

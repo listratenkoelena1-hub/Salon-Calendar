@@ -15522,7 +15522,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-06.6';
+const CALENDAR_APP_VERSION = '2026-10-11.1';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';
@@ -15541,7 +15541,20 @@ function reloadCalendarForUpdate() {
   window.location.replace(url.toString());
 }
 
-async function checkCalendarAppVersion() {
+function canApplyCalendarUpdateAutomatically() {
+  return document.visibilityState === 'visible' &&
+    !document.body.classList.contains('modal-open') &&
+    !appointmentActionInProgress;
+}
+
+function offerCalendarUpdate({ autoApply = false } = {}) {
+  showCalendarUpdateButton();
+  if (autoApply && canApplyCalendarUpdateAutomatically()) {
+    applyCalendarUpdate();
+  }
+}
+
+async function checkCalendarAppVersion({ autoApply = false } = {}) {
   try {
     const response = await fetch(`./version.json?check=${Date.now()}`, { cache: 'no-store' });
     if (!response.ok) return;
@@ -15549,7 +15562,7 @@ async function checkCalendarAppVersion() {
     const availableVersion = String(payload?.version || '').trim();
     if (!availableVersion || availableVersion === CALENDAR_APP_VERSION) return;
     calendarAvailableVersion = availableVersion;
-    showCalendarUpdateButton();
+    offerCalendarUpdate({ autoApply });
   } catch (error) {
     console.log('Calendar version check skipped:', error);
   }
@@ -15577,12 +15590,14 @@ function applyCalendarUpdate() {
 }
 
 window.addEventListener('load', function() {
-  checkCalendarAppVersion();
+  checkCalendarAppVersion({ autoApply: true });
   window.setInterval(checkCalendarAppVersion, 10 * 60 * 1000);
 });
 
 document.addEventListener('visibilitychange', function() {
-  if (document.visibilityState === 'visible') checkCalendarAppVersion();
+  if (document.visibilityState === 'visible') {
+    checkCalendarAppVersion({ autoApply: true });
+  }
 });
 
 if ('serviceWorker' in navigator) {
@@ -15610,7 +15625,7 @@ if ('serviceWorker' in navigator) {
         registration.update();
 
         if (registration.waiting && navigator.serviceWorker.controller) {
-          showCalendarUpdateButton();
+          offerCalendarUpdate({ autoApply: true });
         }
 
         registration.addEventListener('updatefound', function() {
@@ -15619,7 +15634,7 @@ if ('serviceWorker' in navigator) {
 
           newWorker.addEventListener('statechange', function() {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              showCalendarUpdateButton();
+              offerCalendarUpdate();
             }
           });
         });
