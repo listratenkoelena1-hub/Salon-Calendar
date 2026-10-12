@@ -1516,10 +1516,6 @@ body.modal-open #calendarUpdateBtn {
   flex-direction: column;
 }
 
-#staffOnboardingModal.staff-onboarding-preview {
-  z-index: 13000;
-}
-
 .staff-onboarding-header {
   display: flex;
   justify-content: space-between;
@@ -1567,6 +1563,23 @@ body.modal-open #calendarUpdateBtn {
   gap: 9px;
   flex-wrap: wrap;
   padding-top: 13px;
+}
+
+.staff-onboarding-dismiss-option {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0 !important;
+  color: #555;
+  font-size: 14px !important;
+  cursor: pointer;
+}
+
+.staff-onboarding-dismiss-option input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex: 0 0 auto;
 }
 
 .staff-field-error {
@@ -3199,10 +3212,6 @@ body.modal-open{
   margin-top: 12px;
 }
 
-#staffOnboardingPreviewBtn {
-  margin-right: auto;
-}
-
 
  /* ===== TOAST NOTIFICATION ===== */
 
@@ -4808,9 +4817,12 @@ stroke-linejoin="round">
       </div>
     </div>
     <div id="staffOnboardingBody" class="staff-onboarding-body"></div>
+    <label class="staff-onboarding-dismiss-option">
+      <input id="staffOnboardingDismissCheckbox" type="checkbox">
+      <span id="staffOnboardingDismissLabel"></span>
+    </label>
     <div class="staff-onboarding-actions">
-      <button id="staffOnboardingLaterBtn" type="button" onclick="snoozeStaffOnboarding()"></button>
-      <button id="staffOnboardingCloseBtn" type="button" onclick="completeStaffOnboarding()"></button>
+      <button id="staffOnboardingCloseBtn" type="button" onclick="closeStaffOnboarding()"></button>
       <button id="staffOnboardingAllowBtn" type="button" class="btn-primary" onclick="allowStaffOnboardingNotifications()"></button>
     </div>
   </div>
@@ -5196,7 +5208,6 @@ stroke-linejoin="round">
 </div>
 
 <div class="modal-actions staff-modal-actions">
-  <button id="staffOnboardingPreviewBtn" class="hidden" type="button" onclick="openStaffOnboardingPreview()">Preview welcome guide</button>
   <button id="staffPersonalSaveBtn" class="btn-primary staff-personal-save-action" onclick="saveCurrentStaffMeta()">Save</button>
   <button onclick="closeStaff()">Close</button>
 </div>
@@ -9993,7 +10004,6 @@ let messagingInstance = null;
 let pushSetupAttempted = false;
 let pushPermissionLanguage = localStorage.getItem('salonCalendarPushInviteLanguage') || 'en';
 let staffOnboardingLanguage = 'en';
-let staffOnboardingPreviewMode = false;
 
 function getNotificationReadKey() {
   return currentUserRole === 'manager' ? 'manager' : (currentUserStaffId || currentUserRole || 'user');
@@ -10276,7 +10286,7 @@ function getStaffOnboardingCopy(language = staffOnboardingLanguage) {
       ],
       notification: 'Allow notifications to receive important events about your appointments even when the calendar is not open.',
       enabled: 'Notifications are already enabled on this phone.',
-      allow: 'Allow notifications', later: 'Remind me later', close: 'Close'
+      allow: 'Allow notifications', dismiss: "Don't remind me again", close: 'Close'
     },
     uk: {
       title: 'Ласкаво просимо до команди Rose’s Nails Londonderry',
@@ -10291,7 +10301,7 @@ function getStaffOnboardingCopy(language = staffOnboardingLanguage) {
       ],
       notification: 'Дозвольте сповіщення, щоб отримувати важливі повідомлення про ваші записи, навіть коли календар не відкритий.',
       enabled: 'Сповіщення вже дозволені на цьому телефоні.',
-      allow: 'Дозволити сповіщення', later: 'Нагадати пізніше', close: 'Закрити'
+      allow: 'Дозволити сповіщення', dismiss: 'Більше не нагадувати', close: 'Закрити'
     },
     ru: {
       title: 'Добро пожаловать в команду Rose’s Nails Londonderry',
@@ -10306,7 +10316,7 @@ function getStaffOnboardingCopy(language = staffOnboardingLanguage) {
       ],
       notification: 'Разрешите уведомления, чтобы получать важные сообщения о ваших записях, даже когда календарь не открыт.',
       enabled: 'Уведомления уже разрешены на этом телефоне.',
-      allow: 'Разрешить уведомления', later: 'Напомнить позже', close: 'Закрыть'
+      allow: 'Разрешить уведомления', dismiss: 'Больше не напоминать', close: 'Закрыть'
     }
   };
   return copies[language] || copies.en;
@@ -10322,7 +10332,7 @@ function renderStaffOnboarding() {
     `<p class="staff-onboarding-notification-note">${escapeHtml(granted ? copy.enabled : copy.notification)}</p>`;
   document.getElementById('staffOnboardingAllowBtn').textContent = copy.allow;
   document.getElementById('staffOnboardingAllowBtn').classList.toggle('hidden', granted);
-  document.getElementById('staffOnboardingLaterBtn').textContent = copy.later;
+  document.getElementById('staffOnboardingDismissLabel').textContent = copy.dismiss;
   document.getElementById('staffOnboardingCloseBtn').textContent = copy.close;
   ['en', 'uk', 'ru'].forEach(lang => {
     document.getElementById(`staffOnboardingLang${lang === 'en' ? 'En' : lang === 'uk' ? 'Uk' : 'Ru'}Btn`)
@@ -10343,13 +10353,6 @@ function setStaffOnboardingBusy(busy) {
 }
 
 async function persistStaffOnboardingAction(action) {
-  if (staffOnboardingPreviewMode) {
-    const modal = document.getElementById('staffOnboardingModal');
-    modal.classList.add('hidden');
-    modal.classList.remove('staff-onboarding-preview');
-    staffOnboardingPreviewMode = false;
-    return;
-  }
   setStaffOnboardingBusy(true);
   try {
     await setStaffOnboardingState({ version: STAFF_ONBOARDING_VERSION, action });
@@ -10362,14 +10365,12 @@ async function persistStaffOnboardingAction(action) {
   }
 }
 
-window.completeStaffOnboarding = () => persistStaffOnboardingAction('complete');
-window.snoozeStaffOnboarding = () => persistStaffOnboardingAction('snooze');
+window.closeStaffOnboarding = () => {
+  const neverRemind = document.getElementById('staffOnboardingDismissCheckbox')?.checked === true;
+  return persistStaffOnboardingAction(neverRemind ? 'complete' : 'snooze');
+};
 
 window.allowStaffOnboardingNotifications = async () => {
-  if (staffOnboardingPreviewMode) {
-    showToast('Preview only — no notification settings were changed.', 'success', 3500);
-    return;
-  }
   if (!('Notification' in window)) {
     showToast('Notifications are not supported on this device.', 'error');
     return;
@@ -10400,21 +10401,12 @@ function initializeStaffOnboardingForUser(userData) {
     ? userData.staffOnboardingSnoozedUntil.toMillis()
     : 0;
   if (snoozedUntil > Date.now()) return;
-  staffOnboardingPreviewMode = false;
   staffOnboardingLanguage = getPreferredStaffOnboardingLanguage();
+  const dismissCheckbox = document.getElementById('staffOnboardingDismissCheckbox');
+  if (dismissCheckbox) dismissCheckbox.checked = false;
   renderStaffOnboarding();
   setTimeout(() => document.getElementById('staffOnboardingModal').classList.remove('hidden'), 450);
 }
-
-window.openStaffOnboardingPreview = () => {
-  if (currentUserRole !== 'manager') return;
-  staffOnboardingPreviewMode = true;
-  staffOnboardingLanguage = getPreferredStaffOnboardingLanguage();
-  renderStaffOnboarding();
-  const modal = document.getElementById('staffOnboardingModal');
-  modal.classList.add('staff-onboarding-preview');
-  modal.classList.remove('hidden');
-};
 
 function stripNotificationHtml(value) {
   return String(value || '')
@@ -13450,7 +13442,6 @@ window.openStaff = () => {
   }
 
   renderStaff();
-  document.getElementById('staffOnboardingPreviewBtn')?.classList.toggle('hidden', currentUserRole !== 'manager');
   staffModal.classList.remove('hidden');
   if (currentUserRole === 'manager') refreshStaffPushStatuses();
 };
@@ -15896,7 +15887,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-12.2';
+const CALENDAR_APP_VERSION = '2026-10-12.3';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';

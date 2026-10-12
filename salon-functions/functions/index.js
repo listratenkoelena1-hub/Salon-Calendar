@@ -4779,7 +4779,7 @@ exports.setStaffOnboardingState = onCall(
       }, { merge: true });
     } else {
       await userRef.set({
-        staffOnboardingSnoozedUntil: Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000),
+        staffOnboardingSnoozedUntil: Timestamp.fromMillis(Date.now() + 4 * 60 * 60 * 1000),
         staffOnboardingSnoozedAt: FieldValue.serverTimestamp()
       }, { merge: true });
     }

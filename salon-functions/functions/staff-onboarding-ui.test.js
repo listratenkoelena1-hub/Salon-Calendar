@@ -34,9 +34,9 @@ test("first-login onboarding is localized and has explicit actions without an X"
   assert.match(modal, /staffOnboardingLangUkBtn/);
   assert.match(modal, /staffOnboardingLangRuBtn/);
   assert.match(modal, /allowStaffOnboardingNotifications/);
-  assert.match(modal, /snoozeStaffOnboarding/);
-  assert.match(modal, /completeStaffOnboarding/);
-  assert.doesNotMatch(modal, /aria-label="Close"|onclick="[^"\n]*closeStaffOnboarding/);
+  assert.match(modal, /staffOnboardingDismissCheckbox/);
+  assert.match(modal, /closeStaffOnboarding/);
+  assert.doesNotMatch(modal, /aria-label="Close"|modal-close|close-icon/);
   assert.match(html, /Добро пожаловать в команду Rose’s Nails Londonderry/);
   assert.match(html, /Ласкаво просимо до команди Rose’s Nails Londonderry/);
   assert.match(html, /Сообщения хранятся 60 дней/);
@@ -48,8 +48,9 @@ test("legacy Messages permission guide is no longer opened automatically", () =>
   assert.doesNotMatch(initializer, /openPushPermissionModal|shouldAutoShowPushPrompt/);
 });
 
-test("manager can preview the real onboarding without persisting or requesting permission", () => {
-  assert.match(html, /id="staffOnboardingPreviewBtn"[^>]*onclick="openStaffOnboardingPreview\(\)"/);
-  assert.match(html, /if \(currentUserRole !== 'manager'\) return;[\s\S]*staffOnboardingPreviewMode = true/);
-  assert.match(html, /if \(staffOnboardingPreviewMode\) \{[\s\S]*Preview only — no notification settings were changed\./);
+test("closing snoozes for four hours unless the user selects never remind", () => {
+  assert.doesNotMatch(html, /staffOnboardingPreviewBtn|openStaffOnboardingPreview/);
+  assert.match(html, /neverRemind \? 'complete' : 'snooze'/);
+  const functionsSource = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
+  assert.match(functionsSource, /Date\.now\(\) \+ 4 \* 60 \* 60 \* 1000/);
 });
