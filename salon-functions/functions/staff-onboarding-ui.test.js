@@ -47,3 +47,9 @@ test("legacy Messages permission guide is no longer opened automatically", () =>
   const initializer = html.match(/async function initializeCalendarPushForUser\(\) \{[\s\S]*?\n\}/)[0];
   assert.doesNotMatch(initializer, /openPushPermissionModal|shouldAutoShowPushPrompt/);
 });
+
+test("manager can preview the real onboarding without persisting or requesting permission", () => {
+  assert.match(html, /id="staffOnboardingPreviewBtn"[^>]*onclick="openStaffOnboardingPreview\(\)"/);
+  assert.match(html, /if \(currentUserRole !== 'manager'\) return;[\s\S]*staffOnboardingPreviewMode = true/);
+  assert.match(html, /if \(staffOnboardingPreviewMode\) \{[\s\S]*Preview only — no notification settings were changed\./);
+});

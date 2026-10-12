@@ -1516,6 +1516,10 @@ body.modal-open #calendarUpdateBtn {
   flex-direction: column;
 }
 
+#staffOnboardingModal.staff-onboarding-preview {
+  z-index: 13000;
+}
+
 .staff-onboarding-header {
   display: flex;
   justify-content: space-between;
@@ -3193,6 +3197,10 @@ body.modal-open{
   flex: 0 0 auto;
   justify-content: flex-end;
   margin-top: 12px;
+}
+
+#staffOnboardingPreviewBtn {
+  margin-right: auto;
 }
 
 
@@ -5188,6 +5196,7 @@ stroke-linejoin="round">
 </div>
 
 <div class="modal-actions staff-modal-actions">
+  <button id="staffOnboardingPreviewBtn" class="hidden" type="button" onclick="openStaffOnboardingPreview()">Preview welcome guide</button>
   <button id="staffPersonalSaveBtn" class="btn-primary staff-personal-save-action" onclick="saveCurrentStaffMeta()">Save</button>
   <button onclick="closeStaff()">Close</button>
 </div>
@@ -9984,6 +9993,7 @@ let messagingInstance = null;
 let pushSetupAttempted = false;
 let pushPermissionLanguage = localStorage.getItem('salonCalendarPushInviteLanguage') || 'en';
 let staffOnboardingLanguage = 'en';
+let staffOnboardingPreviewMode = false;
 
 function getNotificationReadKey() {
   return currentUserRole === 'manager' ? 'manager' : (currentUserStaffId || currentUserRole || 'user');
@@ -10333,6 +10343,13 @@ function setStaffOnboardingBusy(busy) {
 }
 
 async function persistStaffOnboardingAction(action) {
+  if (staffOnboardingPreviewMode) {
+    const modal = document.getElementById('staffOnboardingModal');
+    modal.classList.add('hidden');
+    modal.classList.remove('staff-onboarding-preview');
+    staffOnboardingPreviewMode = false;
+    return;
+  }
   setStaffOnboardingBusy(true);
   try {
     await setStaffOnboardingState({ version: STAFF_ONBOARDING_VERSION, action });
@@ -10349,6 +10366,10 @@ window.completeStaffOnboarding = () => persistStaffOnboardingAction('complete');
 window.snoozeStaffOnboarding = () => persistStaffOnboardingAction('snooze');
 
 window.allowStaffOnboardingNotifications = async () => {
+  if (staffOnboardingPreviewMode) {
+    showToast('Preview only — no notification settings were changed.', 'success', 3500);
+    return;
+  }
   if (!('Notification' in window)) {
     showToast('Notifications are not supported on this device.', 'error');
     return;
@@ -10379,10 +10400,21 @@ function initializeStaffOnboardingForUser(userData) {
     ? userData.staffOnboardingSnoozedUntil.toMillis()
     : 0;
   if (snoozedUntil > Date.now()) return;
+  staffOnboardingPreviewMode = false;
   staffOnboardingLanguage = getPreferredStaffOnboardingLanguage();
   renderStaffOnboarding();
   setTimeout(() => document.getElementById('staffOnboardingModal').classList.remove('hidden'), 450);
 }
+
+window.openStaffOnboardingPreview = () => {
+  if (currentUserRole !== 'manager') return;
+  staffOnboardingPreviewMode = true;
+  staffOnboardingLanguage = getPreferredStaffOnboardingLanguage();
+  renderStaffOnboarding();
+  const modal = document.getElementById('staffOnboardingModal');
+  modal.classList.add('staff-onboarding-preview');
+  modal.classList.remove('hidden');
+};
 
 function stripNotificationHtml(value) {
   return String(value || '')
@@ -13418,6 +13450,7 @@ window.openStaff = () => {
   }
 
   renderStaff();
+  document.getElementById('staffOnboardingPreviewBtn')?.classList.toggle('hidden', currentUserRole !== 'manager');
   staffModal.classList.remove('hidden');
   if (currentUserRole === 'manager') refreshStaffPushStatuses();
 };
@@ -15863,7 +15896,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-12.1';
+const CALENDAR_APP_VERSION = '2026-10-12.2';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';
