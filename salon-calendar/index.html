@@ -1509,6 +1509,79 @@ body.modal-open #calendarUpdateBtn {
   margin-top: 16px;
 }
 
+.staff-onboarding-modal-content {
+  max-width: 620px;
+  max-height: min(88vh, 760px);
+  display: flex;
+  flex-direction: column;
+}
+
+.staff-onboarding-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.staff-onboarding-title {
+  margin: 0;
+  font-size: 21px;
+  line-height: 1.2;
+}
+
+.staff-onboarding-body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 5px;
+  color: #3e3e3e;
+  font-size: 14px;
+  line-height: 1.42;
+}
+
+.staff-onboarding-intro { margin: 0 0 10px; }
+.staff-onboarding-section { margin: 0 0 10px; }
+.staff-onboarding-section h4 {
+  margin: 0 0 3px;
+  font-size: 15px;
+  color: #2f4d49;
+}
+.staff-onboarding-section p { margin: 0; }
+
+.staff-onboarding-notification-note {
+  margin: 12px 0 0;
+  padding: 9px 11px;
+  border-radius: 12px;
+  background: #f4fffb;
+  border: 1px solid rgba(47,111,103,0.22);
+  color: #2f6f67;
+}
+
+.staff-onboarding-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  flex-wrap: wrap;
+  padding-top: 13px;
+}
+
+.staff-field-error {
+  color: #bd2d2d;
+  font-size: 12px;
+  font-weight: 700;
+  margin: 6px 0 0 118px;
+}
+
+#newStaffEmail.invalid {
+  border-color: #bd2d2d !important;
+  box-shadow: 0 0 0 2px rgba(189,45,45,0.12);
+}
+
+@media (max-width: 600px) {
+  .staff-onboarding-actions button { flex: 1 1 auto; }
+  .staff-field-error { margin-left: 0; }
+}
+
 .staff-notification-empty {
   color: #777;
   font-size: 14px;
@@ -4716,6 +4789,25 @@ stroke-linejoin="round">
   </div>
 </div>
 
+<div id="staffOnboardingModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="staffOnboardingTitle">
+  <div class="modal-content staff-onboarding-modal-content">
+    <div class="staff-onboarding-header">
+      <h3 id="staffOnboardingTitle" class="staff-onboarding-title"></h3>
+      <div class="push-permission-language" aria-label="Guide language">
+        <button id="staffOnboardingLangEnBtn" type="button" onclick="setStaffOnboardingLanguage('en')">ENG</button>
+        <button id="staffOnboardingLangUkBtn" type="button" onclick="setStaffOnboardingLanguage('uk')">UKR</button>
+        <button id="staffOnboardingLangRuBtn" type="button" onclick="setStaffOnboardingLanguage('ru')">RUS</button>
+      </div>
+    </div>
+    <div id="staffOnboardingBody" class="staff-onboarding-body"></div>
+    <div class="staff-onboarding-actions">
+      <button id="staffOnboardingLaterBtn" type="button" onclick="snoozeStaffOnboarding()"></button>
+      <button id="staffOnboardingCloseBtn" type="button" onclick="completeStaffOnboarding()"></button>
+      <button id="staffOnboardingAllowBtn" type="button" class="btn-primary" onclick="allowStaffOnboardingNotifications()"></button>
+    </div>
+  </div>
+</div>
+
 <div id="staffNotificationsModal" class="modal hidden">
   <div class="modal-content staff-notification-modal-content">
     <h3 class="staff-notification-title">Messages</h3>
@@ -5041,7 +5133,7 @@ stroke-linejoin="round">
       <div class="staff-card staff-row">
         <input id="newStaffName" class="staff-name-input" placeholder="Name">
         <input type="color" id="newStaffColor" class="staff-color" value="#cce5ff">
-        <input id="newStaffEmail" type="email" class="staff-email" placeholder="Email">
+        <input id="newStaffEmail" type="email" class="staff-email" placeholder="Email" required aria-describedby="newStaffEmailError">
 
         <details id="newStaffServices" class="staff-services">
           <summary>Services</summary>
@@ -5090,6 +5182,7 @@ stroke-linejoin="round">
 
         <button class="staff-btn primary" onclick="addStaff()">Add</button>
       </div>
+      <div id="newStaffEmailError" class="staff-field-error hidden" role="alert">Please enter a valid email address.</div>
     </div>
   </div>
 </div>
@@ -5253,6 +5346,7 @@ const managerGetAppointmentContact = httpsCallable(functions, "managerGetAppoint
 const managerLookupClientByPhone = httpsCallable(functions, "managerLookupClientByPhone");
 const managerGetActivityLogContacts = httpsCallable(functions, "managerGetActivityLogContacts");
 const getStaffActivityLog = httpsCallable(functions, "getStaffActivityLog");
+const setStaffOnboardingState = httpsCallable(functions, "setStaffOnboardingState");
 const getAppointmentClientHistory = httpsCallable(functions, "getAppointmentClientHistory");
 const FCM_VAPID_KEY = "";
 // Operational pause: keep Telegram code and data intact while staffMessages
@@ -5437,7 +5531,7 @@ weekViewBtn.classList.toggle('active', calendarViewMode === 'week');
   }
 }      
 async function ensureAuthUser(email, role, staffId = null, staffName = null) {
-  if (!email) return true;
+  if (!email) return false;
 
   try {
     const createStaffAuthUser = httpsCallable(functions, "createStaffAuthUser");
@@ -5449,13 +5543,19 @@ async function ensureAuthUser(email, role, staffId = null, staffName = null) {
       staffName: staffName
     });
 
-    const isNewUser = result?.data?.isNewUser === true;
+    const shouldSendPasswordReset = result?.data?.shouldSendPasswordReset === true;
 
-    if (isNewUser) {
-      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+    let passwordResetSent = !shouldSendPasswordReset;
+    if (shouldSendPasswordReset) {
+      try {
+        await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+        passwordResetSent = true;
+      } catch (resetError) {
+        console.warn("Password reset email could not be requested:", resetError);
+      }
     }
 
-    return true;
+    return { ...(result?.data || { ok: true }), passwordResetSent };
   } catch (error) {
     console.error("Auth user create/update error:", error);
 
@@ -5610,6 +5710,12 @@ const newStaffColor = document.getElementById('newStaffColor');
 const newStaffRole = document.getElementById('newStaffRole');
 const newStaffAvailableForAnyone = document.getElementById('newStaffAvailableForAnyone');
 const newStaffOnlineBooking = document.getElementById('newStaffOnlineBooking');
+
+newStaffEmail?.addEventListener('input', () => {
+  if (!newStaffEmail.value.trim() || !newStaffEmail.checkValidity()) return;
+  newStaffEmail.classList.remove('invalid');
+  document.getElementById('newStaffEmailError')?.classList.add('hidden');
+});
 
 const BOOKING_SERVICE_OPTIONS = [
   { value: 'manicure', label: 'Manicure' },
@@ -9873,9 +9979,11 @@ const STAFF_NOTIFICATION_KEY_EVENTS = new Set([
 ]);
 const PUSH_PROMPT_SNOOZE_MS = 24 * 60 * 60 * 1000;
 const PUSH_INVITE_VERSION = 'messages-chat-v3';
+const STAFF_ONBOARDING_VERSION = 'staff-onboarding-v1';
 let messagingInstance = null;
 let pushSetupAttempted = false;
 let pushPermissionLanguage = localStorage.getItem('salonCalendarPushInviteLanguage') || 'en';
+let staffOnboardingLanguage = 'en';
 
 function getNotificationReadKey() {
   return currentUserRole === 'manager' ? 'manager' : (currentUserStaffId || currentUserRole || 'user');
@@ -10131,10 +10239,149 @@ async function initializeCalendarPushForUser() {
       console.warn('Push token could not be saved:', err);
     }
   }
-  if (!pushSetupAttempted && shouldAutoShowPushPrompt()) {
-    pushSetupAttempted = true;
-    setTimeout(openPushPermissionModal, 800);
+}
+
+function getPreferredStaffOnboardingLanguage() {
+  const languages = Array.isArray(navigator.languages) && navigator.languages.length
+    ? navigator.languages
+    : [navigator.language || 'en'];
+  const normalized = languages.map(value => String(value || '').toLowerCase());
+  if (normalized.some(value => value === 'uk' || value.startsWith('uk-'))) return 'uk';
+  if (normalized.some(value => value === 'ru' || value.startsWith('ru-'))) return 'ru';
+  return 'en';
+}
+
+function getStaffOnboardingCopy(language = staffOnboardingLanguage) {
+  const copies = {
+    en: {
+      title: "Welcome to the Rose's Nails Londonderry team",
+      intro: 'Here is a short guide to the main calendar tools.',
+      sections: [
+        ['Calendar and appointments', 'Tap an available time to create an appointment. Choose the date, time, duration and technician, add the client name and service, then save. An existing appointment can be opened, moved, canceled or marked No Show. Walk-in creates an appointment without a prior booking: the calendar automatically selects today, the current technician and the next 15-minute time. You only need to enter the duration and save.'],
+        ['Off Work', 'Use Off Work to close one time period, a full day, a repeating weekly time period or a repeating full day. Vacation closes a range between two selected dates. Finish Day closes all remaining free time until the end of the current workday.'],
+        ['Log and Archive', 'Log shows every action by all calendar users for the selected date. Use its filters to make the information easier to review. Archive keeps appointment history; search by client name to find older appointments.'],
+        ['Messages', 'The bell opens work messages and important events. The For me, Unread and Chat filters show messages for you, all unread messages, or only chat messages. You can send text, photos and voice messages. Tap an appointment message to open it; swipe right to pin or left to reply. Messages are kept for 60 days. If you need to keep an important chat message longer, pin it by swiping right.'],
+        ['Staff Settings and Analytics', 'In Staff Settings, you can choose your column color. Be sure to enter the average duration of your services so Online Booking shows clients the correct times. Analytics shows appointment, busy, free and off-work hour totals, cancellations, No Show and other work data for a day or selected period.'],
+        ['Account', 'Logout safely ends your session. If you forget your password or need to create one, tap Forgot password? on the Login screen and check Inbox, Spam and Junk.']
+      ],
+      notification: 'Allow notifications to receive important events about your appointments even when the calendar is not open.',
+      enabled: 'Notifications are already enabled on this phone.',
+      allow: 'Allow notifications', later: 'Remind me later', close: 'Close'
+    },
+    uk: {
+      title: 'Ласкаво просимо до команди Rose’s Nails Londonderry',
+      intro: 'Нижче — коротка пам’ятка про головні інструменти календаря.',
+      sections: [
+        ['Календар і записи', 'Натисніть на вільний час, щоб створити запис. Виберіть дату, час, тривалість і майстра, додайте ім’я клієнта та сервіс, потім збережіть. Існуючий запис можна відкрити, перенести, скасувати або позначити No Show. Walk-in створює запис без попереднього бронювання: календар автоматично вибирає сьогоднішню дату, поточного майстра та найближче наступне 15-хвилинне вікно. Вам залишається вказати тривалість і зберегти запис.'],
+        ['Off Work', 'В Off Work можна закрити окремий проміжок часу, увесь день, повторюваний щотижневий проміжок або цілий щотижневий день. Vacation закриває період між двома вибраними датами. Finish Day закриває весь вільний час, що залишився до кінця поточного робочого дня.'],
+        ['Log і Archive', 'Log показує всі дії всіх користувачів календаря за вибрану дату. Дані можна відфільтрувати для зручного перегляду. В Archive зберігається історія записів; старі записи можна знайти за ім’ям клієнта.'],
+        ['Messages', 'Дзвіночок відкриває робочі повідомлення та важливі події. Фільтри For me, Unread і Chat показують повідомлення для вас, усі непрочитані або тільки повідомлення чату. Тут можна надсилати текст, фотографії та голосові повідомлення. Натисніть повідомлення про запис, щоб відкрити його; свайп вправо закріплює повідомлення, свайп вліво дає змогу відповісти. Повідомлення зберігаються 60 днів. Якщо важливе повідомлення чату потрібно зберегти довше, закріпіть його свайпом вправо.'],
+        ['Staff Settings і Analytics', 'У Staff Settings можна вибрати колір своєї колонки. Обов’язково вкажіть середню тривалість своїх процедур, щоб Online Booking правильно показував час клієнтам. В Analytics можна побачити показники записів, зайнятих, вільних і off-work годин, скасування, No Show та інші дані роботи за певний день або вибраний період.'],
+        ['Акаунт', 'Logout безпечно завершує сеанс. Якщо ви забули пароль або хочете створити новий, натисніть Forgot password? на екрані Login і перевірте Inbox, Spam та Junk.']
+      ],
+      notification: 'Дозвольте сповіщення, щоб отримувати важливі повідомлення про ваші записи, навіть коли календар не відкритий.',
+      enabled: 'Сповіщення вже дозволені на цьому телефоні.',
+      allow: 'Дозволити сповіщення', later: 'Нагадати пізніше', close: 'Закрити'
+    },
+    ru: {
+      title: 'Добро пожаловать в команду Rose’s Nails Londonderry',
+      intro: 'Ниже — короткая памятка по основным инструментам календаря.',
+      sections: [
+        ['Календарь и записи', 'Нажмите на свободное время, чтобы создать запись. Выберите дату, время, продолжительность и мастера, добавьте имя клиента и сервис, затем сохраните. Существующую запись можно открыть, перенести, отменить или отметить No Show. Walk-in создаёт запись без предварительного бронирования: календарь автоматически выбирает сегодняшнюю дату, текущего мастера и ближайшее следующее 15-минутное окно. Вам остаётся указать продолжительность и сохранить запись.'],
+        ['Off Work', 'В Off Work можно закрыть отдельный промежуток времени, весь день, повторяющийся еженедельный промежуток или целый еженедельный день. Vacation закрывает период между двумя выбранными датами. Finish Day закрывает всё оставшееся свободное время до конца текущего рабочего дня.'],
+        ['Log и Archive', 'Log показывает все действия всех пользователей календаря за выбранную дату. Данные можно отфильтровать для удобного просмотра. В Archive хранится история записей; старые записи можно найти по имени клиента.'],
+        ['Messages', 'Значок колокольчика открывает рабочие сообщения и важные события. Фильтры For me, Unread и Chat показывают сообщения для вас, все непрочитанные или только сообщения чата. Здесь можно отправлять текст, фотографии и голосовые сообщения. Нажмите на сообщение о записи, чтобы открыть её; свайп вправо закрепляет сообщение, свайп влево позволяет ответить. Сообщения хранятся 60 дней. Если важное сообщение чата нужно сохранить дольше, закрепите его свайпом вправо.'],
+        ['Staff Settings и Analytics', 'В Staff Settings можно выбрать цвет своей колонки. Обязательно укажите среднюю продолжительность своих процедур, чтобы Online Booking правильно показывал время клиентам. В Analytics можно увидеть показатели записей, занятых, свободных и off-work часов, отмены, No Show и другие данные работы за определённый день или выбранный период.'],
+        ['Аккаунт', 'Logout безопасно завершает сеанс. Если вы забыли пароль или хотите создать новый, на экране Login нажмите Forgot password?.']
+      ],
+      notification: 'Разрешите уведомления, чтобы получать важные сообщения о ваших записях, даже когда календарь не открыт.',
+      enabled: 'Уведомления уже разрешены на этом телефоне.',
+      allow: 'Разрешить уведомления', later: 'Напомнить позже', close: 'Закрыть'
+    }
+  };
+  return copies[language] || copies.en;
+}
+
+function renderStaffOnboarding() {
+  const copy = getStaffOnboardingCopy();
+  const granted = 'Notification' in window && Notification.permission === 'granted';
+  document.getElementById('staffOnboardingTitle').textContent = copy.title;
+  document.getElementById('staffOnboardingBody').innerHTML =
+    `<p class="staff-onboarding-intro">${escapeHtml(copy.intro)}</p>` +
+    copy.sections.map(([heading, body]) => `<section class="staff-onboarding-section"><h4>${escapeHtml(heading)}</h4><p>${escapeHtml(body)}</p></section>`).join('') +
+    `<p class="staff-onboarding-notification-note">${escapeHtml(granted ? copy.enabled : copy.notification)}</p>`;
+  document.getElementById('staffOnboardingAllowBtn').textContent = copy.allow;
+  document.getElementById('staffOnboardingAllowBtn').classList.toggle('hidden', granted);
+  document.getElementById('staffOnboardingLaterBtn').textContent = copy.later;
+  document.getElementById('staffOnboardingCloseBtn').textContent = copy.close;
+  ['en', 'uk', 'ru'].forEach(lang => {
+    document.getElementById(`staffOnboardingLang${lang === 'en' ? 'En' : lang === 'uk' ? 'Uk' : 'Ru'}Btn`)
+      .classList.toggle('active', staffOnboardingLanguage === lang);
+  });
+}
+
+window.setStaffOnboardingLanguage = language => {
+  staffOnboardingLanguage = ['en', 'uk', 'ru'].includes(language) ? language : 'en';
+  renderStaffOnboarding();
+};
+
+function setStaffOnboardingBusy(busy) {
+  document.querySelectorAll('#staffOnboardingModal button').forEach(button => {
+    button.disabled = busy;
+    button.classList.toggle('action-busy', busy);
+  });
+}
+
+async function persistStaffOnboardingAction(action) {
+  setStaffOnboardingBusy(true);
+  try {
+    await setStaffOnboardingState({ version: STAFF_ONBOARDING_VERSION, action });
+    document.getElementById('staffOnboardingModal').classList.add('hidden');
+  } catch (error) {
+    console.warn('Staff onboarding state could not be saved:', error);
+    showToast('Please try again.', 'error');
+  } finally {
+    setStaffOnboardingBusy(false);
   }
+}
+
+window.completeStaffOnboarding = () => persistStaffOnboardingAction('complete');
+window.snoozeStaffOnboarding = () => persistStaffOnboardingAction('snooze');
+
+window.allowStaffOnboardingNotifications = async () => {
+  if (!('Notification' in window)) {
+    showToast('Notifications are not supported on this device.', 'error');
+    return;
+  }
+  setStaffOnboardingBusy(true);
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      await savePushTokenForThisDevice();
+      markPushInviteSeen();
+      showToast('Notifications enabled', 'success');
+    } else {
+      showToast('Notifications were not enabled. You can allow them later in phone settings.', 'warning');
+    }
+    renderStaffOnboarding();
+  } catch (error) {
+    console.warn('Onboarding notification permission error:', error);
+    showToast('Notifications could not be enabled on this device.', 'error');
+  } finally {
+    setStaffOnboardingBusy(false);
+  }
+};
+
+function initializeStaffOnboardingForUser(userData) {
+  if (!userData || userData.staffOnboardingVersion !== STAFF_ONBOARDING_VERSION) return;
+  if (userData.staffOnboardingCompletedVersion === STAFF_ONBOARDING_VERSION) return;
+  const snoozedUntil = userData.staffOnboardingSnoozedUntil?.toMillis
+    ? userData.staffOnboardingSnoozedUntil.toMillis()
+    : 0;
+  if (snoozedUntil > Date.now()) return;
+  staffOnboardingLanguage = getPreferredStaffOnboardingLanguage();
+  renderStaffOnboarding();
+  setTimeout(() => document.getElementById('staffOnboardingModal').classList.remove('hidden'), 450);
 }
 
 function stripNotificationHtml(value) {
@@ -13338,15 +13585,30 @@ window.addStaff = async () => {
   const color = newStaffColor.value;
   const bookingServiceGroups = getNewStaffServiceGroups();
 
-    if (!name) {
+  if (!name) {
     showToast("Please enter staff name", "warning");
     return;
   }
 
-  const docRef = await addDoc(collection(db, "staff"), {
+  const emailError = document.getElementById('newStaffEmailError');
+  const normalizedEmail = email.toLowerCase();
+  const validEmail = Boolean(normalizedEmail) && newStaffEmail.checkValidity();
+  newStaffEmail.classList.toggle('invalid', !validEmail);
+  emailError.classList.toggle('hidden', validEmail);
+  if (!validEmail) {
+    showToast("Please enter a valid email address", "warning");
+    newStaffEmail.focus();
+    return;
+  }
+
+  const docRef = doc(collection(db, "staff"));
+  const authResult = await ensureAuthUser(normalizedEmail, role, docRef.id, name);
+  if (!authResult) return;
+
+  await setDoc(docRef, {
   name: name,
   color: color,
-  email: email || null,
+  email: normalizedEmail,
   role: role,
   bookingServiceGroups: bookingServiceGroups.length ? bookingServiceGroups : [...DEFAULT_STAFF_SERVICE_GROUPS],
   availableForAnyone: newStaffAvailableForAnyone ? newStaffAvailableForAnyone.checked : true,
@@ -13355,19 +13617,24 @@ window.addStaff = async () => {
   order: getActiveStaffList({ includeAnyone: false }).length
 });
 
-await ensureAuthUser(email, role, docRef.id, name);
-
-
   // ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹
    newStaffName.value = '';
   newStaffEmail.value = '';
+  newStaffEmail.classList.remove('invalid');
+  emailError.classList.add('hidden');
   newStaffRole.value = 'staff';
   newStaffColor.value = '#cce5ff';
   resetNewStaffServiceGroups();
   if (newStaffAvailableForAnyone) newStaffAvailableForAnyone.checked = true;
   if (newStaffOnlineBooking) newStaffOnlineBooking.checked = true;
 
-  showToast("Staff added", "success");
+  if (authResult.isNewStaffLink && authResult.welcomeQueued !== true) {
+    showToast("Staff added, but the welcome email could not be queued", "warning", 5000);
+  } else if (authResult.shouldSendPasswordReset && authResult.passwordResetSent !== true) {
+    showToast("Staff added. Welcome email sent, but password email must be requested again with Forgot password?", "warning", 6000);
+  } else {
+    showToast("Staff added. Welcome and password emails were sent.", "success", 4500);
+  }
 };
 
 window.updateStaffColor = (id, color) => {
@@ -15449,6 +15716,7 @@ if (bottomOffWorkBtn) {
 
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('calendar-container').style.display = 'block';
+  initializeStaffOnboardingForUser(data);
   applyCalendarZoomLevel(calendarZoomLevel, { persist: false, redraw: true });
   updateDeclinedOnlineButton();
   updateCalendarZoomButtonVisibility();
@@ -15595,7 +15863,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-11.1';
+const CALENDAR_APP_VERSION = '2026-10-12.1';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';

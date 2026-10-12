@@ -74,6 +74,10 @@ const {
   selectAnyoneCandidate
 } = require("./anyone-rotation");
 const {
+  STAFF_ONBOARDING_VERSION,
+  buildStaffWelcomeEmail
+} = require("./staff-onboarding-core");
+const {
   enqueueDashReconciliation,
   enqueueDashSource,
   dateKeyInTimeZone,
@@ -113,6 +117,7 @@ const PHOTO_STORAGE_PREFIX = "online-booking-photos";
 const PHOTO_REVIEW_BASE_URL = "https://rosesnails-calendar.web.app/booking-photo";
 const PHOTO_BUCKET_NAME = "rosesnails-calendar.firebasestorage.app";
 const EMAIL_QUEUE_COLLECTION = "EmailQueue";
+const STAFF_CALENDAR_URL = "https://rosesnails-calendar.web.app";
 const SMS_QUEUE_COLLECTION = "SmsQueue";
 const BOOKING_VERIFICATION_COLLECTION = "onlineBookingVerificationChallenges";
 const BOOKING_VERIFICATION_RATE_COLLECTION = "onlineBookingVerificationRateLimits";
@@ -4672,8 +4677,7 @@ exports.createStaffAuthUser = onCall(
     } catch (error) {
       if (error.code === "auth/user-not-found") {
         userRecord = await admin.auth().createUser({
-          email: email,
-          password: "Temp1234!"
+          email: email
         });
         isNewUser = true;
       } else {
@@ -4681,32 +4685,105 @@ exports.createStaffAuthUser = onCall(
       }
     }
 
-    await db.collection("users").doc(userRecord.uid).set(
-      {
-        email: email,
-        role: role,
-        staffId: staffId
-      },
-      { merge: true }
+    const userRef = db.collection("users").doc(userRecord.uid);
+    const staffRef = staffId ? db.collection("staff").doc(staffId) : null;
+    const [existingUserSnap, existingStaffSnap] = await Promise.all([
+      userRef.get(),
+      staffRef ? staffRef.get() : Promise.resolve(null)
+    ]);
+    const existingUser = existingUserSnap.exists ? existingUserSnap.data() : {};
+    const isNewStaffLink = Boolean(
+      staffId &&
+      !existingStaffSnap?.exists &&
+      String(existingUser.staffId || "") !== staffId
     );
+    const userUpdate = { email, role, staffId };
+    if (isNewStaffLink) {
+      userUpdate.staffOnboardingVersion = STAFF_ONBOARDING_VERSION;
+      userUpdate.staffOnboardingCompletedVersion = null;
+      userUpdate.staffOnboardingSnoozedUntil = null;
+      userUpdate.staffOnboardingCreatedAt = FieldValue.serverTimestamp();
+    }
 
-    if (isNewUser && !TELEGRAM_NOTIFICATIONS_PAUSED) {
- const telegramText =
-  `Hello ${staffName}, welcome to Rose's Nails Calendar.\n\n` +
-  `Your login is ready now.\n\n` +
-  `Please use Forgot Password on the login screen.\n` +
-  `If you do not see the email, please check your Spam/Junk folder.`;
+    await userRef.set(userUpdate, { merge: true });
+
+    let welcomeQueued = false;
+    if (isNewStaffLink) {
+      const welcome = buildStaffWelcomeEmail({
+        staffName,
+        email,
+        calendarUrl: STAFF_CALENDAR_URL
+      });
       try {
-        await sendTelegram(telegramText);
-      } catch (telegramError) {
-        console.error("Telegram welcome message error:", telegramError);
+        const welcomeId = `staff-welcome-${userRecord.uid}-${staffId}`;
+        await db.collection(EMAIL_QUEUE_COLLECTION).doc(welcomeId).set({
+          status: "pending",
+          to: email,
+          fromName: EMAIL_FROM_NAME,
+          fromEmail: EMAIL_FROM_EMAIL,
+          subject: welcome.subject,
+          text: welcome.text,
+          html: welcome.html,
+          eventType: "staff_welcome",
+          entityType: "staff",
+          entityId: staffId,
+          staffId,
+          staffName,
+          createdAt: FieldValue.serverTimestamp(),
+          source: "staffSettings"
+        });
+        welcomeQueued = true;
+      } catch (welcomeError) {
+        console.error("Staff welcome email queue error:", welcomeError);
       }
     }
 
     return {
       ok: true,
       uid: userRecord.uid,
-      isNewUser: isNewUser
+      isNewUser,
+      isNewStaffLink,
+      shouldSendPasswordReset: isNewStaffLink || isNewUser,
+      welcomeQueued
     };
+  }
+);
+
+exports.setStaffOnboardingState = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "You must be signed in.");
+    }
+    const data = request.data || {};
+    const version = String(data.version || "");
+    const action = String(data.action || "");
+    if (version !== STAFF_ONBOARDING_VERSION) {
+      throw new HttpsError("invalid-argument", "Unsupported onboarding version.");
+    }
+    if (action !== "complete" && action !== "snooze") {
+      throw new HttpsError("invalid-argument", "Unsupported onboarding action.");
+    }
+
+    const userRef = db.collection("users").doc(request.auth.uid);
+    const userSnap = await userRef.get();
+    if (!userSnap.exists) {
+      throw new HttpsError("permission-denied", "User profile not found.");
+    }
+
+    if (action === "complete") {
+      await userRef.set({
+        staffOnboardingCompletedVersion: version,
+        staffOnboardingCompletedAt: FieldValue.serverTimestamp(),
+        staffOnboardingSnoozedUntil: null
+      }, { merge: true });
+    } else {
+      await userRef.set({
+        staffOnboardingSnoozedUntil: Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000),
+        staffOnboardingSnoozedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+    }
+
+    return { ok: true, action, version };
   }
 );
