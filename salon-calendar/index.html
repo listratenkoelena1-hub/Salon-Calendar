@@ -569,6 +569,30 @@ th.time {
   overflow: visible !important;
 }
 
+.off-work-comment-overlay {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  top: 2px;
+  z-index: 2;
+  box-sizing: border-box;
+  padding: 1px 2px 3px;
+  overflow: hidden;
+  color: #111;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.2;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+.off-work-comment-overlay.has-overflow {
+  mask-image: linear-gradient(to bottom, black calc(100% - 12px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 12px), transparent 100%);
+}
+
 .app-overlay {
   position: absolute;
   left: 1px;
@@ -948,6 +972,34 @@ padding:10px 14px;
   display:flex;
   flex-direction:column;
   align-items:flex-start;
+}
+
+.off-comment-field {
+  margin-top: 10px;
+}
+
+.off-comment-field label,
+.off-time-field label {
+  margin-top: 0;
+}
+
+#offComment {
+  width: 100%;
+  min-width: 0;
+}
+
+.off-time-range-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.off-time-field {
+  min-width: 0;
+}
+
+.off-time-field select {
+  width: 100%;
 }
 .off-checkbox {
   display: flex;
@@ -4751,11 +4803,22 @@ stroke-linejoin="round">
 
 </div>
 
+<div class="off-comment-field">
+  <label for="offComment">Comment</label>
+  <input id="offComment" type="text" maxlength="300" autocomplete="off" placeholder="Optional">
+</div>
+
 <div id="offTimeRange" class="smooth-section" style="display:none">
-  <label>From</label>
-  <select id="offStart"></select>
-  <label>To</label>
-  <select id="offEnd"></select>
+  <div class="off-time-range-row">
+    <div class="off-time-field">
+      <label for="offStart">From</label>
+      <select id="offStart"></select>
+    </div>
+    <div class="off-time-field">
+      <label for="offEnd">To</label>
+      <select id="offEnd"></select>
+    </div>
+  </div>
 </div>
 
 <div id="vacationRange" class="smooth-section" style="display:none; margin-top:12px;">
@@ -6846,6 +6909,10 @@ function getOffWorkSourceType(record) {
   return 'manual';
 }
 
+function normalizeOffWorkComment(value) {
+  return String(value || '').trim().slice(0, 300);
+}
+
 function normalizeOffWorkRecord(record, source = null) {
   const allDay = record.allDay === true;
   const normalizedSource = source || getOffWorkSourceType(record);
@@ -6859,6 +6926,7 @@ function normalizeOffWorkRecord(record, source = null) {
     allDay,
     start: allDay ? 0 : Number(record.start),
     end: allDay ? SLOTS : Number(record.end),
+    comment: normalizeOffWorkComment(record.comment),
     raw: record
   };
 }
@@ -7142,7 +7210,8 @@ if (replaceId) {
 async function replaceDateWithAllDayVacation({
   date,
   staffId,
-  vacationId
+  vacationId,
+  comment = ''
 }) {
   const existing = getExistingManualOffWorkForDate({ date, staffId });
 
@@ -7164,7 +7233,8 @@ async function replaceDateWithAllDayVacation({
     start: null,
     end: null,
     vacation: true,
-    vacationId: vacationId
+    vacationId: vacationId,
+    comment: normalizeOffWorkComment(comment)
   });
 }
 function timeLabel(i){
@@ -8104,9 +8174,9 @@ function offWorkTouchesMorning(start, end) {
 }
 
 function applyOffWorkOccurrenceToCell(cell, occurrence) {
-  if (!cell) return;
+  if (!cell) return false;
 
-  if (occurrence.source === 'weekly' && cell.classList.contains('busy')) return;
+  if (occurrence.source === 'weekly' && cell.classList.contains('busy')) return false;
 
   cell.style.background = '#e0e0e0';
 
@@ -8114,7 +8184,7 @@ function applyOffWorkOccurrenceToCell(cell, occurrence) {
     cell.dataset.weeklyOff = '1';
     cell.dataset.weeklyId = occurrence.sourceId || occurrence.id;
     cell.dataset.weeklyStaffId = occurrence.staffId;
-    return;
+    return true;
   }
 
   const record = occurrence.raw;
@@ -8123,13 +8193,46 @@ function applyOffWorkOccurrenceToCell(cell, occurrence) {
     if (record?.id && !offWork.find(x => x.id === record.id)) return;
     openOffWorkEdit(record);
   };
+  return true;
+}
+
+function renderOffWorkComment(cells, occurrence) {
+  const comment = normalizeOffWorkComment(occurrence.comment || occurrence.raw?.comment);
+  const visibleCells = Array.from(new Set(cells.filter(Boolean)))
+    .sort((left, right) => left.getBoundingClientRect().top - right.getBoundingClientRect().top);
+
+  if (!comment || !visibleCells.length) return;
+
+  const firstCell = visibleCells[0];
+  const lastCell = visibleCells[visibleCells.length - 1];
+  const firstRect = firstCell.getBoundingClientRect();
+  const lastRect = lastCell.getBoundingClientRect();
+  const height = Math.max(firstRect.height, lastRect.bottom - firstRect.top - 2);
+  const overlay = document.createElement('div');
+
+  overlay.className = 'off-work-comment-overlay';
+  overlay.style.height = `${Math.max(1, height)}px`;
+  overlay.textContent = comment;
+  firstCell.style.overflow = 'visible';
+  firstCell.appendChild(overlay);
+
+  requestAnimationFrame(() => {
+    if (!overlay.isConnected) return;
+    overlay.classList.toggle('has-overflow', overlay.scrollHeight > overlay.clientHeight + 1);
+  });
 }
 
 function paintOffWorkOccurrence(occurrence, { selectAllCells, selectSlotCell }) {
+  const paintedCells = [];
+  const paintCell = cell => {
+    if (applyOffWorkOccurrenceToCell(cell, occurrence)) paintedCells.push(cell);
+  };
+
   if (occurrence.allDay) {
     selectAllCells().forEach(cell => {
-      applyOffWorkOccurrenceToCell(cell, occurrence);
+      paintCell(cell);
     });
+    renderOffWorkComment(paintedCells, occurrence);
     return;
   }
 
@@ -8138,12 +8241,14 @@ function paintOffWorkOccurrence(occurrence, { selectAllCells, selectSlotCell }) 
   const rawStart = occurrence.raw?.start;
 
   if (rawStart === -1 || offWorkTouchesMorning(offStartVisual, offEndVisual)) {
-    applyOffWorkOccurrenceToCell(selectSlotCell(-1), occurrence);
+    paintCell(selectSlotCell(-1));
   }
 
   for (let i = offStartVisual; i < offEndVisual; i++) {
-    applyOffWorkOccurrenceToCell(selectSlotCell(i), occurrence);
+    paintCell(selectSlotCell(i));
   }
+
+  renderOffWorkComment(paintedCells, occurrence);
 }
 
 function drawAppointments(){
@@ -8151,6 +8256,7 @@ function drawAppointments(){
 document.querySelectorAll('.slot').forEach(c => {
   c.innerHTML = '';
   c.style.background = '';
+  c.style.overflow = '';
   c.classList.remove('busy', 'block-start', 'block-middle', 'block-end', 'continues-from-morning', 'anyone-cell', 'has-online-request', 'has-dash-request');
   delete c.dataset.weeklyOff;
 delete c.dataset.weeklyId;
@@ -8413,6 +8519,7 @@ function drawAppointmentsWeek() {
   document.querySelectorAll('.slot').forEach(c => {
     c.innerHTML = '';
     c.style.background = '';
+    c.style.overflow = '';
     c.classList.remove('busy', 'block-start', 'block-middle', 'block-end', 'continues-from-morning', 'anyone-cell', 'has-online-request', 'has-dash-request');
     delete c.dataset.weeklyOff;
     delete c.dataset.weeklyId;
@@ -13910,6 +14017,8 @@ function initVacationPicker() {
 
 const offTimeRange = document.getElementById('offTimeRange');
 
+const offComment = document.getElementById('offComment');
+
 const offStart = document.getElementById('offStart');
 
 const offEnd = document.getElementById('offEnd');
@@ -13929,6 +14038,10 @@ offStart.onchange = () => {
 };
 
 offEnd.onchange = () => {
+  offSaveBtn.disabled = false;
+};
+
+offComment.oninput = () => {
   offSaveBtn.disabled = false;
 };
 
@@ -14212,9 +14325,13 @@ if (weekOffSaveBtn) {
 }
 window.openOffWork = () => {
     closeAllMainModals();
+
+offWorkModal.dataset.weeklyId = '';
+offWorkModal.dataset.vacationId = '';
       
 offVacation.checked = false;
 vacationRange.style.display = 'none';
+offComment.value = '';
 
 vacationFrom = null;
 vacationTo = null;
@@ -14348,7 +14465,11 @@ function formatOffWorkInfoText(record) {
     ? ' This is part of a vacation period.'
     : '';
 
-  return `${staffName} is off work ${timing}.${weeklyText}${vacationText}`;
+  const commentText = normalizeOffWorkComment(record?.comment)
+    ? ` Comment: ${normalizeOffWorkComment(record.comment)}`
+    : '';
+
+  return `${staffName} is off work ${timing}.${weeklyText}${vacationText}${commentText}`;
 }
 
 function showOffWorkInfo(record) {
@@ -14382,6 +14503,7 @@ function openOffWorkEdit(record) {
   offStaff.value = record.staffId;
 
   offVacation.checked = true;
+  offComment.value = normalizeOffWorkComment(record.comment);
 
   offWeekly.disabled = true;
   offAllDay.disabled = true;
@@ -14389,10 +14511,10 @@ function openOffWorkEdit(record) {
   offStaff.disabled = true;
 
   toggleSmoothSection(offTimeRange, false);
-  vacationRange.style.display = 'block';
-  initVacationPicker();
+  toggleSmoothSection(vacationRange, false);
 
-  offSaveBtn.style.display = 'none';
+  offSaveBtn.style.display = '';
+  offSaveBtn.disabled = false;
   offRemoveBtn.style.display = 'none';
     offRemoveBtn.disabled = true;
 
@@ -14429,6 +14551,7 @@ offRemoveBtn.style.display = '';
     .join('');
 
   offStaff.value = record.staffId;
+  offComment.value = normalizeOffWorkComment(record.comment);
 // --- LOCK FIELDS FOR SINGLE OFF WORK EDIT ---
 offStaff.disabled = true;
 offWeekly.checked = false;
@@ -14499,6 +14622,7 @@ function openWeeklyOffFromCell(cell) {
   offVacation.disabled = true;
 
   offAllDay.checked = !!weeklyRecord?.allDay;
+  offComment.value = normalizeOffWorkComment(weeklyRecord?.comment);
 
   offStart.innerHTML =
     [...Array(SLOTS).keys()]
@@ -14515,13 +14639,14 @@ function openWeeklyOffFromCell(cell) {
     toggleSmoothSection(offTimeRange, false);
   }
 
-  // read-only ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¶ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼
+  // Existing weekly timing stays read-only; only its optional comment can be edited.
   offStaff.disabled = true;
   offAllDay.disabled = true;
   offWeekly.disabled = true;
   offStart.disabled = true;
   offEnd.disabled = true;
-  offSaveBtn.style.display = 'none';
+  offSaveBtn.style.display = '';
+  offSaveBtn.disabled = false;
   offRemoveBtn.style.display = 'none';
 
   removeWeeklyDayBtn.classList.remove('hidden');
@@ -14552,6 +14677,7 @@ if (currentUserRole === 'staff') {
 
   offWeekly.checked = false;
   offVacation.checked = false;
+  offComment.value = '';
 
 
   offSaveBtn.style.display = '';
@@ -14644,6 +14770,32 @@ window.saveOffWork = async () => {
     offStaff.value = getCurrentStaffId();
   }
 
+  const comment = normalizeOffWorkComment(offComment.value);
+  const existingWeeklyId = offWorkModal.dataset.weeklyId;
+  const existingVacationId = offWorkModal.dataset.vacationId;
+
+  if (existingWeeklyId) {
+    await updateDoc(doc(db, 'WeeklyOff', existingWeeklyId), { comment });
+    showToast('Weekly off comment saved', 'success');
+    closeOffWork();
+    renderCalendar();
+    return;
+  }
+
+  if (existingVacationId) {
+    await updateDoc(doc(db, 'Vacations', existingVacationId), { comment });
+    const vacationDaysQuery = query(
+      collection(db, 'OffWork'),
+      where('vacationId', '==', existingVacationId)
+    );
+    const vacationDays = await getDocs(vacationDaysQuery);
+    await Promise.all(vacationDays.docs.map(day => updateDoc(day.ref, { comment })));
+    showToast('Vacation comment saved', 'success');
+    closeOffWork();
+    renderCalendar();
+    return;
+  }
+
   const normalizedEnd =
     offAllDay.checked
       ? SLOTS
@@ -14694,6 +14846,7 @@ window.saveOffWork = async () => {
       staffId: offStaff.value,
       startDate: vacationFrom.toISOString().slice(0, 10),
       endDate: vacationTo.toISOString().slice(0, 10),
+      comment,
       createdAt: serverTimestamp()
     });
 
@@ -14710,7 +14863,8 @@ window.saveOffWork = async () => {
       await replaceDateWithAllDayVacation({
         date: dateStr,
         staffId: offStaff.value,
-        vacationId
+        vacationId,
+        comment
       });
     }
 
@@ -14787,7 +14941,8 @@ window.saveOffWork = async () => {
       allDay: offAllDay.checked,
       start: offAllDay.checked ? 0 : +offStart.value,
       end: normalizedEnd,
-      enabled: true
+      enabled: true,
+      comment
     };
 
     if (findEquivalentWeeklyOffRule(weeklyData)) {
@@ -14825,7 +14980,8 @@ window.saveOffWork = async () => {
     staffId: offStaff.value,
     allDay: offAllDay.checked,
     start: offAllDay.checked ? 0 : +offStart.value,
-    end: normalizedEnd
+    end: normalizedEnd,
+    comment
   };
 
   if (isOlderThan7Days(data.date)) {
@@ -14891,7 +15047,8 @@ window.saveOffWork = async () => {
       start: data.start,
       end: data.end,
       excludeId: editingOffWorkId,
-      replaceId: editingOffWorkId
+      replaceId: editingOffWorkId,
+      extraFields: { comment }
     });
   } else {
     await updateDoc(doc(db, 'OffWork', editingOffWorkId), {
@@ -14899,7 +15056,8 @@ window.saveOffWork = async () => {
       staffId: data.staffId,
       allDay: data.allDay,
       start: data.allDay ? null : data.start,
-      end: data.allDay ? null : data.end
+      end: data.allDay ? null : data.end,
+      comment
     });
   }
 
@@ -15270,6 +15428,7 @@ await replaceOffWorkWithMergedBlock({
   staffId: staffId,
   start: startSlot,
   end: END_SLOT,
+  extraFields: { comment: normalizeOffWorkComment(offComment.value) },
   finishWork: true
 });
 
@@ -15887,7 +16046,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-12.3';
+const CALENDAR_APP_VERSION = '2026-10-13.1';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';
