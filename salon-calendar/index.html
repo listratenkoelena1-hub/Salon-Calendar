@@ -12096,23 +12096,35 @@ function buildTelegramAppointmentMessage(data, original = null, mode = null) {
 }
 function buildTelegramOffWorkCreatedMessage(data) {
   const staffName = getActivityLogStaffName(data.staffId);
+  const commentLine = buildOffWorkCommentLine(data);
 
   if (data.allDay === true) {
-    return `${'\u{1F483}'} ${staffName} is off on ${formatTelegramDate(data.date)}`;
+    return `${'\u{1F483}'} ${staffName} is off on ${formatTelegramDate(data.date)}${commentLine}`;
   }
 
-  return `${'\u{1F483}'} ${staffName} is off on ${formatTelegramDate(data.date)} from ${timeLabel(data.start)} to ${formatTelegramEndTime(data.end)}`;
+  return `${'\u{1F483}'} ${staffName} is off on ${formatTelegramDate(data.date)} from ${timeLabel(data.start)} to ${formatTelegramEndTime(data.end)}${commentLine}`;
 }
 
 function buildTelegramOffWorkUpdatedMessage(before, after) {
   const staffName = getActivityLogStaffName(after.staffId);
+  const commentLine = buildOffWorkCommentLine(after);
+  const commentChanged = normalizeOffWorkComment(before?.comment) !== normalizeOffWorkComment(after.comment);
+  const timingChanged = before?.allDay !== after.allDay || (
+    after.allDay !== true && (Number(before?.start) !== Number(after.start) || Number(before?.end) !== Number(after.end))
+  );
+
+  if (commentChanged && !timingChanged) {
+    return normalizeOffWorkComment(after.comment)
+      ? `${'\u{1F4AC}'} Comment for ${staffName}'s off work on ${formatTelegramDate(after.date)} was updated.${commentLine}`
+      : `${'\u{1F4AC}'} Comment for ${staffName}'s off work on ${formatTelegramDate(after.date)} was removed.`;
+  }
 
   if (before?.allDay === true && after.allDay === false) {
-    return `${'\u{1F483}'} ${staffName} is now off on ${formatTelegramDate(after.date)} from ${timeLabel(after.start)} to ${formatTelegramEndTime(after.end)}`;
+    return `${'\u{1F483}'} ${staffName} is now off on ${formatTelegramDate(after.date)} from ${timeLabel(after.start)} to ${formatTelegramEndTime(after.end)}${commentLine}`;
   }
 
   if (before?.allDay === false && after.allDay === true) {
-    return `${'\u{1F483}'} ${staffName} is now off for the full day on ${formatTelegramDate(after.date)}`;
+    return `${'\u{1F483}'} ${staffName} is now off for the full day on ${formatTelegramDate(after.date)}${commentLine}`;
   }
 
   if (
@@ -12120,7 +12132,7 @@ function buildTelegramOffWorkUpdatedMessage(before, after) {
     after.allDay === false &&
     (before.start !== after.start || before.end !== after.end)
   ) {
-    return `${'\u{1F483}'} ${staffName}'s off hours on ${formatTelegramDate(after.date)} have been changed to ${timeLabel(after.start)} - ${formatTelegramEndTime(after.end)}`;
+    return `${'\u{1F483}'} ${staffName}'s off hours on ${formatTelegramDate(after.date)} have been changed to ${timeLabel(after.start)} - ${formatTelegramEndTime(after.end)}${commentLine}`;
   }
 
   return buildTelegramOffWorkCreatedMessage(after);
@@ -12128,38 +12140,65 @@ function buildTelegramOffWorkUpdatedMessage(before, after) {
 
 function buildTelegramOffWorkDeletedMessage(data) {
   const staffName = getActivityLogStaffName(data.staffId);
+  const commentLine = buildOffWorkCommentLine(data);
 
   if (data.allDay === true) {
-    return `${'\u{1F483}'} ${staffName}'s off day on ${formatTelegramDate(data.date)} has been removed`;
+    return `${'\u{1F483}'} ${staffName}'s off day on ${formatTelegramDate(data.date)} has been removed${commentLine}`;
   }
 
-  return `${'\u{1F483}'} ${staffName}'s off time on ${formatTelegramDate(data.date)} from ${timeLabel(data.start)} to ${formatTelegramEndTime(data.end)} has been removed`;
+  return `${'\u{1F483}'} ${staffName}'s off time on ${formatTelegramDate(data.date)} from ${timeLabel(data.start)} to ${formatTelegramEndTime(data.end)} has been removed${commentLine}`;
+}
+
+function buildOffWorkCommentLine(data) {
+  const comment = normalizeOffWorkComment(data?.comment);
+  return comment ? `\nComment: ${escapeHtml(comment)}` : '';
 }
 
 function buildTelegramWeeklyOffMessage(data) {
   const staffName = getActivityLogStaffName(data.staffId);
   const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const dayName = weekdays[data.weekday] || 'Weekly';
+  const commentLine = buildOffWorkCommentLine(data);
 
   if (data.allDay === true) {
-    return `${'\u{1F4C5}'} ${staffName} now has a weekly day off every ${dayName}.`;
+    return `${'\u{1F4C5}'} ${staffName} now has a weekly day off every ${dayName}.${commentLine}`;
   }
 
-  return `${'\u{1F4C5}'} ${staffName} now has a weekly day off every ${dayName} from ${timeLabel(data.start)} to ${formatTelegramEndTime(data.end)}.`;
+  return `${'\u{1F4C5}'} ${staffName} now has a weekly day off every ${dayName} from ${timeLabel(data.start)} to ${formatTelegramEndTime(data.end)}.${commentLine}`;
+}
+
+function buildTelegramWeeklyOffCommentMessage(data, previousComment = '') {
+  const staffName = getActivityLogStaffName(data.staffId);
+  const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayName = weekdays[data.weekday] || 'Weekly';
+  const comment = normalizeOffWorkComment(data.comment);
+  if (comment === normalizeOffWorkComment(previousComment)) return '';
+  return comment
+    ? `${'\u{1F4AC}'} Comment for ${staffName}'s weekly off every ${dayName} was updated.${buildOffWorkCommentLine(data)}`
+    : `${'\u{1F4AC}'} Comment for ${staffName}'s weekly off every ${dayName} was removed.`;
 }
 
 function buildTelegramWeeklyRemovedMessage(rule) {
   const staffName = getActivityLogStaffName(rule.staffId);
   const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  return `${'\u{1F4C5}'} ${staffName}'s weekly day off on ${weekdays[rule.weekday] || 'Weekly'} has been removed.`;
+  return `${'\u{1F4C5}'} ${staffName}'s weekly day off on ${weekdays[rule.weekday] || 'Weekly'} has been removed.${buildOffWorkCommentLine(rule)}`;
 }
 
 function buildTelegramVacationMessage(data, removed = false) {
   const staffName = getActivityLogStaffName(data.staffId);
   if (removed) {
-    return `${'\u{1F3D6}\uFE0F'} ${staffName}'s vacation from ${data.startDate} to ${data.endDate} has been removed.`;
+    return `${'\u{1F3D6}\uFE0F'} ${staffName}'s vacation from ${data.startDate} to ${data.endDate} has been removed.${buildOffWorkCommentLine(data)}`;
   }
-  return `${'\u{1F3D6}\uFE0F'} ${staffName} is on vacation from ${data.startDate} to ${data.endDate}.`;
+  return `${'\u{1F3D6}\uFE0F'} ${staffName} is on vacation from ${data.startDate} to ${data.endDate}.${buildOffWorkCommentLine(data)}`;
+}
+
+function buildTelegramVacationCommentMessage(data, previousComment = '') {
+  const staffName = getActivityLogStaffName(data.staffId);
+  const comment = normalizeOffWorkComment(data.comment);
+  if (comment === normalizeOffWorkComment(previousComment)) return '';
+  return comment
+    ? `${'\u{1F4AC}'} Comment for ${staffName}'s vacation from ${data.startDate} to ${data.endDate} was updated.${buildOffWorkCommentLine(data)}`
+    : `${'\u{1F4AC}'} Comment for ${staffName}'s vacation from ${data.startDate} to ${data.endDate} was removed.`;
 }
 
 function getActivityLogEventLabel(eventType) {
@@ -14775,7 +14814,22 @@ window.saveOffWork = async () => {
   const existingVacationId = offWorkModal.dataset.vacationId;
 
   if (existingWeeklyId) {
+    const weeklyRecord = weeklyOff.find(item => item.id === existingWeeklyId) || {
+      staffId: offStaff.value,
+      weekday: getLocalDateFromInput(offDate.value).getDay()
+    };
+    const previousComment = normalizeOffWorkComment(weeklyRecord.comment);
     await updateDoc(doc(db, 'WeeklyOff', existingWeeklyId), { comment });
+    const message = buildTelegramWeeklyOffCommentMessage({ ...weeklyRecord, comment }, previousComment);
+    if (message) {
+      await queueTelegramMessage({
+        message,
+        eventType: 'off_updated',
+        entityType: 'weeklyOff',
+        entityId: existingWeeklyId,
+        staffId: weeklyRecord.staffId
+      });
+    }
     showToast('Weekly off comment saved', 'success');
     closeOffWork();
     renderCalendar();
@@ -14783,13 +14837,29 @@ window.saveOffWork = async () => {
   }
 
   if (existingVacationId) {
-    await updateDoc(doc(db, 'Vacations', existingVacationId), { comment });
+    const vacationRef = doc(db, 'Vacations', existingVacationId);
+    const vacationSnapshot = await getDoc(vacationRef);
+    const vacationRecord = vacationSnapshot.exists()
+      ? { id: existingVacationId, ...vacationSnapshot.data() }
+      : { id: existingVacationId, staffId: offStaff.value, startDate: offDate.value, endDate: offDate.value };
+    const previousComment = normalizeOffWorkComment(vacationRecord.comment);
+    await updateDoc(vacationRef, { comment });
     const vacationDaysQuery = query(
       collection(db, 'OffWork'),
       where('vacationId', '==', existingVacationId)
     );
     const vacationDays = await getDocs(vacationDaysQuery);
     await Promise.all(vacationDays.docs.map(day => updateDoc(day.ref, { comment })));
+    const message = buildTelegramVacationCommentMessage({ ...vacationRecord, comment }, previousComment);
+    if (message) {
+      await queueTelegramMessage({
+        message,
+        eventType: 'off_updated',
+        entityType: 'vacation',
+        entityId: existingVacationId,
+        staffId: vacationRecord.staffId
+      });
+    }
     showToast('Vacation comment saved', 'success');
     closeOffWork();
     renderCalendar();
@@ -14883,7 +14953,8 @@ window.saveOffWork = async () => {
       message: buildTelegramVacationMessage({
         staffId: offStaff.value,
         startDate: vacationFrom.toISOString().slice(0, 10),
-        endDate: vacationTo.toISOString().slice(0, 10)
+        endDate: vacationTo.toISOString().slice(0, 10),
+        comment
       }),
       eventType: 'vacation_created',
       entityType: 'vacation',
@@ -15187,6 +15258,7 @@ removeWeeklyDayBtn.onclick = async () => {
     weeklyException: true,
     weeklyId: weeklyId
   };
+  const weeklyRecord = weeklyOff.find(item => item.id === weeklyId);
 
   await addDoc(collection(db, 'OffWork'), data);
   await writeActivityLogEntry({
@@ -15198,7 +15270,7 @@ removeWeeklyDayBtn.onclick = async () => {
     actorKey: getCurrentActorKey()
   });
   await queueTelegramMessage({
-    message: `${'\u{1F4C5}'} ${getActivityLogStaffName(data.staffId)} will be working on ${formatTelegramDate(data.date)} instead of having a weekly day off.`,
+    message: `${'\u{1F4C5}'} ${getActivityLogStaffName(data.staffId)} will be working on ${formatTelegramDate(data.date)} instead of having a weekly day off.${buildOffWorkCommentLine(weeklyRecord)}`,
     eventType: 'weekly_day_removed',
     entityType: 'weeklyOff',
     entityId: weeklyId,
@@ -15444,7 +15516,7 @@ await writeActivityLogEntry({
   actorKey: getCurrentActorKey()
 });
 await queueTelegramMessage({
-  message: `<b>${getActivityLogStaffName(staffId)}</b> finished for today at ${timeLabel(startSlot)}.`,
+  message: `<b>${getActivityLogStaffName(staffId)}</b> finished for today at ${timeLabel(startSlot)}.${buildOffWorkCommentLine({ comment: offComment.value })}`,
   eventType: 'finish_day',
   entityType: 'offWork',
   staffId: staffId
@@ -16046,7 +16118,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-13.1';
+const CALENDAR_APP_VERSION = '2026-10-13.2';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';

@@ -33,3 +33,14 @@ test("off-work comment card fades only when its text overflows", () => {
   assert.match(calendarHtml, /\.off-work-comment-overlay\.has-overflow/);
   assert.match(calendarHtml, /overlay\.scrollHeight > overlay\.clientHeight \+ 1/);
 });
+
+test("messenger notifications include comments for every off-work source", () => {
+  assert.match(calendarHtml, /function buildOffWorkCommentLine\(data\)/);
+  assert.match(calendarHtml, /Comment: \$\{escapeHtml\(comment\)\}/);
+  assert.match(calendarHtml, /buildTelegramOffWorkCreatedMessage[\s\S]*buildOffWorkCommentLine\(data\)/);
+  assert.match(calendarHtml, /buildTelegramWeeklyOffMessage[\s\S]*buildOffWorkCommentLine\(data\)/);
+  assert.match(calendarHtml, /buildTelegramVacationMessage[\s\S]*buildOffWorkCommentLine\(data\)/);
+  assert.match(calendarHtml, /buildTelegramWeeklyOffCommentMessage/);
+  assert.match(calendarHtml, /buildTelegramVacationCommentMessage/);
+  assert.match(calendarHtml, /finished for today[\s\S]*buildOffWorkCommentLine/);
+});
