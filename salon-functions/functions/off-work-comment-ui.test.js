@@ -16,6 +16,7 @@ test("off-work modal exposes one optional comment field above a horizontal time 
 
   assert.ok(commentIndex > 0);
   assert.ok(timeRangeIndex > commentIndex);
+  assert.match(calendarHtml, /#offTimeRange\s*\{[\s\S]*?padding-top:\s*8px/);
   assert.match(calendarHtml, /class="off-time-range-row"[\s\S]*id="offStart"[\s\S]*id="offEnd"/);
 });
 
