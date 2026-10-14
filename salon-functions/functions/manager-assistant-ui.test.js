@@ -11,6 +11,7 @@ test('focused Buddha integration is manager-only and contains the approved intro
   assert.match(html, /if \(currentUserRole !== 'manager'\) return null;/);
   assert.match(html, /Hello, I'm here to help\./);
   assert.match(html, /check appointment duration, assign Anyone bookings in order/);
+  assert.match(html, /this is just the beginning — over time, I'll be able to help with even more/);
   assert.match(html, /Don't show this again/);
   assert.match(assistant, /title: 'Bình an 🌿'/);
   assert.match(assistant, /manager-assistant__preference-input/);
