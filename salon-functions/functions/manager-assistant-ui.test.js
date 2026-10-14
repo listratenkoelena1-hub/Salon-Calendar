@@ -13,6 +13,7 @@ test('focused Buddha integration is manager-only and contains the approved intro
   assert.match(html, /check appointment duration, assign Anyone bookings in order/);
   assert.match(html, /this is just the beginning — over time, I'll be able to help with even more/);
   assert.match(html, /Don't show this again/);
+  assert.doesNotMatch(html, /close-introduction/);
   assert.match(assistant, /title: 'Bình an 🌿'/);
   assert.match(assistant, /manager-assistant__preference-input/);
 });
@@ -22,10 +23,19 @@ test('focused Buddha integration includes only the requested scheduling helpers'
   assert.match(html, /getManagerAssistantAnyoneResult/);
   assert.match(html, /getPendingManagerAssistantOnlineRequests/);
   assert.match(html, /showManagerAssistantDashReminder/);
+  assert.match(html, /buildManagerAssistantAppointmentResult\(\{ forSave = false \} = \{\}\)/);
+  assert.match(html, /if \(!forSave \|\| !aNote\.value\.trim\(\)\) return null/);
+  assert.match(html, /Assign this service to \$\{selected\.member\.name\}\?/);
   assert.doesNotMatch(html, /getManagerServiceQuestion/);
   assert.doesNotMatch(html, /applyManagerServiceChoice/);
   assert.doesNotMatch(html, /Any nail design\?/);
   assert.doesNotMatch(html, /new set or refill\?/i);
+});
+
+test('manager Update stays centered while other roles keep the existing placement', () => {
+  assert.match(html, /#calendarUpdateBtn\s*\{[\s\S]*?left:\s*16px\s*!important/);
+  assert.match(html, /body\.manager-user #calendarUpdateBtn\s*\{[\s\S]*?left:\s*50%\s*!important[\s\S]*?translateX\(-50%\)/);
+  assert.match(html, /classList\.toggle\('manager-user', currentUserRole === 'manager'\)/);
 });
 
 test('Buddha artwork required by every animation state is packaged', () => {

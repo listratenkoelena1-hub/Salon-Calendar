@@ -1079,6 +1079,12 @@ body.modal-open #calendarUpdateBtn {
   cursor: wait;
 }
 
+body.manager-user #calendarUpdateBtn {
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) !important;
+}
+
 .bottom-tool-btn {
   border: none;
   background: transparent;
@@ -6506,20 +6512,12 @@ function scheduleManagerAssistantWelcome(delay = 1400, { force = false } = {}) {
 
     managerAssistantWelcomePlayed = true;
     if (shouldShowManagerAssistantIntro()) {
-      const closeIntro = () => {
-        rememberManagerAssistantIntroChoice();
-        assistant.dismissTip({ celebrate: false });
-      };
       assistant.playWelcome({
         autoHideMs: 0,
         payload: {
           title: "Hello, I'm here to help.",
           intro: "I'll check appointment duration, assign Anyone bookings in order, remind you about unconfirmed online bookings, and remind you to check Dash Booking. And this is just the beginning — over time, I'll be able to help with even more.",
-          preferenceLabel: "Don't show this again",
-          actions: [{ id: 'close-introduction', label: 'Close' }]
-        },
-        onAction: actionId => {
-          if (actionId === 'close-introduction') closeIntro();
+          preferenceLabel: "Don't show this again"
         },
         onDismiss: rememberManagerAssistantIntroChoice
       });
@@ -6774,19 +6772,14 @@ async function getManagerAssistantAnyoneResult(analysis) {
     interceptSave: true,
     resolvedKey,
     payload: {
-      title: candidates.length > 1
-        ? `Next in line for Anyone: ${selected.member.name}`
-        : `${selected.member.name} is available for this appointment.`,
-      actions: [
-        { id: 'assign-anyone', label: `Assign to ${selected.member.name}` },
-        { id: 'keep-anyone', label: 'Keep Anyone', emphasis: 'secondary' }
-      ],
+      title: `Assign this service to ${selected.member.name}?`,
+      actions: [{ id: 'assign-anyone', label: `Assign to ${selected.member.name}` }],
       leaveCurrent: true
     }
   };
 }
 
-async function buildManagerAssistantAppointmentResult() {
+async function buildManagerAssistantAppointmentResult({ forSave = false } = {}) {
   if (currentUserRole !== 'manager' || appointmentModal.classList.contains('hidden')) return null;
   const assistant = await ensureManagerAssistant();
   if (!assistant || !managerAssistantModule) return null;
@@ -6794,6 +6787,7 @@ async function buildManagerAssistantAppointmentResult() {
   const durationResult = getManagerAssistantDurationResult(analysis);
   if (durationResult) return durationResult;
   if (aStaff.value !== ANYONE_ID) return null;
+  if (!forSave || !aNote.value.trim()) return null;
   const session = ensureManagerAssistantAppointmentSession();
   if (session.existing && !session.serviceTouched && !session.scheduleTouched) return null;
   return getManagerAssistantAnyoneResult(analysis);
@@ -6827,7 +6821,7 @@ function scheduleManagerAssistantForAppointment(delay = 650) {
 function handleManagerAssistantAppointmentAction(actionId) {
   const session = ensureManagerAssistantAppointmentSession();
   const result = session.currentResult;
-  if (actionId === 'leave-current' || actionId === 'keep-anyone') {
+  if (actionId === 'leave-current') {
     if (result?.resolvedKey) session.resolvedKeys.add(result.resolvedKey);
     session.currentResult = null;
     session.saveOverrideSignature = '';
@@ -6876,7 +6870,7 @@ async function managerAssistantShouldInterceptAppointmentSave() {
     appointmentSaveBtn?.classList.remove('manager-save-anyway');
     return false;
   }
-  const result = await buildManagerAssistantAppointmentResult();
+  const result = await buildManagerAssistantAppointmentResult({ forSave: true });
   if (!result?.interceptSave) return false;
   session.saveOverrideSignature = signature;
   appointmentSaveBtn?.classList.add('manager-save-anyway');
@@ -16527,6 +16521,7 @@ try {
     currentUserRole = null;
     currentUserStaffId = null;
     currentUserEmail = '';
+    document.body.classList.remove('manager-user');
     destroyManagerAssistant();
     document.getElementById('loginScreen').classList.remove('hidden');
     document.getElementById('calendar-container').style.display = 'none';
@@ -16549,6 +16544,7 @@ try {
   currentUserRole = data.role;
 currentUserStaffId = data.staffId;
 currentUserEmail = String(user.email || '').trim().toLowerCase();
+document.body.classList.toggle('manager-user', currentUserRole === 'manager');
 
 if (!currentUserRole) {
   showToast("User role is missing. Please contact admin.", "error", 4000);
