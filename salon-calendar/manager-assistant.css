@@ -1,0 +1,602 @@
+.manager-assistant {
+  --ma-ink: #4d4039;
+  --ma-muted: #7f7169;
+  --ma-rose: #c76f89;
+  --ma-gold: #e5a547;
+  --ma-pose-transition-ms: 400ms;
+  --ma-frame-ms: 400ms;
+  --ma-walk-ms: 1200ms;
+  --ma-wave-cycle-ms: 800ms;
+  --ma-idle-cycle-ms: 3200ms;
+  --ma-laugh-cycle-ms: 400ms;
+  --ma-meditate-cycle-ms: 2400ms;
+  --ma-poof-ms: 1000ms;
+  position: fixed;
+  left: 0;
+  bottom: 76px;
+  z-index: 2147480000;
+  display: flex;
+  width: min(390px, 100vw);
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 0;
+  padding-right: 6px;
+  pointer-events: none;
+  box-sizing: border-box;
+  contain: layout style;
+  isolation: isolate;
+}
+
+#appointmentPrimaryBtn.manager-save-anyway {
+  min-height: 43px;
+  line-height: 1.05;
+}
+
+#appointmentPrimaryBtn.manager-save-anyway::after {
+  content: "anyway";
+  display: block;
+  margin-top: 2px;
+  color: #267a50;
+  font: 800 9px/1 system-ui, -apple-system, sans-serif;
+}
+
+.manager-assistant.manager-assistant--contained {
+  position: absolute;
+}
+
+.manager-assistant[hidden] {
+  display: none;
+}
+
+.manager-assistant__character-button {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 124px;
+  width: 124px;
+  height: 151px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translateX(-22%);
+  transform-origin: 34% 91%;
+  transition:
+    transform var(--ma-pose-transition-ms) cubic-bezier(.22,.61,.36,1),
+    opacity var(--ma-pose-transition-ms) ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.manager-assistant__character-button:focus-visible {
+  outline: 2px solid rgba(199, 111, 137, 0.58);
+  outline-offset: -8px;
+  border-radius: 42%;
+}
+
+.manager-assistant__character-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: left bottom;
+  user-select: none;
+  -webkit-user-drag: none;
+  transform-origin: 48% 89%;
+  filter: drop-shadow(0 7px 6px rgba(72, 47, 36, 0.2));
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+.manager-assistant__bubble {
+  position: relative;
+  z-index: 1;
+  width: min(238px, calc(100vw - 128px));
+  margin: 0 0 39px -2px;
+  padding: 13px 14px 8px;
+  border: 1px solid rgba(91, 68, 59, 0.16);
+  border-radius: 18px 18px 18px 6px;
+  background: rgba(255, 253, 251, 0.985);
+  box-shadow: 0 14px 34px rgba(66, 43, 35, 0.2);
+  color: var(--ma-ink);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(9px) scale(0.96);
+  transform-origin: left bottom;
+  transition: opacity 180ms ease, transform 240ms cubic-bezier(.2,.8,.2,1), visibility 0s linear 240ms;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.manager-assistant__bubble::after {
+  content: "";
+  position: absolute;
+  left: -10px;
+  bottom: 18px;
+  width: 20px;
+  height: 20px;
+  border-left: 1px solid rgba(91, 68, 59, 0.14);
+  border-bottom: 1px solid rgba(91, 68, 59, 0.14);
+  border-radius: 0 0 0 5px;
+  background: #fffdfb;
+  transform: rotate(45deg);
+}
+
+.manager-assistant.is-modal-speaking .manager-assistant__bubble {
+  width: min(316px, calc(100vw - 74px));
+  margin: 0;
+  padding: 10px 12px 6px;
+}
+
+.manager-assistant.has-dynamic-bubble {
+  contain: none;
+}
+
+.manager-assistant.has-dynamic-bubble .manager-assistant__bubble {
+  position: fixed;
+  margin: 0;
+}
+
+.manager-assistant.has-dynamic-bubble .manager-assistant__bubble::after {
+  top: var(--ma-tail-top, 18px);
+  bottom: auto;
+}
+
+.manager-assistant.is-bubble-visible .manager-assistant__bubble {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  transition-delay: 0s;
+  pointer-events: auto;
+}
+
+.manager-assistant.is-greeting-bubble .manager-assistant__bubble {
+  width: 172px;
+  padding-bottom: 11px;
+}
+
+.manager-assistant__close {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #95857d;
+  font: 700 20px/28px system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.manager-assistant__close:hover,
+.manager-assistant__close:focus-visible {
+  background: #f6ecef;
+  color: #594941;
+  outline: none;
+}
+
+.manager-assistant__eyebrow {
+  margin: 0 27px 4px 0;
+  color: var(--ma-rose);
+  font: 800 9px/1.2 system-ui, -apple-system, sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.manager-assistant__title {
+  margin: 0 21px 5px 0;
+  font: 800 14px/1.28 system-ui, -apple-system, sans-serif;
+}
+
+.manager-assistant__intro,
+.manager-assistant__empty {
+  margin: 0;
+  color: #64564f;
+  font: 650 11px/1.4 system-ui, -apple-system, sans-serif;
+}
+
+.manager-assistant__helper {
+  margin: 5px 0 0;
+  color: #91847c;
+  font: 650 9px/1.35 system-ui, -apple-system, sans-serif;
+}
+
+.manager-assistant__helper[hidden] {
+  display: none;
+}
+
+.manager-assistant__actions {
+  display: grid;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.manager-assistant__action-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.manager-assistant__actions[data-layout="single-row"] .manager-assistant__action-row,
+.manager-assistant__action-row--primary {
+  width: 100%;
+}
+
+.manager-assistant__actions[hidden],
+.manager-assistant__links[hidden],
+.manager-assistant__footer[hidden] {
+  display: none;
+}
+
+.manager-assistant__choice {
+  min-width: 0;
+  min-height: 27px;
+  padding: 5px 7px;
+  border: 1px solid rgba(199, 111, 137, 0.28);
+  border-radius: 999px;
+  background: #fff7f9;
+  color: #684d56;
+  font: 800 10px/1.2 system-ui, -apple-system, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.manager-assistant__choice--secondary {
+  min-height: 23px;
+  padding: 3px 7px;
+  border-color: rgba(91, 68, 59, 0.16);
+  background: #faf7f4;
+  color: #77675f;
+  font-size: 9px;
+}
+
+.manager-assistant__choice:hover,
+.manager-assistant__choice:focus-visible,
+.manager-assistant__link:hover,
+.manager-assistant__link:focus-visible,
+.manager-assistant__leave:hover,
+.manager-assistant__leave:focus-visible {
+  filter: brightness(0.98);
+  outline: 2px solid rgba(199, 111, 137, 0.22);
+  outline-offset: 1px;
+}
+
+.manager-assistant__links {
+  display: grid;
+  gap: 3px;
+  margin-top: 7px;
+}
+
+.manager-assistant__link {
+  width: 100%;
+  min-height: 29px;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: 7px;
+  background: #f9f5f1;
+  color: #7e5d69;
+  text-align: left;
+  font: 800 10px/1.3 system-ui, -apple-system, sans-serif;
+  cursor: pointer;
+}
+
+.manager-assistant__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+  padding-top: 2px;
+  border-top: 1px solid rgba(91, 68, 59, 0.09);
+}
+
+.manager-assistant__leave {
+  min-height: 18px;
+  padding: 1px 5px 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #8a7971;
+  font: 800 9px/1.2 system-ui, -apple-system, sans-serif;
+  cursor: pointer;
+}
+
+.manager-assistant.is-greeting-bubble .manager-assistant__title {
+  margin-bottom: 2px;
+  font-size: 15px;
+}
+
+.manager-assistant.is-greeting-bubble .manager-assistant__intro {
+  color: #7a665a;
+  font-size: 12px;
+}
+
+.manager-assistant__availability {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.manager-assistant__availability[hidden] {
+  display: none;
+}
+
+.manager-assistant__availability-group {
+  display: grid;
+  grid-template-columns: 53px minmax(0, 1fr);
+  gap: 6px;
+  align-items: start;
+}
+
+.manager-assistant__availability-label {
+  padding-top: 2px;
+  color: var(--ma-muted);
+  font: 800 8.5px/1.25 system-ui, -apple-system, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
+}
+
+.manager-assistant__availability-list {
+  display: grid;
+  gap: 3px;
+}
+
+.manager-assistant__availability-item {
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr);
+  gap: 6px;
+  color: #544841;
+  font: 700 10px/1.35 system-ui, -apple-system, sans-serif;
+}
+
+.manager-assistant__availability-dot {
+  width: 6px;
+  height: 6px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #61a477;
+  box-shadow: 0 0 0 3px rgba(97, 164, 119, 0.12);
+}
+
+.manager-assistant__availability-group--soon .manager-assistant__availability-dot {
+  background: var(--ma-gold);
+  box-shadow: 0 0 0 3px rgba(229, 165, 71, 0.14);
+}
+
+.manager-assistant.is-walking .manager-assistant__character-button,
+.manager-assistant.is-greeting .manager-assistant__character-button,
+.manager-assistant.is-sitting .manager-assistant__character-button,
+.manager-assistant.is-speaking .manager-assistant__character-button,
+.manager-assistant.is-laughing .manager-assistant__character-button,
+.manager-assistant.is-meditating .manager-assistant__character-button {
+  transform: translateX(4px);
+}
+
+.manager-assistant.is-poofing .manager-assistant__character-button {
+  transform: translateX(4px);
+  opacity: 1;
+  transition: none;
+  pointer-events: none;
+}
+
+.manager-assistant.is-modal-peeking .manager-assistant__character-button,
+.manager-assistant.is-modal-speaking .manager-assistant__character-button {
+  transform: translateX(-28%);
+  transition: none;
+}
+
+.manager-assistant.is-walking .manager-assistant__character-button {
+  transition-duration: var(--ma-walk-ms);
+}
+
+.manager-assistant.is-peeking .manager-assistant__character-button {
+  transform: translateX(-28%);
+}
+
+.manager-assistant.is-peeking .manager-assistant__character-image {
+  animation: maPeekBreath var(--ma-meditate-cycle-ms) ease-in-out infinite;
+}
+
+.manager-assistant.is-modal-peeking .manager-assistant__character-image {
+  animation: maPeekBreath var(--ma-meditate-cycle-ms) ease-in-out infinite;
+}
+
+.manager-assistant.is-modal-speaking .manager-assistant__character-image {
+  animation: maModalPeekWave var(--ma-wave-cycle-ms) ease-in-out infinite;
+}
+
+.manager-assistant.is-poofing .manager-assistant__character-image {
+  object-position: center center;
+  transform-origin: 50% 50%;
+  filter: none;
+  animation: maPoofTwirl var(--ma-poof-ms) cubic-bezier(.42,0,.58,1) both;
+}
+
+.manager-assistant.is-walking .manager-assistant__character-image {
+  animation: maWalkWaddle var(--ma-wave-cycle-ms) ease-in-out infinite;
+}
+
+.manager-assistant.is-greeting .manager-assistant__character-image,
+.manager-assistant.is-speaking .manager-assistant__character-image {
+  animation: maFriendlyWave var(--ma-wave-cycle-ms) ease-in-out 3;
+}
+
+.manager-assistant.is-sitting .manager-assistant__character-image {
+  animation: maIdleBreath var(--ma-idle-cycle-ms) ease-in-out infinite;
+}
+
+.manager-assistant.is-laughing .manager-assistant__character-image {
+  animation: maBellyLaugh var(--ma-laugh-cycle-ms) ease-in-out infinite;
+}
+
+.manager-assistant.is-meditating .manager-assistant__character-image {
+  animation: maMeditateBreath var(--ma-meditate-cycle-ms) ease-in-out infinite;
+}
+
+.manager-assistant.is-leaving .manager-assistant__character-button {
+  transform: translateX(-112%) rotate(-5deg);
+  opacity: 0.28;
+  transition-duration: var(--ma-walk-ms);
+}
+
+.manager-assistant.is-leaving .manager-assistant__character-image {
+  animation: maWalkWaddle var(--ma-wave-cycle-ms) ease-in-out infinite;
+}
+
+@keyframes maPeekBreath {
+  0%, 100% { transform: translate(0, 0) scale(0.81) rotate(0); }
+  48% { transform: translate(2px, 1px) scale(0.81) rotate(1deg); }
+}
+
+@keyframes maWalkWaddle {
+  0%, 100% { transform: translateY(0) rotate(-0.8deg); }
+  50% { transform: translateY(-1.5px) rotate(0.8deg); }
+}
+
+@keyframes maModalPeekWave {
+  0%, 100% { transform: translate(0, 0) scale(0.81) rotate(0); }
+  36% { transform: translate(2px, -1px) scale(0.81) rotate(-1.2deg); }
+  70% { transform: translate(1px, 1px) scale(0.81) rotate(0.8deg); }
+}
+
+@keyframes maPoofTwirl {
+  0% {
+    opacity: 0;
+    transform: translate(0, 3px) scale(1.44) rotate(-10deg);
+  }
+  16% {
+    opacity: 1;
+    transform: translate(-0.5px, 1px) scale(1.47) rotate(4deg);
+  }
+  52% {
+    opacity: 1;
+    transform: translate(0.5px, -1px) scale(1.52) rotate(34deg);
+  }
+  84% {
+    opacity: 1;
+    transform: translate(-0.5px, -1px) scale(1.49) rotate(62deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-1px, -2px) scale(1.46) rotate(78deg);
+  }
+}
+
+@keyframes maFriendlyWave {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  35% { transform: translateY(-2px) rotate(-1.4deg); }
+  68% { transform: translateY(0) rotate(1deg); }
+}
+
+@keyframes maIdleBreath {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-1px) scale(1.008, 1.012); }
+}
+
+@keyframes maBellyLaugh {
+  0%, 100% { transform: translateY(0) scale(1) rotate(0); }
+  25% { transform: translateY(-3px) scale(1.018, 0.988) rotate(-1deg); }
+  55% { transform: translateY(1px) scale(0.995, 1.012) rotate(1deg); }
+}
+
+@keyframes maMeditateBreath {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    filter: drop-shadow(0 7px 6px rgba(72, 47, 36, 0.18));
+  }
+  50% {
+    transform: translateY(-2px) scale(1.01);
+    filter: drop-shadow(0 9px 8px rgba(165, 108, 44, 0.22));
+  }
+}
+
+body.modal-open .manager-assistant .manager-assistant__character-button,
+body.modal-open .manager-assistant.is-bubble-visible .manager-assistant__bubble {
+  pointer-events: none;
+}
+
+body.modal-open .manager-assistant.is-bubble-visible .manager-assistant__close {
+  pointer-events: auto;
+}
+
+body.modal-open .manager-assistant.is-bubble-visible .manager-assistant__choice,
+body.modal-open .manager-assistant.is-bubble-visible .manager-assistant__link,
+body.modal-open .manager-assistant.is-bubble-visible .manager-assistant__leave {
+  pointer-events: auto;
+}
+
+.manager-assistant__preference {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 9px 0 2px;
+  color: #4e423c;
+  font-size: 12px;
+  line-height: 1.25;
+  cursor: pointer;
+}
+
+.manager-assistant__preference[hidden] {
+  display: none;
+}
+
+.manager-assistant__preference-input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: #75a886;
+  flex: 0 0 auto;
+}
+
+.manager-assistant.is-modal-speaking .manager-assistant__title {
+  margin-bottom: 3px;
+}
+
+.manager-assistant.is-modal-speaking .manager-assistant__helper {
+  margin-top: 3px;
+}
+
+.manager-assistant.is-modal-speaking .manager-assistant__actions[data-layout="single-row"] .manager-assistant__choice,
+.manager-assistant.is-modal-speaking .manager-assistant__action-row--primary .manager-assistant__choice {
+  flex: 1 1 auto;
+}
+
+@media (max-width: 370px) {
+  .manager-assistant__character-button {
+    flex-basis: 114px;
+    width: 114px;
+    height: 142px;
+  }
+
+  .manager-assistant__bubble {
+    width: min(232px, calc(100vw - 116px));
+    padding: 11px 11px 10px;
+  }
+
+  .manager-assistant.is-greeting-bubble .manager-assistant__bubble {
+    width: 166px;
+  }
+
+  .manager-assistant.is-modal-speaking .manager-assistant__bubble {
+    width: min(296px, calc(100vw - 68px));
+    padding-inline: 9px;
+  }
+
+  .manager-assistant.is-modal-speaking .manager-assistant__choice {
+    padding-inline: 5px;
+    font-size: 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .manager-assistant *,
+  .manager-assistant *::before,
+  .manager-assistant *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+}

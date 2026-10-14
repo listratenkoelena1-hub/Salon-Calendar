@@ -5442,6 +5442,21 @@ const TELEGRAM_NOTIFICATIONS_PAUSED = true;
 let currentUserRole = null;
 let currentUserStaffId = null;
 let currentUserEmail = '';
+let managerAssistant = null;
+let managerAssistantModule = null;
+let managerAssistantLoadPromise = null;
+let managerAssistantDraftTimer = 0;
+let managerAssistantWelcomeTimer = 0;
+let managerAssistantWelcomePlayed = false;
+let managerAssistantHiddenAt = 0;
+let managerAssistantSession = null;
+let managerAssistantBackgroundTimer = 0;
+let managerAssistantBackgroundSnoozedUntil = 0;
+let managerAssistantBackgroundReadyAt = 0;
+let managerAssistantLastOnlineReminderKey = '';
+let managerAssistantLastOnlineReminderAt = 0;
+let managerAssistantRotationState = { loaded: false, nextStaffId: null };
+let managerAssistantRotationLoadPromise = null;
 const DASH_PREVIEW_DEMO_ID = '__dash_preview_request__';
 const DASH_PREVIEW_DEMO_NOTIFICATION_ID = '__dash_preview_notification__';
 const DASH_PREVIEW_DEMO_ENABLED = (() => {
@@ -5662,7 +5677,9 @@ async function ensureAuthUser(email, role, staffId = null, staffName = null) {
 const aDate = document.getElementById('aDate');
       aDate.addEventListener('change', () => {
   aDate.setAttribute('readonly', true);
+  markManagerAssistantScheduleTouched();
   checkTimeAvailability();
+  scheduleManagerAssistantForAppointment();
 });
 const aStaff = document.getElementById('aStaff');
 const aTime = document.getElementById('aTime');
@@ -5752,7 +5769,9 @@ appointmentDatePicker = flatpickr(aDate, {
   onChange: function(selectedDates, dateStr) {
     if (dateStr) {
       aDate.value = dateStr;
+      markManagerAssistantScheduleTouched();
       checkTimeAvailability();
+      scheduleManagerAssistantForAppointment();
     }
   }
 });
@@ -6416,6 +6435,617 @@ function buildStaffOptions(list, { markInactive = false } = {}) {
       '</option>';
   }).join('');
 }
+
+const MANAGER_ASSISTANT_ASSET_VERSION = 'buddha-focused-v1';
+const MANAGER_ASSISTANT_ROTATION_LOCAL_KEY = 'managerAssistantAnyoneNextStaffId';
+const MANAGER_ASSISTANT_ROTATION_COLLECTION = 'managerAssistantState';
+const MANAGER_ASSISTANT_ROTATION_DOCUMENT = 'anyoneRotation';
+const MANAGER_ASSISTANT_INTRO_PREFIX = 'managerAssistantIntroDismissed:';
+let managerAssistantScheduleRun = 0;
+
+async function ensureManagerAssistant() {
+  if (currentUserRole !== 'manager') return null;
+  if (managerAssistant) return managerAssistant;
+  if (managerAssistantLoadPromise) return managerAssistantLoadPromise;
+
+  managerAssistantLoadPromise = import(`./manager-assistant.js?v=${MANAGER_ASSISTANT_ASSET_VERSION}`)
+    .then(module => {
+      if (currentUserRole !== 'manager') return null;
+      managerAssistantModule = module;
+      managerAssistant = module.createManagerAssistant();
+      return managerAssistant;
+    })
+    .catch(error => {
+      console.warn('Buddha assistant could not be loaded:', error);
+      return null;
+    })
+    .finally(() => {
+      managerAssistantLoadPromise = null;
+    });
+
+  return managerAssistantLoadPromise;
+}
+
+function getManagerAssistantIntroKey() {
+  return MANAGER_ASSISTANT_INTRO_PREFIX + (auth.currentUser?.uid || currentUserEmail || 'manager');
+}
+
+function shouldShowManagerAssistantIntro() {
+  const forcePreview = new URLSearchParams(window.location.search).get('buddhaIntro') === '1';
+  if (forcePreview) return true;
+  try { return localStorage.getItem(getManagerAssistantIntroKey()) !== 'true'; }
+  catch (error) { return true; }
+}
+
+function rememberManagerAssistantIntroChoice() {
+  if (!managerAssistant?.isPreferenceChecked?.()) return;
+  try { localStorage.setItem(getManagerAssistantIntroKey(), 'true'); }
+  catch (error) { /* The introduction can safely appear again. */ }
+}
+
+function clearManagerAssistantWelcomeTimer() {
+  if (!managerAssistantWelcomeTimer) return;
+  clearTimeout(managerAssistantWelcomeTimer);
+  managerAssistantWelcomeTimer = 0;
+}
+
+function scheduleManagerAssistantWelcome(delay = 1400, { force = false } = {}) {
+  clearManagerAssistantWelcomeTimer();
+  if (currentUserRole !== 'manager' || document.hidden) return;
+  if (managerAssistantWelcomePlayed && !force) return;
+  managerAssistantBackgroundReadyAt = Math.max(
+    managerAssistantBackgroundReadyAt,
+    Date.now() + Math.max(0, Number(delay) || 0) + 8500
+  );
+
+  managerAssistantWelcomeTimer = setTimeout(async () => {
+    managerAssistantWelcomeTimer = 0;
+    if (currentUserRole !== 'manager' || document.hidden) return;
+    const assistant = await ensureManagerAssistant();
+    if (!assistant) return;
+
+    managerAssistantWelcomePlayed = true;
+    if (shouldShowManagerAssistantIntro()) {
+      const closeIntro = () => {
+        rememberManagerAssistantIntroChoice();
+        assistant.dismissTip({ celebrate: false });
+      };
+      assistant.playWelcome({
+        autoHideMs: 0,
+        payload: {
+          title: "Hello, I'm here to help.",
+          intro: "I'll check appointment duration, assign Anyone bookings in order, remind you about unconfirmed online bookings, and remind you to check Dash Booking.",
+          preferenceLabel: "Don't show this again",
+          actions: [{ id: 'close-introduction', label: 'Close' }]
+        },
+        onAction: actionId => {
+          if (actionId === 'close-introduction') closeIntro();
+        },
+        onDismiss: rememberManagerAssistantIntroChoice
+      });
+      return;
+    }
+
+    assistant.playWelcome({
+      payload: { title: 'Bình an 🌿' }
+    });
+  }, Math.max(0, Number(delay) || 0));
+}
+
+function destroyManagerAssistant() {
+  if (managerAssistantDraftTimer) clearTimeout(managerAssistantDraftTimer);
+  managerAssistantDraftTimer = 0;
+  clearManagerAssistantWelcomeTimer();
+  if (managerAssistantBackgroundTimer) clearInterval(managerAssistantBackgroundTimer);
+  managerAssistantBackgroundTimer = 0;
+  managerAssistant?.destroy();
+  managerAssistant = null;
+  managerAssistantModule = null;
+  managerAssistantSession = null;
+  managerAssistantWelcomePlayed = false;
+  managerAssistantHiddenAt = 0;
+  managerAssistantBackgroundReadyAt = 0;
+  managerAssistantBackgroundSnoozedUntil = 0;
+  managerAssistantLastOnlineReminderKey = '';
+  managerAssistantLastOnlineReminderAt = 0;
+}
+
+function formatManagerAssistantDuration(slots) {
+  const minutes = Math.max(0, Number(slots) || 0) * 15;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  if (!hours) return `${remainder} min`;
+  if (!remainder) return `${hours} hr`;
+  return `${hours} hr ${remainder} min`;
+}
+
+function resetManagerAssistantAppointmentSession({ existing = false } = {}) {
+  managerAssistantScheduleRun += 1;
+  if (managerAssistantDraftTimer) clearTimeout(managerAssistantDraftTimer);
+  managerAssistantDraftTimer = 0;
+  managerAssistantSession = {
+    existing,
+    serviceTouched: false,
+    scheduleTouched: false,
+    originStaffId: aStaff?.value || '',
+    pendingRotationStaffId: null,
+    recommendedCandidate: null,
+    currentResult: null,
+    resolvedKeys: new Set(),
+    saveOverrideSignature: ''
+  };
+  appointmentSaveBtn?.classList.remove('manager-save-anyway');
+}
+
+function ensureManagerAssistantAppointmentSession() {
+  if (!managerAssistantSession) {
+    resetManagerAssistantAppointmentSession({ existing: appointmentAction !== 'create' });
+  }
+  return managerAssistantSession;
+}
+
+function markManagerAssistantServiceTouched() {
+  if (currentUserRole !== 'manager') return;
+  const session = ensureManagerAssistantAppointmentSession();
+  session.serviceTouched = true;
+  session.pendingRotationStaffId = null;
+  session.saveOverrideSignature = '';
+  appointmentSaveBtn?.classList.remove('manager-save-anyway');
+}
+
+function markManagerAssistantScheduleTouched() {
+  if (currentUserRole !== 'manager') return;
+  const session = ensureManagerAssistantAppointmentSession();
+  session.scheduleTouched = true;
+  if (session.pendingRotationStaffId && aStaff.value !== session.pendingRotationStaffId) {
+    session.pendingRotationStaffId = null;
+  }
+  session.saveOverrideSignature = '';
+  appointmentSaveBtn?.classList.remove('manager-save-anyway');
+}
+
+function getManagerAssistantFormSignature() {
+  return JSON.stringify({
+    date: aDate?.value || '',
+    staffId: aStaff?.value || '',
+    time: aTime?.value || '',
+    duration: aDuration?.value || '',
+    service: aNote?.value || ''
+  });
+}
+
+function getManagerAssistantContinuousWindowSlots({ staffId, date, start }) {
+  const startSlot = Number(start);
+  if (!staffId || staffId === ANYONE_ID || !date || !Number.isFinite(startSlot) || startSlot < 0) return 0;
+  let end = startSlot;
+  while (end < SLOTS && !getAppointmentPlacementConflict({
+    staffId,
+    date,
+    start: end,
+    end: end + 1,
+    excludeId: editId
+  })) end += 1;
+  return Math.max(0, end - startSlot);
+}
+
+function getManagerAssistantConfiguredDuration(staffMember, analysis) {
+  if (!staffMember || !analysis?.durationResolvable || !analysis.durationKeys?.length) return null;
+  const stored = getStaffBookingDurations(staffMember);
+  let total = 0;
+  for (const key of analysis.durationKeys) {
+    const slots = Number(stored[key]);
+    if (!Number.isFinite(slots) || slots <= 0) return null;
+    total += slots;
+  }
+  return total + Math.max(0, Number(analysis.designSlots) || 0);
+}
+
+function setManagerAssistantDurationValue(slots) {
+  const value = Math.max(1, Math.round(Number(slots) || 0));
+  if (!value) return;
+  let option = Array.from(aDuration.options).find(item => Number(item.value) === value);
+  if (!option) {
+    option = document.createElement('option');
+    option.value = String(value);
+    option.textContent = formatManagerAssistantDuration(value);
+    aDuration.appendChild(option);
+  }
+  aDuration.value = String(value);
+}
+
+function managerAssistantStaffSupportsService(staffMember, analysis) {
+  if (!staffMember || !analysis?.requiredGroups?.length) return true;
+  const groups = getStaffBookingServiceGroups(staffMember);
+  return analysis.requiredGroups.every(group => groups.includes(group));
+}
+
+function getManagerAssistantDurationResult(analysis) {
+  if (!analysis?.durationResolvable || analysis.groupDetected || aStaff.value === ANYONE_ID) return null;
+  const staffMember = getStaffById(aStaff.value);
+  const requiredSlots = getManagerAssistantConfiguredDuration(staffMember, analysis);
+  const currentSlots = Math.max(0, Number(aDuration.value) || 0);
+  if (!requiredSlots || currentSlots >= requiredSlots) return null;
+
+  const availableSlots = getManagerAssistantContinuousWindowSlots({
+    staffId: staffMember.id,
+    date: aDate.value,
+    start: Number(aTime.value)
+  });
+  const resolvedKey = ['duration', analysis.signature, staffMember.id, aDate.value, aTime.value, currentSlots, requiredSlots].join('|');
+  if (ensureManagerAssistantAppointmentSession().resolvedKeys.has(resolvedKey)) return null;
+
+  return {
+    mode: 'prompt',
+    kind: 'duration',
+    interceptSave: true,
+    resolvedKey,
+    payload: availableSlots >= requiredSlots ? {
+      title: `${staffMember.name} usually needs ${formatManagerAssistantDuration(requiredSlots)} for this service.`,
+      intro: currentSlots ? `Current time: ${formatManagerAssistantDuration(currentSlots)}.` : '',
+      actions: [{ id: `set-duration:${requiredSlots}`, label: `Set ${formatManagerAssistantDuration(requiredSlots)}` }],
+      leaveCurrent: true
+    } : {
+      title: `${staffMember.name} usually needs ${formatManagerAssistantDuration(requiredSlots)}, but only ${formatManagerAssistantDuration(availableSlots)} is open.`,
+      actions: [{ id: 'choose-another-time', label: 'Choose another time' }],
+      leaveCurrent: true
+    }
+  };
+}
+
+function getManagerAssistantRotationLocalValue() {
+  try { return localStorage.getItem(MANAGER_ASSISTANT_ROTATION_LOCAL_KEY) || null; }
+  catch (error) { return null; }
+}
+
+function setManagerAssistantRotationLocalValue(staffId) {
+  try {
+    if (staffId) localStorage.setItem(MANAGER_ASSISTANT_ROTATION_LOCAL_KEY, staffId);
+    else localStorage.removeItem(MANAGER_ASSISTANT_ROTATION_LOCAL_KEY);
+  } catch (error) { /* Firestore remains the shared source. */ }
+}
+
+async function loadManagerAssistantRotationState() {
+  if (managerAssistantRotationState.loaded) return managerAssistantRotationState;
+  if (managerAssistantRotationLoadPromise) return managerAssistantRotationLoadPromise;
+  managerAssistantRotationLoadPromise = (async () => {
+    let nextStaffId = getManagerAssistantRotationLocalValue();
+    try {
+      const snapshot = await getDoc(doc(db, MANAGER_ASSISTANT_ROTATION_COLLECTION, MANAGER_ASSISTANT_ROTATION_DOCUMENT));
+      if (snapshot.exists() && snapshot.data()?.nextStaffId) nextStaffId = snapshot.data().nextStaffId;
+    } catch (error) {
+      console.warn('Buddha Anyone queue could not be read; using this device:', error);
+    }
+    managerAssistantRotationState = { loaded: true, nextStaffId: nextStaffId || null };
+    return managerAssistantRotationState;
+  })().finally(() => { managerAssistantRotationLoadPromise = null; });
+  return managerAssistantRotationLoadPromise;
+}
+
+function pickManagerAssistantRotationCandidate(candidates) {
+  const ordered = getAnyoneEligibleStaffList();
+  if (!ordered.length || !candidates.length) return null;
+  const byId = new Map(candidates.map(candidate => [candidate.member.id, candidate]));
+  const configuredIndex = ordered.findIndex(member => member.id === managerAssistantRotationState.nextStaffId);
+  const startIndex = configuredIndex >= 0 ? configuredIndex : 0;
+  for (let offset = 0; offset < ordered.length; offset += 1) {
+    const member = ordered[(startIndex + offset) % ordered.length];
+    if (byId.has(member.id)) return byId.get(member.id);
+  }
+  return candidates[0] || null;
+}
+
+async function getManagerAssistantAnyoneResult(analysis) {
+  const date = aDate.value;
+  const start = Number(aTime.value);
+  if (!date || !Number.isFinite(start) || start < 0) return null;
+  const session = ensureManagerAssistantAppointmentSession();
+  const resolvedKey = `anyone|${analysis.signature}|${date}|${start}`;
+  if (session.resolvedKeys.has(resolvedKey)) return null;
+
+  await loadManagerAssistantRotationState();
+  const candidates = getAnyoneEligibleStaffList()
+    .filter(member => managerAssistantStaffSupportsService(member, analysis))
+    .map(member => {
+      const configuredSlots = getManagerAssistantConfiguredDuration(member, analysis);
+      const assignmentSlots = configuredSlots || ANYONE_REQUIRED_DURATION;
+      return {
+        member,
+        assignmentSlots,
+        openSlots: getManagerAssistantContinuousWindowSlots({ staffId: member.id, date, start })
+      };
+    })
+    .filter(candidate => candidate.openSlots >= candidate.assignmentSlots);
+
+  if (!candidates.length) {
+    return {
+      mode: 'prompt',
+      kind: 'anyone-no-fit',
+      interceptSave: true,
+      resolvedKey,
+      payload: { title: "I don't see an available technician with enough time for this appointment.", leaveCurrent: true }
+    };
+  }
+
+  const selected = pickManagerAssistantRotationCandidate(candidates);
+  session.recommendedCandidate = selected;
+  return {
+    mode: 'prompt',
+    kind: 'anyone-assignment',
+    interceptSave: true,
+    resolvedKey,
+    payload: {
+      title: candidates.length > 1
+        ? `Next in line for Anyone: ${selected.member.name}`
+        : `${selected.member.name} is available for this appointment.`,
+      actions: [
+        { id: 'assign-anyone', label: `Assign to ${selected.member.name}` },
+        { id: 'keep-anyone', label: 'Keep Anyone', emphasis: 'secondary' }
+      ],
+      leaveCurrent: true
+    }
+  };
+}
+
+async function buildManagerAssistantAppointmentResult() {
+  if (currentUserRole !== 'manager' || appointmentModal.classList.contains('hidden')) return null;
+  const assistant = await ensureManagerAssistant();
+  if (!assistant || !managerAssistantModule) return null;
+  const analysis = managerAssistantModule.analyzeManagerService(aNote.value);
+  const durationResult = getManagerAssistantDurationResult(analysis);
+  if (durationResult) return durationResult;
+  if (aStaff.value !== ANYONE_ID) return null;
+  const session = ensureManagerAssistantAppointmentSession();
+  if (session.existing && !session.serviceTouched && !session.scheduleTouched) return null;
+  return getManagerAssistantAnyoneResult(analysis);
+}
+
+function showManagerAssistantAppointmentResult(result) {
+  const session = ensureManagerAssistantAppointmentSession();
+  session.currentResult = result || null;
+  if (!result) {
+    managerAssistant?.dismissTip({ celebrate: false });
+    return;
+  }
+  managerAssistant?.showPrompt(result.payload, {
+    context: 'prompt',
+    onAction: handleManagerAssistantAppointmentAction,
+    onDismiss: () => { session.currentResult = null; }
+  });
+}
+
+function scheduleManagerAssistantForAppointment(delay = 650) {
+  if (managerAssistantDraftTimer) clearTimeout(managerAssistantDraftTimer);
+  const runId = ++managerAssistantScheduleRun;
+  if (currentUserRole !== 'manager' || appointmentModal.classList.contains('hidden')) return;
+  managerAssistantDraftTimer = setTimeout(async () => {
+    managerAssistantDraftTimer = 0;
+    const result = await buildManagerAssistantAppointmentResult();
+    if (runId === managerAssistantScheduleRun) showManagerAssistantAppointmentResult(result);
+  }, Math.max(0, Number(delay) || 0));
+}
+
+function handleManagerAssistantAppointmentAction(actionId) {
+  const session = ensureManagerAssistantAppointmentSession();
+  const result = session.currentResult;
+  if (actionId === 'leave-current' || actionId === 'keep-anyone') {
+    if (result?.resolvedKey) session.resolvedKeys.add(result.resolvedKey);
+    session.currentResult = null;
+    session.saveOverrideSignature = '';
+    appointmentSaveBtn?.classList.remove('manager-save-anyway');
+    managerAssistant?.dismissTip({ celebrate: false });
+    return;
+  }
+  if (actionId === 'assign-anyone') {
+    const candidate = session.recommendedCandidate;
+    if (!candidate?.member?.id) return;
+    aStaff.value = candidate.member.id;
+    handleAnyone();
+    setManagerAssistantDurationValue(candidate.assignmentSlots);
+    aDuration.disabled = false;
+    session.pendingRotationStaffId = candidate.member.id;
+    session.scheduleTouched = true;
+    checkTimeAvailability();
+    applyAppointmentTintNow();
+    scheduleManagerAssistantForAppointment(80);
+    return;
+  }
+  if (actionId.startsWith('set-duration:')) {
+    const slots = Number(actionId.split(':')[1]);
+    if (Number.isFinite(slots) && slots > 0) {
+      setManagerAssistantDurationValue(slots);
+      session.scheduleTouched = true;
+      checkTimeAvailability();
+      scheduleManagerAssistantForAppointment(80);
+    }
+    return;
+  }
+  if (actionId === 'choose-another-time') {
+    managerAssistant?.dismissTip({ celebrate: false });
+    aTime.focus();
+    try { aTime.showPicker?.(); } catch (error) { /* Native select remains available. */ }
+  }
+}
+
+async function managerAssistantShouldInterceptAppointmentSave() {
+  if (currentUserRole !== 'manager' || appointmentModal.classList.contains('hidden')) return false;
+  if (editId && isPendingBookingRequest(appointments.find(item => item.id === editId))) return false;
+  const session = ensureManagerAssistantAppointmentSession();
+  const signature = getManagerAssistantFormSignature();
+  if (session.saveOverrideSignature === signature) {
+    session.saveOverrideSignature = '';
+    appointmentSaveBtn?.classList.remove('manager-save-anyway');
+    return false;
+  }
+  const result = await buildManagerAssistantAppointmentResult();
+  if (!result?.interceptSave) return false;
+  session.saveOverrideSignature = signature;
+  appointmentSaveBtn?.classList.add('manager-save-anyway');
+  showManagerAssistantAppointmentResult(result);
+  return true;
+}
+
+async function persistManagerAssistantRotationAfterSave(staffId) {
+  const session = managerAssistantSession;
+  if (!session || session.originStaffId !== ANYONE_ID || session.pendingRotationStaffId !== staffId) return;
+  const ordered = getAnyoneEligibleStaffList();
+  const selectedIndex = ordered.findIndex(member => member.id === staffId);
+  if (selectedIndex < 0 || !ordered.length) return;
+  const nextStaffId = ordered[(selectedIndex + 1) % ordered.length]?.id || null;
+  managerAssistantRotationState = { loaded: true, nextStaffId };
+  setManagerAssistantRotationLocalValue(nextStaffId);
+  session.pendingRotationStaffId = null;
+  try {
+    await setDoc(doc(db, MANAGER_ASSISTANT_ROTATION_COLLECTION, MANAGER_ASSISTANT_ROTATION_DOCUMENT), {
+      nextStaffId,
+      updatedAt: serverTimestamp(),
+      updatedBy: currentUserEmail || 'manager'
+    }, { merge: true });
+  } catch (error) {
+    console.warn('Buddha Anyone queue was saved only on this device:', error);
+  }
+}
+
+function getManagerAssistantTimestampMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === 'function') return value.toMillis();
+  if (typeof value.toDate === 'function') return value.toDate().getTime();
+  if (Number.isFinite(Number(value.seconds))) return Number(value.seconds) * 1000;
+  return Number(new Date(value)) || 0;
+}
+
+function getPendingManagerAssistantOnlineRequests() {
+  return appointments.filter(isPendingOnlineBookingRequest).sort((a, b) => {
+    const createdDiff = getManagerAssistantTimestampMillis(a.createdAt) - getManagerAssistantTimestampMillis(b.createdAt);
+    return createdDiff || String(a.date || '').localeCompare(String(b.date || '')) || (Number(a.start) || 0) - (Number(b.start) || 0);
+  });
+}
+
+function formatManagerAssistantRequestDate(value) {
+  const date = getLocalDateFromInput(String(value || ''));
+  return Number.isFinite(date.getTime())
+    ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : String(value || 'Date');
+}
+
+function canShowManagerAssistantBackgroundMessage() {
+  if (currentUserRole !== 'manager' || document.hidden || Date.now() < managerAssistantBackgroundReadyAt) return false;
+  if (managerAssistant?.isWelcomeActive?.()) return false;
+  if (!appointmentModal.classList.contains('hidden')) return false;
+  return !document.querySelector('.modal:not(.hidden)');
+}
+
+function showManagerAssistantOnlineRequestReminder(requests) {
+  const links = requests.slice(0, 6).map(request => ({
+    id: `open-online-request:${request.id}`,
+    label: `${formatManagerAssistantRequestDate(request.date)} · ${timeLabel(Number(request.start) || 0)}`
+  }));
+  managerAssistant?.showPrompt({
+    title: requests.length === 1
+      ? 'An online booking request is waiting.'
+      : `${requests.length} online booking requests are waiting.`,
+    links
+  }, {
+    context: 'background',
+    onAction: handleManagerAssistantBackgroundAction,
+    onDismiss: () => { managerAssistantBackgroundSnoozedUntil = Date.now() + 15 * 60 * 1000; }
+  });
+}
+
+function getManagerAssistantDashPeriod(now = new Date()) {
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  if (minutes >= 9 * 60 + 45 && minutes < 14 * 60) return 'morning';
+  if (minutes >= 14 * 60 && minutes <= 20 * 60) return 'afternoon';
+  return null;
+}
+
+function getManagerAssistantDashKey(now = new Date()) {
+  const period = getManagerAssistantDashPeriod(now);
+  return period ? `managerAssistantDashChecked:${toInputDate(now)}:${period}` : '';
+}
+
+function isManagerAssistantDashChecked(key) {
+  if (!key) return true;
+  try { return localStorage.getItem(key) === 'true'; }
+  catch (error) { return false; }
+}
+
+function showManagerAssistantDashReminder(dashKey) {
+  managerAssistant?.showPrompt({
+    title: 'Do we have any new online bookings in Dash Booking?',
+    actions: [
+      { id: `dash-checked:${dashKey}`, label: 'Checked' },
+      { id: 'dash-remind-later', label: 'Remind me later', emphasis: 'secondary' }
+    ]
+  }, {
+    context: 'background',
+    onAction: handleManagerAssistantBackgroundAction,
+    onDismiss: () => { managerAssistantBackgroundSnoozedUntil = Date.now() + 30 * 60 * 1000; }
+  });
+}
+
+function handleManagerAssistantBackgroundAction(actionId) {
+  if (actionId.startsWith('open-online-request:')) {
+    const id = actionId.slice('open-online-request:'.length);
+    managerAssistant?.dismissTip();
+    if (id) window.openFromSearch?.(id);
+    return;
+  }
+  if (actionId.startsWith('dash-checked:')) {
+    try { localStorage.setItem(actionId.slice('dash-checked:'.length), 'true'); }
+    catch (error) { /* A later reminder remains safe. */ }
+    managerAssistantBackgroundSnoozedUntil = 0;
+    managerAssistant?.dismissTip();
+    return;
+  }
+  if (actionId === 'dash-remind-later') {
+    managerAssistantBackgroundSnoozedUntil = Date.now() + 30 * 60 * 1000;
+    managerAssistant?.dismissTip();
+  }
+}
+
+async function runManagerAssistantBackgroundChecks() {
+  if (!canShowManagerAssistantBackgroundMessage() || Date.now() < managerAssistantBackgroundSnoozedUntil) return;
+  const assistant = await ensureManagerAssistant();
+  if (!assistant || !canShowManagerAssistantBackgroundMessage()) return;
+  const pending = getPendingManagerAssistantOnlineRequests();
+  if (pending.length) {
+    const key = pending.map(request => request.id).join('|');
+    if (key !== managerAssistantLastOnlineReminderKey || Date.now() - managerAssistantLastOnlineReminderAt >= 15 * 60 * 1000) {
+      managerAssistantLastOnlineReminderKey = key;
+      managerAssistantLastOnlineReminderAt = Date.now();
+      showManagerAssistantOnlineRequestReminder(pending);
+    }
+    return;
+  }
+  managerAssistantLastOnlineReminderKey = '';
+  const dashKey = getManagerAssistantDashKey();
+  if (dashKey && !isManagerAssistantDashChecked(dashKey)) showManagerAssistantDashReminder(dashKey);
+}
+
+function startManagerAssistantBackgroundChecks() {
+  if (managerAssistantBackgroundTimer) clearInterval(managerAssistantBackgroundTimer);
+  loadManagerAssistantRotationState();
+  managerAssistantBackgroundTimer = setInterval(runManagerAssistantBackgroundChecks, 60 * 1000);
+  setTimeout(runManagerAssistantBackgroundChecks, 10500);
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    managerAssistantHiddenAt = Date.now();
+    clearManagerAssistantWelcomeTimer();
+    return;
+  }
+  if (currentUserRole !== 'manager') return;
+  const hiddenFor = managerAssistantHiddenAt ? Date.now() - managerAssistantHiddenAt : 0;
+  managerAssistantHiddenAt = 0;
+  let welcomeWillPlay = false;
+  if (!managerAssistantWelcomePlayed || hiddenFor >= 30 * 60 * 1000) {
+    scheduleManagerAssistantWelcome(900, { force: managerAssistantWelcomePlayed });
+    welcomeWillPlay = true;
+  }
+  setTimeout(runManagerAssistantBackgroundChecks, welcomeWillPlay ? 10000 : 1800);
+});
+
 let appointmentAction = 'create';
 if (appointmentGroupToggle) {
   appointmentGroupToggle.addEventListener('change', updateAppointmentGroupControls);
@@ -6428,6 +7058,13 @@ if (aDate) {
 }
 if (aClient) {
   aClient.addEventListener('input', updateAppointmentGroupControls);
+}
+if (aNote) {
+  aNote.addEventListener('input', () => {
+    if (currentUserRole !== 'manager' || appointmentModal.classList.contains('hidden')) return;
+    markManagerAssistantServiceTouched();
+    scheduleManagerAssistantForAppointment();
+  });
 }
 aPhone.addEventListener('input', () => {
   const phone = aPhone.value.trim();
@@ -6593,17 +7230,25 @@ const ANYONE_ID="anyone";
 const ANYONE_DISPLAY_DURATION = 1;
 const ANYONE_REQUIRED_DURATION = 4;
 aStaff.onchange = () => {
+  markManagerAssistantScheduleTouched();
   handleAnyone();
   checkTimeAvailability();
+  scheduleManagerAssistantForAppointment();
   if (!isWalkInDraftOpenNow()) {
   applyAppointmentTintNow();   
 }    
 };
 
-aTime.onchange = checkTimeAvailability;
+aTime.onchange = () => {
+  markManagerAssistantScheduleTouched();
+  checkTimeAvailability();
+  scheduleManagerAssistantForAppointment();
+};
 aDuration.onchange = () => {
+  markManagerAssistantScheduleTouched();
   checkTimeAvailability();
   document.getElementById('durationError').style.display = 'none';
+  scheduleManagerAssistantForAppointment();
    
 };
 
@@ -8805,6 +9450,8 @@ updateClientHistoryLink(null);
 handleAnyone();
 clearAppointmentEditorMeta();
 applyAppointmentTintNow();
+resetManagerAssistantAppointmentSession({ existing: false });
+scheduleManagerAssistantForAppointment(180);
 }
 
 function formatAppointmentActionDate(value) {
@@ -8924,6 +9571,8 @@ if (isRequestAppointment) {
   applyAppointmentTintNow();
 }
 setAppointmentReadonly((options.readonly === true || isArchivedCalendarDate(a.date)) && !isDeclinedRequest);
+resetManagerAssistantAppointmentSession({ existing: true });
+scheduleManagerAssistantForAppointment(180);
 };
 
 
@@ -9329,6 +9978,8 @@ const conflictType = getAppointmentPlacementConflict({
     showToast("Appointment saved", "success");
   }
 
+  await persistManagerAssistantRotationAfterSave(normalizedData.staffId);
+  managerAssistant?.celebrateAfterModalClose?.();
   closeAppointment();
 };
 
@@ -9342,6 +9993,7 @@ window.handleAppointmentPrimaryAction = () => runAppointmentActionWithGuard(asyn
     await confirmOnlineBookingRequest();
     return;
   }
+  if (await managerAssistantShouldInterceptAppointmentSave()) return;
   await saveAppointment();
 });
 
@@ -13965,6 +14617,8 @@ window.closeAppointment = () => {
   setOnlineRequestModalMode(false);
   updateClientHistoryLink(null);
       resetAppointmentModalTint();
+  managerAssistantSession = null;
+  managerAssistant?.dismissTip({ celebrate: false });
 
   // ===== RESET WALK-IN LOCKS =====
   aStaff.disabled = false;
@@ -15873,6 +16527,7 @@ try {
     currentUserRole = null;
     currentUserStaffId = null;
     currentUserEmail = '';
+    destroyManagerAssistant();
     document.getElementById('loginScreen').classList.remove('hidden');
     document.getElementById('calendar-container').style.display = 'none';
     hideLoadingScreen();
@@ -15980,6 +16635,12 @@ if (bottomOffWorkBtn) {
   updateDeclinedOnlineButton();
   updateCalendarZoomButtonVisibility();
   hideLoadingScreen();
+  if (currentUserRole === 'manager') {
+    scheduleManagerAssistantWelcome();
+    startManagerAssistantBackgroundChecks();
+  } else {
+    destroyManagerAssistant();
+  }
 } catch (err) {
   console.warn('App did not finish loading:', err);
   showLoadingRetry();
@@ -16122,7 +16783,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-14.1';
+const CALENDAR_APP_VERSION = '2026-10-14.2';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';
