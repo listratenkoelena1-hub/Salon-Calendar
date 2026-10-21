@@ -109,16 +109,20 @@ function isTerminalIncomingStatus(value) {
     "rescheduled",
     "conflict",
     "duplicate",
+    "alerted",
+    "monitor_ignored",
     "baseline",
     "baseline_parse_error"
   ].includes(String(value || ""));
 }
 
 function buildDefaultConfig(raw = {}) {
+  const monitorOnly = raw.monitorOnly === true;
   return {
     enabled: raw.enabled === true,
-    writeEnabled: raw.writeEnabled === true,
+    writeEnabled: !monitorOnly && raw.writeEnabled === true,
     inboundEnabled: raw.inboundEnabled === true,
+    monitorOnly,
     inboundBaselineComplete: raw.inboundBaselineComplete === true,
     initialApplyEnabled: raw.initialApplyEnabled === true,
     dailyReconciliationEnabled: raw.dailyReconciliationEnabled !== false,
@@ -936,6 +940,48 @@ function buildDashMessageDoc({
   };
 }
 
+function buildDashMonitorMessage(detail = {}) {
+  const startMinutes = slotToMinutes(detail.start);
+  const startText = Number.isFinite(startMinutes) ? minutesToTime(startMinutes) : "unknown time";
+  return [
+    "NEW DASH BOOKING APPOINTMENT",
+    `${detail.client || "A client"} booked with ${detail.staffName || "an unrecognized technician"}.`,
+    `${detail.date || "Unknown date"} at ${startText}.`,
+    ...(detail.service ? [detail.service] : []),
+    "",
+    "Please check Dash Booking. Nothing was changed in Dash Booking or Rose Calendar."
+  ].join("\n");
+}
+
+function buildDashMonitorMessageDoc({ FieldValue, Timestamp, detail, localStaff, staffRecords }) {
+  const activeStaffIds = staffRecords
+    .filter(staff => staff.active !== false && staff.id && staff.id !== ANYONE_ID)
+    .map(staff => staff.id);
+  const isAnyone = localStaff?.id === ANYONE_ID || /^anyone$/i.test(String(detail?.staffName || "").trim());
+  const assignedStaffIds = localStaff?.id && localStaff.id !== ANYONE_ID ? [localStaff.id] : [];
+  const audienceStaffIds = isAnyone ? activeStaffIds : assignedStaffIds;
+  const entityId = getDashRequestDocumentId(detail?.dashBookingId || "unknown");
+  return {
+    ...buildDashMessageDoc({
+      FieldValue,
+      Timestamp,
+      message: buildDashMonitorMessage(detail),
+      eventType: "dash_appointment_detected",
+      entityType: "dashBooking",
+      entityId,
+      staffId: localStaff?.id || "",
+      staffName: localStaff?.name || detail?.staffName || "",
+      staffRecords,
+      conflict: false
+    }),
+    title: "New Dash Booking appointment",
+    visibleToAllStaff: isAnyone,
+    audienceStaffIds,
+    importantStaffIds: audienceStaffIds,
+    staffDefaultPriority: audienceStaffIds.length ? "key" : "secondary"
+  };
+}
+
 function buildDashActivityLogDoc({ FieldValue, detail, eventType, entityType, entityId, staffId, message }) {
   return {
     createdAt: FieldValue.serverTimestamp(),
@@ -1677,6 +1723,85 @@ async function processDashIncoming({ db, FieldValue, Timestamp, client, mappings
   return report;
 }
 
+async function processDashMonitorAlerts({ db, FieldValue, Timestamp, client, mappings }) {
+  const receiptSnap = await db.collection(DASH_RECEIPT_COLLECTION)
+    .orderBy("processedAt", "desc")
+    .limit(300)
+    .get();
+  const knownNotificationKeys = new Set();
+  receiptSnap.docs.forEach(docSnap => {
+    const data = docSnap.data() || {};
+    if (!isTerminalIncomingStatus(data.status)) return;
+    knownNotificationKeys.add(docSnap.id);
+    const notificationKey = String(data.notificationKey || "");
+    if (notificationKey) knownNotificationKeys.add(notificationKey);
+  });
+  const items = await client.readDashEvents({ knownNotificationKeys, limit: 50 });
+  const staffSnap = await db.collection("staff").get();
+  const staffRecords = [
+    { id: ANYONE_ID, name: "Anyone", active: true },
+    ...staffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }))
+  ];
+  const report = { scanned: items.length, alerted: 0, ignored: 0, parseError: 0 };
+
+  for (const item of items) {
+    const notificationRef = db.collection(DASH_RECEIPT_COLLECTION).doc(item.notificationKey);
+    const detail = item.detail || null;
+    if (!detail?.dashBookingId) {
+      await notificationRef.set({
+        notificationKey: item.notificationKey,
+        status: "parse_error",
+        monitorOnly: true,
+        processedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+      report.parseError += 1;
+      continue;
+    }
+    if (item.kind !== "created") {
+      await notificationRef.set({
+        notificationKey: item.notificationKey,
+        dashBookingId: detail.dashBookingId,
+        status: "monitor_ignored",
+        monitorOnly: true,
+        processedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+      report.ignored += 1;
+      continue;
+    }
+
+    const localStaff = resolveLocalStaffForDashName(staffRecords, detail.staffName, mappings);
+    const entityId = getDashRequestDocumentId(detail.dashBookingId);
+    const messageRef = db.collection("staffMessages").doc(`dash_monitor_${entityId}`);
+    const batch = db.batch();
+    batch.set(notificationRef, {
+      notificationKey: item.notificationKey,
+      dashBookingId: detail.dashBookingId,
+      status: "alerted",
+      monitorOnly: true,
+      localStaffId: localStaff?.id || "",
+      processedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    batch.set(db.collection(DASH_RECEIPT_COLLECTION).doc(entityId), {
+      dashBookingId: detail.dashBookingId,
+      notificationKey: item.notificationKey,
+      status: "alerted",
+      monitorOnly: true,
+      localStaffId: localStaff?.id || "",
+      processedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    batch.set(messageRef, buildDashMonitorMessageDoc({
+      FieldValue,
+      Timestamp,
+      detail,
+      localStaff,
+      staffRecords
+    }));
+    await batch.commit();
+    report.alerted += 1;
+  }
+  return report;
+}
+
 async function initializeDashIncomingBaseline({ db, FieldValue, client }) {
   const items = await client.readDashEvents({
     knownNotificationKeys: new Set(),
@@ -1790,20 +1915,24 @@ async function runDashSyncCycle({
   const browser = await launchDashBrowser({ executablePath });
   try {
     const page = await createAuthenticatedDashPage(browser, { email, password });
-    const client = createDashBrowserClient(page, { dryRun: !config.writeEnabled });
+    const client = createDashBrowserClient(page, { dryRun: config.monitorOnly || !config.writeEnabled });
     const mappings = await loadDashMappings(db);
     const incoming = config.inboundEnabled
       ? config.inboundBaselineComplete
-        ? await processDashIncoming({ db, FieldValue, Timestamp, client, mappings })
+        ? config.monitorOnly
+          ? await processDashMonitorAlerts({ db, FieldValue, Timestamp, client, mappings })
+          : await processDashIncoming({ db, FieldValue, Timestamp, client, mappings })
         : await initializeDashIncomingBaseline({ db, FieldValue, client })
       : { disabled: true };
-    const queue = await processDashQueue({
-      db,
-      FieldValue,
-      client,
-      dryRun: !config.writeEnabled,
-      limit: config.queueLimit
-    });
+    const queue = config.monitorOnly
+      ? { disabled: true, reason: "monitor_only" }
+      : await processDashQueue({
+          db,
+          FieldValue,
+          client,
+          dryRun: !config.writeEnabled,
+          limit: config.queueLimit
+        });
     const report = { status: "completed", queue, incoming, browserStarted: true, config };
     await runRef.set({ ...report, finishedAt: FieldValue.serverTimestamp() }, { merge: true });
     return report;
@@ -1831,6 +1960,8 @@ module.exports = {
   DASH_RUN_COLLECTION,
   addDateKeyDays,
   buildDashMessageDoc,
+  buildDashMonitorMessage,
+  buildDashMonitorMessageDoc,
   buildDashOutboundMismatchMessage,
   buildDashActivityLogDoc,
   buildDashEventDocumentId,
@@ -1853,6 +1984,7 @@ module.exports = {
   isTerminalIncomingStatus,
   makeWeeklyOccurrence,
   processDashIncoming,
+  processDashMonitorAlerts,
   processDashQueue,
   runDashAudit,
   runDashAuditWithBrowser,

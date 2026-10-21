@@ -4469,7 +4469,7 @@ exports.dashAppointmentWritten = onDocumentWritten(
   },
   async event => {
     const config = await loadDashConfig(db);
-    if (!config.enabled) return { skipped: true, reason: "disabled" };
+    if (!config.enabled || config.monitorOnly) return { skipped: true, reason: config.monitorOnly ? "monitor_only" : "disabled" };
     const before = event.data?.before?.exists ? event.data.before.data() || {} : null;
     const after = event.data?.after?.exists ? event.data.after.data() || {} : null;
     return enqueueDashSource({
@@ -4493,7 +4493,7 @@ exports.dashOffWorkWritten = onDocumentWritten(
   },
   async event => {
     const config = await loadDashConfig(db);
-    if (!config.enabled) return { skipped: true, reason: "disabled" };
+    if (!config.enabled || config.monitorOnly) return { skipped: true, reason: config.monitorOnly ? "monitor_only" : "disabled" };
     const before = event.data?.before?.exists ? event.data.before.data() || {} : null;
     const after = event.data?.after?.exists ? event.data.after.data() || {} : null;
     const effective = after || before || {};
@@ -4544,7 +4544,7 @@ exports.dashWeeklyOffWritten = onDocumentWritten(
   },
   async () => {
     const config = await loadDashConfig(db);
-    if (!config.enabled) return { skipped: true, reason: "disabled" };
+    if (!config.enabled || config.monitorOnly) return { skipped: true, reason: config.monitorOnly ? "monitor_only" : "disabled" };
     return enqueueDashReconciliation({
       db,
       FieldValue,
@@ -4562,7 +4562,7 @@ exports.dashStaffMappingWritten = onDocumentWritten(
   },
   async () => {
     const config = await loadDashConfig(db);
-    if (!config.enabled) return { skipped: true, reason: "disabled" };
+    if (!config.enabled || config.monitorOnly) return { skipped: true, reason: config.monitorOnly ? "monitor_only" : "disabled" };
     return enqueueDashReconciliation({
       db,
       FieldValue,
@@ -4581,7 +4581,7 @@ exports.dashSyncConfigWritten = onDocumentWritten(
   async event => {
     const before = event.data?.before?.exists ? event.data.before.data() || {} : {};
     const after = event.data?.after?.exists ? event.data.after.data() || {} : {};
-    if (after.enabled !== true) return { skipped: true, reason: "disabled" };
+    if (after.enabled !== true || after.monitorOnly === true) return { skipped: true, reason: after.monitorOnly === true ? "monitor_only" : "disabled" };
     const needsFullQueue = before.enabled !== true ||
       before.writeEnabled !== after.writeEnabled ||
       Number(before.horizonDays || 60) !== Number(after.horizonDays || 60);
@@ -4617,7 +4617,7 @@ exports.dashSyncEveryFifteenMinutes = onSchedule(
     }
     const config = await loadDashConfig(db);
     if (!config.enabled) return { skipped: true, reason: "disabled" };
-    if (pollingWindow.morningReconciliation && config.dailyReconciliationEnabled) {
+    if (pollingWindow.morningReconciliation && config.dailyReconciliationEnabled && !config.monitorOnly) {
       // At 6:00 AM, rebuild today and the new far edge of the rolling window.
       // This keeps recurring WeeklyOff occurrences available in Dash without
       // rescanning all 30 days every morning.

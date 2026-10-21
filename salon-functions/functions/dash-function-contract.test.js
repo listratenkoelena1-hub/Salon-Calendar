@@ -18,11 +18,20 @@ test("registers disabled-by-default Dash triggers and protected scheduled creden
   assert.doesNotMatch(functionsSource, /exports\.dashReconcileDaily = onSchedule/);
   assert.match(functionsSource, /getDashPollingWindow\(new Date\(\), SALON_TIME_ZONE\)/);
   assert.match(functionsSource, /reason: "outside_active_hours"/);
-  assert.match(functionsSource, /pollingWindow\.morningReconciliation && config\.dailyReconciliationEnabled/);
+  assert.match(functionsSource, /pollingWindow\.morningReconciliation && config\.dailyReconciliationEnabled && !config\.monitorOnly/);
   assert.match(functionsSource, /getDailyReconciliationWindows\(today, config\.horizonDays\)/);
   assert.doesNotMatch(functionsSource, /enqueueDashReconciliation\(\{ db, FieldValue, horizonDays: 0 \}\)/);
   assert.match(functionsSource, /secrets: \[DASH_BOOKING_EMAIL, DASH_BOOKING_PASSWORD\]/);
   assert.match(functionsSource, /if \(!config\.enabled\) return \{ skipped: true, reason: "disabled" \};/);
+});
+
+test("monitor-only mode cannot queue or execute outbound Dash changes", () => {
+  assert.match(functionsSource, /if \(!config\.enabled \|\| config\.monitorOnly\) return \{ skipped: true/);
+  assert.match(functionsSource, /after\.enabled !== true \|\| after\.monitorOnly === true/);
+  assert.match(runnerSource, /dryRun: config\.monitorOnly \|\| !config\.writeEnabled/);
+  assert.match(runnerSource, /config\.monitorOnly[\s\S]*?processDashMonitorAlerts/);
+  assert.match(runnerSource, /queue = config\.monitorOnly[\s\S]*?reason: "monitor_only"/);
+  assert.match(runnerSource, /status: "alerted"[\s\S]*?monitorOnly: true/);
 });
 
 test("does not expose the retired in-calendar Dash audit callables", () => {

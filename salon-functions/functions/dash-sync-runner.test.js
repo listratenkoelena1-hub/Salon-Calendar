@@ -7,6 +7,8 @@ const {
   addDateKeyDays,
   buildDashActivityLogDoc,
   buildDashMessageDoc,
+  buildDashMonitorMessage,
+  buildDashMonitorMessageDoc,
   buildDashOutboundMismatchMessage,
   buildDefaultConfig,
   dashCycleNeedsBrowser,
@@ -27,6 +29,7 @@ test("keeps the Dash bridge disabled unless the server config explicitly enables
     enabled: false,
     writeEnabled: false,
     inboundEnabled: false,
+    monitorOnly: false,
     inboundBaselineComplete: false,
     initialApplyEnabled: false,
     dailyReconciliationEnabled: true,
@@ -37,13 +40,15 @@ test("keeps the Dash bridge disabled unless the server config explicitly enables
     enabled: true,
     writeEnabled: true,
     inboundEnabled: true,
+    monitorOnly: true,
     inboundBaselineComplete: false,
     horizonDays: 999,
     queueLimit: 0
   }), {
     enabled: true,
-    writeEnabled: true,
+    writeEnabled: false,
     inboundEnabled: true,
+    monitorOnly: true,
     inboundBaselineComplete: false,
     initialApplyEnabled: false,
     dailyReconciliationEnabled: true,
@@ -58,6 +63,8 @@ test("retries incomplete incoming receipts but not terminal Dash outcomes", () =
   assert.equal(isTerminalIncomingStatus("rescheduled"), true);
   assert.equal(isTerminalIncomingStatus("conflict"), true);
   assert.equal(isTerminalIncomingStatus("duplicate"), true);
+  assert.equal(isTerminalIncomingStatus("alerted"), true);
+  assert.equal(isTerminalIncomingStatus("monitor_ignored"), true);
   assert.equal(isTerminalIncomingStatus("baseline"), true);
   assert.equal(isTerminalIncomingStatus("baseline_parse_error"), true);
   assert.equal(isTerminalIncomingStatus("unmapped_staff"), false);
@@ -185,6 +192,51 @@ test("builds one canonical Important message for manager and assigned technician
   assert.equal(message.staffDefaultPriority, "secondary");
   assert.equal(message.source, "dash_booking");
   assert.equal(message.title, "Dash Booking appointment");
+});
+
+test("monitor-only alerts target one technician, or every active technician for Anyone", () => {
+  const FieldValue = { serverTimestamp: () => "SERVER_TIME" };
+  const Timestamp = { fromDate: date => ({ millis: date.getTime() }) };
+  const staffRecords = [
+    { id: "staff-1", name: "Tanya", active: true },
+    { id: "staff-2", name: "Olha", active: true },
+    { id: "retired", name: "Former", active: false },
+    { id: "anyone", name: "Anyone", active: true }
+  ];
+  const detail = {
+    dashBookingId: "dash-123",
+    client: "Sofia",
+    date: "2026-10-22",
+    start: 12,
+    staffName: "Tanya",
+    service: "Spa Pedicure"
+  };
+  const assigned = buildDashMonitorMessageDoc({
+    FieldValue,
+    Timestamp,
+    detail,
+    localStaff: staffRecords[0],
+    staffRecords
+  });
+  assert.equal(assigned.visibleToManager, true);
+  assert.equal(assigned.visibleToAllStaff, false);
+  assert.deepEqual(assigned.audienceStaffIds, ["staff-1"]);
+  assert.deepEqual(assigned.importantStaffIds, ["staff-1"]);
+  assert.equal(assigned.staffDefaultPriority, "key");
+  assert.match(assigned.body, /Please check Dash Booking/);
+  assert.match(assigned.body, /Nothing was changed in Dash Booking or Rose Calendar/);
+
+  const anyone = buildDashMonitorMessageDoc({
+    FieldValue,
+    Timestamp,
+    detail: { ...detail, dashBookingId: "dash-456", staffName: "Anyone" },
+    localStaff: staffRecords[3],
+    staffRecords
+  });
+  assert.equal(anyone.visibleToAllStaff, true);
+  assert.deepEqual(anyone.audienceStaffIds, ["staff-1", "staff-2"]);
+  assert.deepEqual(anyone.importantStaffIds, ["staff-1", "staff-2"]);
+  assert.doesNotMatch(buildDashMonitorMessage(detail), /Added to the calendar automatically/);
 });
 
 test("uses distinct titles for ongoing Dash cancellation and reschedule events", () => {
