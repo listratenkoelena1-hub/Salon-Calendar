@@ -1234,7 +1234,8 @@ function buildCanonicalStaffMessageDoc({
   staffRecords,
   photoReviewUrl = "",
   source = "calendar",
-  messageGroupId = ""
+  messageGroupId = "",
+  importantToAllStaff = false
 }) {
   const legacy = buildStaffNotificationDoc({
     message,
@@ -1248,8 +1249,10 @@ function buildCanonicalStaffMessageDoc({
     messageGroupId
   });
   const audienceStaffIds = staffRecords
+    .filter(staff => staff.active !== false)
     .map(staff => staff.id)
     .filter(id => id && id !== ANYONE_ID);
+  const anyoneRelated = importantToAllStaff === true || staffId === ANYONE_ID;
   return {
     ...legacy,
     recipientStaffId: "",
@@ -1257,9 +1260,11 @@ function buildCanonicalStaffMessageDoc({
     visibleToAllStaff: true,
     audienceVersion: 2,
     audienceStaffIds,
-    importantStaffIds: staffId && staffId !== ANYONE_ID ? [staffId] : [],
+    importantStaffIds: anyoneRelated
+      ? audienceStaffIds
+      : staffId && staffId !== ANYONE_ID ? [staffId] : [],
     managerPriority: "key",
-    staffDefaultPriority: "secondary",
+    staffDefaultPriority: anyoneRelated ? "key" : "secondary",
     pushEligible: true,
     notificationLink: "https://rosesnails-calendar.web.app"
   };
@@ -3092,6 +3097,7 @@ exports.cancelOnlineBookingAppointment = onCall(
         staffId: before.staffId,
         staffName,
         staffRecords,
+        importantToAllStaff: before.requestedStaffId === ANYONE_ID || before.autoAssignedFromAnyone === true,
         source: "online_booking",
         messageGroupId: `online-booking-cancel-${appointmentId}`
       }));
@@ -3542,6 +3548,7 @@ exports.createOnlineBookingRequest = onCall(
         staffId: assignedStaffId,
         staffName: getStaffName(staffRecords, assignedStaffId),
         staffRecords,
+        importantToAllStaff: requestedStaffId === ANYONE_ID,
         photoReviewUrl: appointmentData.photoReviewUrl || "",
         source: "online_booking",
         messageGroupId

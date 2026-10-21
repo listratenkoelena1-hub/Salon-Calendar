@@ -98,4 +98,12 @@ test("Anyone requests store the original choice and actual technician", () => {
   assert.match(functionsSource, /autoAssignedFromAnyone: requestedStaffId === ANYONE_ID/);
   assert.match(functionsSource, /anyoneAssignedStaffId: requestedStaffId === ANYONE_ID \? assignedStaffId : null/);
   assert.match(functionsSource, /Assigned to <b>\$\{staffName\}<\/b> by the Anyone rotation\./);
+  assert.match(functionsSource, /importantToAllStaff: requestedStaffId === ANYONE_ID/);
+  assert.match(functionsSource, /importantToAllStaff: before\.requestedStaffId === ANYONE_ID \|\| before\.autoAssignedFromAnyone === true/);
+});
+
+test("manual Anyone messages are Important for every active technician", () => {
+  assert.match(calendarHtml, /const anyoneRelated = staffId === ANYONE_ID \|\| additionalImportantStaffIds\.includes\(ANYONE_ID\)/);
+  assert.match(calendarHtml, /importantStaffIds = anyoneRelated[\s\S]*?recipients\.map\(recipient => recipient\.id\)/);
+  assert.match(calendarHtml, /staffDefaultPriority: anyoneRelated \? 'key' : 'secondary'/);
 });

@@ -925,6 +925,7 @@ function buildDashMessageDoc({
   const audienceStaffIds = staffRecords
     .filter(staff => staff.active !== false && staff.id && staff.id !== ANYONE_ID)
     .map(staff => staff.id);
+  const anyoneRelated = staffId === ANYONE_ID;
   const titles = {
     dash_appointment_added: "Dash Booking appointment",
     dash_appointment_canceled: "Dash Booking canceled",
@@ -955,9 +956,11 @@ function buildDashMessageDoc({
     messageGroupId: `dash-booking-${entityId}`,
     audienceVersion: 2,
     audienceStaffIds,
-    importantStaffIds: staffId && staffId !== ANYONE_ID ? [staffId] : [],
+    importantStaffIds: anyoneRelated
+      ? audienceStaffIds
+      : staffId && staffId !== ANYONE_ID ? [staffId] : [],
     managerPriority: "key",
-    staffDefaultPriority: "secondary",
+    staffDefaultPriority: anyoneRelated ? "key" : "secondary",
     notificationLink: "https://rosesnails-calendar.web.app"
   };
 }

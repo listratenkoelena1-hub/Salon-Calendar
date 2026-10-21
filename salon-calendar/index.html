@@ -11610,11 +11610,14 @@ async function queueStaffNotification({
   if (!message) return;
 
   try {
-    const basePriority = getStaffNotificationPriority(eventType, message);
+    const anyoneRelated = staffId === ANYONE_ID || additionalImportantStaffIds.includes(ANYONE_ID);
+    const basePriority = anyoneRelated ? 'key' : getStaffNotificationPriority(eventType, message);
     const messageGroupId = crypto?.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(16).slice(2);
     const recipients = getActiveStaffList({ includeAnyone: false }).filter(s => s.id && s.id !== ANYONE_ID);
-    const importantStaffIds = basePriority === 'key'
-      ? Array.from(new Set([staffId, ...additionalImportantStaffIds].filter(Boolean)))
+    const importantStaffIds = anyoneRelated
+      ? recipients.map(recipient => recipient.id)
+      : basePriority === 'key'
+      ? Array.from(new Set([staffId, ...additionalImportantStaffIds].filter(id => id && id !== ANYONE_ID)))
       : [];
     const canonicalDoc = buildStaffNotificationDoc({
       message,
@@ -11643,7 +11646,7 @@ async function queueStaffNotification({
       audienceStaffIds: recipients.map(recipient => recipient.id),
       importantStaffIds,
       managerPriority: basePriority,
-      staffDefaultPriority: 'secondary',
+      staffDefaultPriority: anyoneRelated ? 'key' : 'secondary',
       notificationLink: window.location.origin
     });
   } catch (err) {
@@ -11708,9 +11711,11 @@ function getDashPreviewDemoNotifications() {
     visibleToAllStaff: true,
     audienceVersion: 2,
     audienceStaffIds: getActiveStaffList({ includeAnyone: false }).map(item => item.id),
-    importantStaffIds: appointment.staffId === ANYONE_ID ? [] : [appointment.staffId],
+    importantStaffIds: appointment.staffId === ANYONE_ID
+      ? getActiveStaffList({ includeAnyone: false }).map(item => item.id)
+      : [appointment.staffId],
     managerPriority: 'key',
-    staffDefaultPriority: 'secondary',
+    staffDefaultPriority: appointment.staffId === ANYONE_ID ? 'key' : 'secondary',
     messageGroupId: 'dash-booking-preview-only',
     readBy: dashPreviewDemoRead ? { [readKey]: true } : {},
     createdAt: {
@@ -17047,7 +17052,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-21.2';
+const CALENDAR_APP_VERSION = '2026-10-21.3';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';

@@ -239,6 +239,31 @@ test("builds one canonical Important message for manager and assigned technician
   assert.equal(message.title, "Dash Booking appointment");
 });
 
+test("makes every Anyone Dash message Important for every active technician", () => {
+  const FieldValue = { serverTimestamp: () => "SERVER_TIME" };
+  const Timestamp = { fromDate: date => ({ millis: date.getTime() }) };
+  const message = buildDashMessageDoc({
+    FieldValue,
+    Timestamp,
+    message: "DASH BOOKING APPOINTMENT",
+    eventType: "dash_appointment_added",
+    entityType: "appointment",
+    entityId: "dash_anyone",
+    staffId: "anyone",
+    staffName: "Anyone",
+    staffRecords: [
+      { id: "staff-1", active: true },
+      { id: "staff-2", active: true },
+      { id: "retired", active: false },
+      { id: "anyone", active: true }
+    ]
+  });
+  assert.deepEqual(message.audienceStaffIds, ["staff-1", "staff-2"]);
+  assert.deepEqual(message.importantStaffIds, ["staff-1", "staff-2"]);
+  assert.equal(message.managerPriority, "key");
+  assert.equal(message.staffDefaultPriority, "key");
+});
+
 test("monitor-only alerts target one technician, or every active technician for Anyone", () => {
   const FieldValue = { serverTimestamp: () => "SERVER_TIME" };
   const Timestamp = { fromDate: date => ({ millis: date.getTime() }) };
