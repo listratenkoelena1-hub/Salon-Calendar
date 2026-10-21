@@ -801,9 +801,22 @@ async function readNewDashAppointments(page, { knownNotificationKeys = new Set()
       item.occurrence === candidate.occurrence
     ));
     if (!currentCandidate) continue;
-    const rows = await page.$$("li.notification-item-container");
-    if (!rows[currentCandidate.summary.index]) continue;
-    await rows[currentCandidate.summary.index].click();
+    const opened = await page.evaluate(index => {
+      const row = document.querySelectorAll("li.notification-item-container")[index];
+      if (!(row instanceof HTMLElement)) return { opened: false, href: "" };
+      const link = row.querySelector('a[href*="/appointments/view"]');
+      const href = String(link?.getAttribute("href") || "").trim();
+      if (href) return { opened: true, href };
+      // Dash normally attaches navigation to the list item itself. Calling the
+      // DOM click method is more reliable than Puppeteer's geometric click for
+      // a notification row inside an animated/scrolling dropdown.
+      row.click();
+      return { opened: true, href: "" };
+    }, currentCandidate.summary.index);
+    if (!opened?.opened) continue;
+    if (opened.href) {
+      await navigateDashPage(page, new URL(opened.href, DASH_APPOINTMENTS_URL).toString());
+    }
     await waitForDashAppointmentDetail(page);
     const detail = await parseDashAppointmentPage(page);
     newItems.push({
