@@ -7,6 +7,9 @@ on:
     paths:
       - '.github/workflows/deploy-appointment-history-once.yml'
 
+permissions:
+  contents: write
+
 jobs:
   deploy:
     if: github.repository == 'listratenkoelena1-hub/Salon-Calendar'
@@ -36,3 +39,12 @@ jobs:
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-key.json
         run: firebase deploy --only hosting:calendar --project rosesnails-calendar --non-interactive
+
+      - name: Record successful production deploy
+        run: |
+          date -u > .github/deploy-appointment-history-success.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/deploy-appointment-history-success.txt
+          git commit -m "Record appointment history production deploy [skip ci]"
+          git push
