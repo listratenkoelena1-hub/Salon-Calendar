@@ -116,6 +116,15 @@ function isTerminalIncomingStatus(value) {
   ].includes(String(value || ""));
 }
 
+function isTerminalReceiptForDashBooking(receipt, dashBookingId) {
+  const expectedId = String(dashBookingId || "").trim();
+  if (!expectedId) return false;
+  return (
+    String(receipt?.dashBookingId || "").trim() === expectedId &&
+    isTerminalIncomingStatus(receipt?.status)
+  );
+}
+
 function buildDefaultConfig(raw = {}) {
   const monitorOnly = raw.monitorOnly === true;
   return {
@@ -1774,8 +1783,24 @@ async function processDashMonitorAlerts({ db, FieldValue, Timestamp, client, map
       continue;
     }
 
-    const localStaff = resolveLocalStaffForDashName(staffRecords, detail.staffName, mappings);
     const entityId = getDashRequestDocumentId(detail.dashBookingId);
+    const canonicalRef = db.collection(DASH_RECEIPT_COLLECTION).doc(entityId);
+    const canonicalSnap = await canonicalRef.get();
+    if (canonicalSnap.exists && isTerminalReceiptForDashBooking(canonicalSnap.data(), detail.dashBookingId)) {
+      await notificationRef.set({
+        notificationKey: item.notificationKey,
+        dashBookingId: detail.dashBookingId,
+        canonicalReceiptId: entityId,
+        status: "monitor_ignored",
+        reason: "known_dash_booking",
+        monitorOnly: true,
+        processedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+      report.ignored += 1;
+      continue;
+    }
+
+    const localStaff = resolveLocalStaffForDashName(staffRecords, detail.staffName, mappings);
     const messageRef = db.collection("staffMessages").doc(`dash_monitor_${entityId}`);
     const batch = db.batch();
     batch.set(notificationRef, {
@@ -1786,7 +1811,7 @@ async function processDashMonitorAlerts({ db, FieldValue, Timestamp, client, map
       localStaffId: localStaff?.id || "",
       processedAt: FieldValue.serverTimestamp()
     }, { merge: true });
-    batch.set(db.collection(DASH_RECEIPT_COLLECTION).doc(entityId), {
+    batch.set(canonicalRef, {
       dashBookingId: detail.dashBookingId,
       notificationKey: item.notificationKey,
       status: "alerted",
@@ -1987,6 +2012,7 @@ module.exports = {
   loadDashConfig,
   loadDashMappings,
   isTerminalIncomingStatus,
+  isTerminalReceiptForDashBooking,
   makeWeeklyOccurrence,
   processDashIncoming,
   processDashMonitorAlerts,

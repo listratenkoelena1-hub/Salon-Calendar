@@ -18,6 +18,7 @@ const {
   getReconciliationRange,
   getWeeklyOffOccurrencesForDate,
   isTerminalIncomingStatus,
+  isTerminalReceiptForDashBooking,
   makeWeeklyOccurrence,
   resolveStableDashLink,
   weekdayForDateKey,
@@ -69,6 +70,25 @@ test("retries incomplete incoming receipts but not terminal Dash outcomes", () =
   assert.equal(isTerminalIncomingStatus("baseline_parse_error"), true);
   assert.equal(isTerminalIncomingStatus("unmapped_staff"), false);
   assert.equal(isTerminalIncomingStatus("parse_error"), false);
+});
+
+test("deduplicates changing Dash notification labels by the permanent appointment id", () => {
+  assert.equal(isTerminalReceiptForDashBooking({
+    dashBookingId: "dash-appointment-19",
+    status: "baseline"
+  }, "dash-appointment-19"), true);
+  assert.equal(isTerminalReceiptForDashBooking({
+    dashBookingId: "dash-appointment-19",
+    status: "alerted"
+  }, "dash-appointment-19"), true);
+  assert.equal(isTerminalReceiptForDashBooking({
+    dashBookingId: "dash-appointment-19",
+    status: "running"
+  }, "dash-appointment-19"), false);
+  assert.equal(isTerminalReceiptForDashBooking({
+    dashBookingId: "another-appointment",
+    status: "baseline"
+  }, "dash-appointment-19"), false);
 });
 
 test("starts Chromium only for inbound polling or real pending writes", () => {
