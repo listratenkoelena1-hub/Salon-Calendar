@@ -2409,6 +2409,85 @@ exports.getAppointmentClientHistory = onCall(
   }
 );
 
+function isManualCalendarAppointmentRecord(appointment) {
+  const source = String(appointment?.source || "").trim().toLowerCase();
+  const type = String(appointment?.type || "").trim().toLowerCase();
+  return !["online_booking", "dash_booking"].includes(source) &&
+    !["online_booking_request", "dash_booking_request"].includes(type);
+}
+
+const APPOINTMENT_HISTORY_CREATION_EVENTS = new Set([
+  "new_app",
+  "online_request_created",
+  "dash_request_created",
+  "dash_appointment_added"
+]);
+
+// One manual appointment at a time. The existing activity log is the source;
+// this endpoint creates no additional history documents and exposes no phone.
+exports.getAppointmentHistory = onCall(
+  {
+    region: "us-central1",
+    maxInstances: 8
+  },
+  async request => {
+    const actor = await getAuthorizedCalendarActor(request);
+    if (!["manager", "staff"].includes(actor.role)) {
+      throw new HttpsError("permission-denied", "Appointment History is available to managers and staff.");
+    }
+
+    const appointmentId = assertAppointmentToken(
+      request.data?.appointmentId,
+      "appointmentId",
+      { min: 12, max: 100 }
+    );
+    const [appointmentSnapshot, logSnapshot] = await Promise.all([
+      db.collection("appointments").doc(appointmentId).get(),
+      db.collection("activityLog")
+        .where("entityId", "==", appointmentId)
+        .limit(ACTIVITY_LOG_PAGE_LIMIT)
+        .get()
+    ]);
+
+    if (!appointmentSnapshot.exists) {
+      throw new HttpsError("not-found", "Appointment no longer exists.");
+    }
+    const appointment = appointmentSnapshot.data() || {};
+    if (!isManualCalendarAppointmentRecord(appointment)) {
+      return { ok: true, appointmentId, available: false, rows: [], totalCount: 0 };
+    }
+
+    const rows = logSnapshot.docs
+      .map(serializeStaffActivityLogEntry)
+      .filter(entry =>
+        entry.entityType === "appointment" &&
+        !APPOINTMENT_HISTORY_CREATION_EVENTS.has(entry.eventType)
+      )
+      .map(entry => ({
+        id: entry.id,
+        appointmentId,
+        createdAtMillis: entry.createdAtMillis,
+        appointmentDate: String(appointment.date || entry.logDate || ""),
+        appointmentStart: Number(appointment.start) || 0,
+        staffId: entry.staffId || String(appointment.staffId || ""),
+        staffName: entry.staffName,
+        actorLabel: entry.actorLabel,
+        actorKey: entry.actorKey,
+        eventType: entry.eventType,
+        details: entry.details || entry.service || "Appointment updated"
+      }))
+      .sort((left, right) => (right.createdAtMillis || 0) - (left.createdAtMillis || 0));
+
+    return {
+      ok: true,
+      appointmentId,
+      available: rows.length > 0,
+      rows,
+      totalCount: rows.length
+    };
+  }
+);
+
 exports.clientHistorySummaryUpdated = onDocumentWritten(
   {
     document: `${CLIENT_HISTORY_COLLECTION}/{appointmentId}`,

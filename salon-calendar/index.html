@@ -2247,7 +2247,8 @@ body.manager-user #calendarUpdateBtn {
 }
 
 .appointment-group-row,
-.client-history-link-row {
+.client-history-link-row,
+.appointment-history-link-row {
   margin-top: 8px;
 }
 
@@ -2259,11 +2260,13 @@ body.manager-user #calendarUpdateBtn {
 }
 
 .appointment-group-row.is-hidden,
-.client-history-link-row.is-hidden {
+.client-history-link-row.is-hidden,
+.appointment-history-link-row.is-hidden {
   display: none;
 }
 
-.client-history-link {
+.client-history-link,
+.appointment-history-link {
   appearance: none;
   border: 0;
   padding: 2px 0;
@@ -2279,6 +2282,8 @@ body.manager-user #calendarUpdateBtn {
 
 #clientHistoryModal { z-index: 13100; }
 #clientHistoryDetailModal { z-index: 13200; }
+#appointmentHistoryModal { z-index: 13100; }
+#appointmentHistoryDetailModal { z-index: 13200; }
 
 .client-history-content {
   width: min(760px, calc(100vw - 24px));
@@ -4669,6 +4674,10 @@ stroke-linejoin="round">
   <button type="button" id="clientHistoryLink" class="client-history-link">Client History</button>
 </div>
 
+<div id="appointmentHistoryLinkRow" class="ap-row appointment-history-link-row is-hidden">
+  <button type="button" id="appointmentHistoryLink" class="appointment-history-link">Appointment History</button>
+</div>
+
 <div>
   <div class="ap-label" style="margin-top:12px;">Service</div>
   <textarea id="aNote" class="ap-textarea"></textarea>
@@ -4766,6 +4775,40 @@ stroke-linejoin="round">
     <dl id="clientHistoryDetailGrid" class="client-history-detail-grid"></dl>
     <div class="modal-actions" style="justify-content:flex-end;">
       <button type="button" onclick="closeClientHistoryDetail()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="appointmentHistoryModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="appointmentHistoryTitle">
+  <div class="modal-content client-history-content">
+    <h3 id="appointmentHistoryTitle" style="margin:0;">Appointment History</h3>
+    <div id="appointmentHistoryState" class="client-history-state">Loading Appointment History…</div>
+    <div id="appointmentHistoryTableWrap" class="client-history-table-wrap hidden">
+      <table class="client-history-table">
+        <thead>
+          <tr>
+            <th>Date / Time</th>
+            <th>Staff</th>
+            <th>Changed by</th>
+            <th>Event</th>
+            <th>Details<span class="client-history-header-note">(Tap to Open)</span></th>
+          </tr>
+        </thead>
+        <tbody id="appointmentHistoryTableBody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions" style="justify-content:flex-end;">
+      <button type="button" onclick="closeAppointmentHistory()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="appointmentHistoryDetailModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="appointmentHistoryDetailTitle">
+  <div class="modal-content" style="width:min(560px, calc(100vw - 24px));">
+    <h3 id="appointmentHistoryDetailTitle" style="margin:0;">Appointment Update</h3>
+    <dl id="appointmentHistoryDetailGrid" class="client-history-detail-grid"></dl>
+    <div class="modal-actions" style="justify-content:flex-end;">
+      <button type="button" onclick="closeAppointmentHistoryDetail()">Close</button>
     </div>
   </div>
 </div>
@@ -5441,6 +5484,7 @@ const managerGetActivityLogContacts = httpsCallable(functions, "managerGetActivi
 const getStaffActivityLog = httpsCallable(functions, "getStaffActivityLog");
 const setStaffOnboardingState = httpsCallable(functions, "setStaffOnboardingState");
 const getAppointmentClientHistory = httpsCallable(functions, "getAppointmentClientHistory");
+const getAppointmentHistory = httpsCallable(functions, "getAppointmentHistory");
 const FCM_VAPID_KEY = "";
 // Operational pause: keep Telegram code and data intact while staffMessages
 // remains the active internal notification channel. Set to false to resume.
@@ -5716,6 +5760,16 @@ const clientHistoryDetailModal = document.getElementById('clientHistoryDetailMod
 const clientHistoryDetailGrid = document.getElementById('clientHistoryDetailGrid');
 let clientHistoryLoadRunId = 0;
 let clientHistoryAppointmentsById = new Map();
+const appointmentHistoryLinkRow = document.getElementById('appointmentHistoryLinkRow');
+const appointmentHistoryLink = document.getElementById('appointmentHistoryLink');
+const appointmentHistoryModal = document.getElementById('appointmentHistoryModal');
+const appointmentHistoryState = document.getElementById('appointmentHistoryState');
+const appointmentHistoryTableWrap = document.getElementById('appointmentHistoryTableWrap');
+const appointmentHistoryTableBody = document.getElementById('appointmentHistoryTableBody');
+const appointmentHistoryDetailModal = document.getElementById('appointmentHistoryDetailModal');
+const appointmentHistoryDetailGrid = document.getElementById('appointmentHistoryDetailGrid');
+let appointmentHistoryLoadRunId = 0;
+let appointmentHistoryRowsById = new Map();
 const changeDateBtn = document.getElementById('changeDateBtn');
       changeDateBtn.textContent = 'Move to other date';
 function setAppointmentChangeDateVisible(visible) {
@@ -8549,6 +8603,28 @@ function updateClientHistoryLink(appointment = null) {
   if (clientHistoryLink) clientHistoryLink.disabled = !visible;
 }
 
+function isManualCalendarAppointment(appointment) {
+  if (!appointment?.id) return false;
+  const source = String(appointment.source || '').trim().toLowerCase();
+  const type = String(appointment.type || '').trim().toLowerCase();
+  return !['online_booking', 'dash_booking'].includes(source) &&
+    !['online_booking_request', 'dash_booking_request'].includes(type);
+}
+
+function hasManualAppointmentUpdates(appointment) {
+  if (!isManualCalendarAppointment(appointment)) return false;
+  if (Number(appointment.revision) > 1) return true;
+  const action = String(appointment.lastAction || '').trim().toLowerCase();
+  return Boolean(action && action !== 'create');
+}
+
+function updateAppointmentHistoryLink(appointment = null) {
+  const roleCanView = currentUserRole === 'manager' || currentUserRole === 'staff';
+  const visible = Boolean(roleCanView && hasManualAppointmentUpdates(appointment));
+  appointmentHistoryLinkRow?.classList.toggle('is-hidden', !visible);
+  if (appointmentHistoryLink) appointmentHistoryLink.disabled = !visible;
+}
+
 function formatClientHistoryRowDate(row) {
   const millis = Number(row?.createdAtMillis);
   if (Number.isFinite(millis) && millis > 0) {
@@ -8679,6 +8755,100 @@ clientHistoryTableBody?.addEventListener('click', event => {
   const trigger = event.target.closest('[data-client-history-appointment]');
   if (!trigger) return;
   window.openClientHistoryDetail(trigger.dataset.clientHistoryAppointment);
+});
+
+function renderAppointmentHistoryRows(rows) {
+  if (!appointmentHistoryTableBody) return;
+  const safeRows = Array.isArray(rows) ? rows : [];
+  appointmentHistoryRowsById = new Map(
+    safeRows.map(row => [String(row?.id || ''), row]).filter(([id]) => id)
+  );
+  if (!safeRows.length) {
+    appointmentHistoryTableBody.innerHTML = '<tr><td colspan="5">No appointment updates yet</td></tr>';
+    return;
+  }
+  appointmentHistoryTableBody.innerHTML = safeRows.map(row => {
+    const rowId = String(row.id || '');
+    const details = String(row.details || row.service || 'Open update');
+    return '<tr>' +
+      '<td>' + escapeHtml(formatClientHistoryRowDate(row)) + '</td>' +
+      '<td>' + escapeHtml(row.staffName || getActivityLogStaffName(row.staffId)) + '</td>' +
+      '<td>' + escapeHtml(formatActorLabel(row.actorLabel)) + '</td>' +
+      '<td>' + escapeHtml(getActivityLogEventLabel(row.eventType)) + '</td>' +
+      '<td><button type="button" class="client-history-details-link" data-appointment-history-row="' + escapeHtml(rowId) + '">' + escapeHtml(details) + '</button></td>' +
+    '</tr>';
+  }).join('');
+}
+
+window.openAppointmentHistory = async () => {
+  const appointment = editId ? appointments.find(item => item.id === editId) : null;
+  if (!hasManualAppointmentUpdates(appointment)) return;
+
+  const runId = ++appointmentHistoryLoadRunId;
+  appointmentHistoryRowsById = new Map();
+  if (appointmentHistoryState) {
+    appointmentHistoryState.textContent = 'Loading Appointment History…';
+    appointmentHistoryState.classList.remove('is-error');
+  }
+  appointmentHistoryTableWrap?.classList.add('hidden');
+  if (appointmentHistoryTableBody) appointmentHistoryTableBody.innerHTML = '';
+  appointmentModal.inert = true;
+  appointmentModal.setAttribute('aria-hidden', 'true');
+  appointmentHistoryModal?.classList.remove('hidden');
+
+  try {
+    const response = await getAppointmentHistory({ appointmentId: appointment.id });
+    if (runId !== appointmentHistoryLoadRunId || appointmentHistoryModal?.classList.contains('hidden')) return;
+    const result = response?.data || {};
+    const rows = Array.isArray(result.rows) ? result.rows : [];
+    renderAppointmentHistoryRows(rows);
+    if (appointmentHistoryState) {
+      const count = Number(result.totalCount) || rows.length;
+      appointmentHistoryState.textContent = `${count} update${count === 1 ? '' : 's'}`;
+    }
+    appointmentHistoryTableWrap?.classList.remove('hidden');
+  } catch (error) {
+    console.error('Appointment History could not be loaded:', error);
+    if (runId !== appointmentHistoryLoadRunId) return;
+    if (appointmentHistoryState) {
+      appointmentHistoryState.textContent = error?.message || 'Appointment History could not be loaded.';
+      appointmentHistoryState.classList.add('is-error');
+    }
+  }
+};
+
+window.closeAppointmentHistory = () => {
+  appointmentHistoryLoadRunId += 1;
+  window.closeAppointmentHistoryDetail();
+  appointmentHistoryModal?.classList.add('hidden');
+  appointmentModal.inert = false;
+  appointmentModal.removeAttribute('aria-hidden');
+};
+
+window.openAppointmentHistoryDetail = rowId => {
+  const row = appointmentHistoryRowsById.get(String(rowId || ''));
+  if (!row || !appointmentHistoryDetailGrid) return;
+  appointmentHistoryDetailGrid.innerHTML = [
+    ['Date / Time', formatClientHistoryRowDate(row)],
+    ['Staff', row.staffName || getActivityLogStaffName(row.staffId)],
+    ['Changed by', formatActorLabel(row.actorLabel)],
+    ['Event', getActivityLogEventLabel(row.eventType)],
+    ['Details', row.details || row.service || '-']
+  ].map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd>`).join('');
+  appointmentHistoryModal.inert = true;
+  appointmentHistoryDetailModal?.classList.remove('hidden');
+};
+
+window.closeAppointmentHistoryDetail = () => {
+  appointmentHistoryDetailModal?.classList.add('hidden');
+  if (appointmentHistoryModal) appointmentHistoryModal.inert = false;
+};
+
+appointmentHistoryLink?.addEventListener('click', window.openAppointmentHistory);
+appointmentHistoryTableBody?.addEventListener('click', event => {
+  const trigger = event.target.closest('[data-appointment-history-row]');
+  if (!trigger) return;
+  window.openAppointmentHistoryDetail(trigger.dataset.appointmentHistoryRow);
 });
 
 function buildAppointmentOverlay(a, color, pixelHeight = null, options = {}) {
@@ -9413,6 +9583,7 @@ aCancelComment.value = '';
 updateCancelUI();
 setAppointmentGroupValue(null);
 updateClientHistoryLink(null);
+updateAppointmentHistoryLink(null);
 appointmentModal.classList.remove('hidden');
   fillSelects();
   aDuration.value = '';
@@ -9441,6 +9612,7 @@ aCancelComment.value = '';
 updateCancelUI();
 setAppointmentGroupValue(null);
 updateClientHistoryLink(null);
+updateAppointmentHistoryLink(null);
 handleAnyone();
 clearAppointmentEditorMeta();
 applyAppointmentTintNow();
@@ -9551,6 +9723,7 @@ aCancelComment.value = a.cancelComment || (isDeclinedRequest ? 'Online booking r
 updateCancelUI();     
 setAppointmentGroupValue(a.groupTag || null);
 updateClientHistoryLink(a);
+updateAppointmentHistoryLink(a);
 handleAnyone();
 if (isRequestAppointment) {
   if (aStaff.value === ANYONE_ID) {
@@ -14601,6 +14774,7 @@ window.confirmStaffDelete = async () => {
 
 window.closeAppointment = () => {
    window.closeClientHistory();
+   window.closeAppointmentHistory();
    document.getElementById('appointmentStatusBlock').style.display = 'none';
    setAppointmentReadonly(false);
    
@@ -14610,6 +14784,7 @@ window.closeAppointment = () => {
   pendingCreateMutationId = null;
   setOnlineRequestModalMode(false);
   updateClientHistoryLink(null);
+  updateAppointmentHistoryLink(null);
       resetAppointmentModalTint();
   managerAssistantSession = null;
   managerAssistant?.dismissTip({ celebrate: false });
@@ -16434,6 +16609,7 @@ aCancelComment.value = '';
 updateCancelUI();
 setAppointmentGroupValue(null);
 updateClientHistoryLink(null);
+updateAppointmentHistoryLink(null);
 handleAnyone();
 clearAppointmentEditorMeta();
   applyAppointmentTintNow();    
@@ -16779,7 +16955,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-14.2';
+const CALENDAR_APP_VERSION = '2026-10-21.1';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';

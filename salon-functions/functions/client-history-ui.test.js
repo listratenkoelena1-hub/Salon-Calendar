@@ -69,6 +69,30 @@ test("Client History phone is conditionally returned only to a manager", () => {
   assert.match(calendarHtml, /currentUserRole === 'manager' && result\.phone/);
 });
 
+test("Appointment History is offered only for changed manual appointments", () => {
+  assert.match(calendarHtml, /id="appointmentHistoryLink"[^>]*>Appointment History<\/button>/);
+  assert.match(calendarHtml, /function isManualCalendarAppointment\(appointment\)/);
+  assert.match(calendarHtml, /!\['online_booking', 'dash_booking'\]\.includes\(source\)/);
+  assert.match(calendarHtml, /Number\(appointment\.revision\) > 1/);
+  assert.match(calendarHtml, /action && action !== 'create'/);
+  assert.match(calendarHtml, /updateClientHistoryLink\(a\);\s*updateAppointmentHistoryLink\(a\);/);
+});
+
+test("Appointment History reads existing activity logs without storing a second history", () => {
+  assert.match(calendarHtml, /getAppointmentHistory\(\{ appointmentId: appointment\.id \}\)/);
+  assert.match(calendarHtml, /Appointment History[\s\S]*?Date \/ Time[\s\S]*?Changed by[\s\S]*?Tap to Open/);
+  assert.match(functionsSource, /exports\.getAppointmentHistory = onCall/);
+  assert.match(functionsSource, /collection\("activityLog"\)[\s\S]*?where\("entityId", "==", appointmentId\)/);
+  assert.match(functionsSource, /APPOINTMENT_HISTORY_CREATION_EVENTS\.has\(entry\.eventType\)/);
+  assert.doesNotMatch(functionsSource, /collection\("appointmentHistory"\)/);
+});
+
+test("online and Dash appointments are rejected by the Appointment History endpoint", () => {
+  assert.match(functionsSource, /function isManualCalendarAppointmentRecord\(appointment\)/);
+  assert.match(functionsSource, /!\["online_booking", "dash_booking"\]\.includes\(source\)/);
+  assert.match(functionsSource, /available: false, rows: \[\], totalCount: 0/);
+});
+
 test("Anyone requests store the original choice and actual technician", () => {
   assert.match(functionsSource, /requestedStaffId,/);
   assert.match(functionsSource, /autoAssignedFromAnyone: requestedStaffId === ANYONE_ID/);
