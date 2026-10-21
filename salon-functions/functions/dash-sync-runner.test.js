@@ -97,7 +97,7 @@ test("accepts a synchronized Block Time only after its stable Dash id is known",
   });
 });
 
-test("polls Dash hourly before opening and every fifteen minutes from 9 AM through 7 PM", () => {
+test("accepts Firebase scheduler offsets while polling hourly before opening and every fifteen minutes during business hours", () => {
   const atEdmonton = (hour, minute = 0) => new Date(Date.UTC(2026, 8, 25, hour + 6, minute));
 
   assert.deepEqual(getDashPollingWindow(atEdmonton(6), "America/Edmonton"), {
@@ -107,10 +107,14 @@ test("polls Dash hourly before opening and every fifteen minutes from 9 AM throu
     minute: 0,
     phase: "morning_reconciliation"
   });
+  assert.equal(getDashPollingWindow(atEdmonton(6, 2), "America/Edmonton").phase, "morning_reconciliation");
   assert.equal(getDashPollingWindow(atEdmonton(6, 15), "America/Edmonton").shouldRun, false);
+  assert.equal(getDashPollingWindow(atEdmonton(7, 2), "America/Edmonton").phase, "morning_hourly");
   assert.equal(getDashPollingWindow(atEdmonton(7), "America/Edmonton").phase, "morning_hourly");
   assert.equal(getDashPollingWindow(atEdmonton(8), "America/Edmonton").shouldRun, true);
   assert.equal(getDashPollingWindow(atEdmonton(9), "America/Edmonton").phase, "business_quarter_hour");
+  assert.equal(getDashPollingWindow(atEdmonton(9, 2), "America/Edmonton").shouldRun, true);
+  assert.equal(getDashPollingWindow(atEdmonton(9, 47), "America/Edmonton").shouldRun, true);
   assert.equal(getDashPollingWindow(atEdmonton(12, 15), "America/Edmonton").shouldRun, true);
   assert.equal(getDashPollingWindow(atEdmonton(18, 45), "America/Edmonton").shouldRun, true);
   assert.equal(getDashPollingWindow(atEdmonton(19), "America/Edmonton").shouldRun, true);

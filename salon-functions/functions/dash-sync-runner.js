@@ -153,11 +153,16 @@ function getDashPollingWindow(date = new Date(), timeZone = "America/Edmonton") 
   const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
   const hour = Number(values.hour);
   const minute = Number(values.minute);
-  const morningReconciliation = hour === 6 && minute === 0;
-  const morningHourly = hour >= 6 && hour < 9 && minute === 0;
+  // Firebase's "every 15 minutes" scheduler keeps its deployment-time
+  // minute offset (for example :02/:17/:32/:47), so do not require exact
+  // wall-clock quarter hours here. The first invocation in each morning
+  // hour is the one that falls within minutes 00-14.
+  const firstInvocationOfHour = minute < 15;
+  const morningReconciliation = hour === 6 && firstInvocationOfHour;
+  const morningHourly = hour >= 6 && hour < 9 && firstInvocationOfHour;
   const businessQuarterHour = (
-    (hour >= 9 && hour < 19 && minute % 15 === 0) ||
-    (hour === 19 && minute === 0)
+    (hour >= 9 && hour < 19) ||
+    (hour === 19 && firstInvocationOfHour)
   );
   const shouldRun = morningHourly || businessQuarterHour;
 
