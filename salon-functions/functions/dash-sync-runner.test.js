@@ -15,6 +15,7 @@ const {
   dateKeyInTimeZone,
   getDailyReconciliationWindows,
   getDashPollingWindow,
+  getDashMonitorIgnoreReason,
   getReconciliationRange,
   getWeeklyOffOccurrencesForDate,
   isTerminalIncomingStatus,
@@ -89,6 +90,26 @@ test("deduplicates changing Dash notification labels by the permanent appointmen
     dashBookingId: "another-appointment",
     status: "baseline"
   }, "dash-appointment-19"), false);
+});
+
+test("never alerts for old or no-longer-active Dash appointments", () => {
+  const now = new Date("2026-10-21T16:00:00Z");
+  assert.equal(getDashMonitorIgnoreReason({
+    date: "2026-10-19",
+    dashStatus: "confirmed"
+  }, now), "past_appointment");
+  assert.equal(getDashMonitorIgnoreReason({
+    date: "2026-10-21",
+    dashStatus: "canceled"
+  }, now), "appointment_not_active");
+  assert.equal(getDashMonitorIgnoreReason({
+    date: "2026-10-21",
+    dashStatus: "confirmed"
+  }, now), "");
+  assert.equal(getDashMonitorIgnoreReason({
+    date: "2026-10-30",
+    dashStatus: "confirmed"
+  }, now), "");
 });
 
 test("starts Chromium only for inbound polling or real pending writes", () => {

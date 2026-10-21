@@ -125,6 +125,14 @@ function isTerminalReceiptForDashBooking(receipt, dashBookingId) {
   );
 }
 
+function getDashMonitorIgnoreReason(detail, now = new Date()) {
+  if (!detail) return "missing_detail";
+  if (String(detail.dashStatus || "confirmed") !== "confirmed") return "appointment_not_active";
+  const appointmentDate = String(detail.date || "").trim();
+  if (appointmentDate && appointmentDate < dateKeyInTimeZone(now)) return "past_appointment";
+  return "";
+}
+
 function buildDefaultConfig(raw = {}) {
   const monitorOnly = raw.monitorOnly === true;
   return {
@@ -1785,6 +1793,26 @@ async function processDashMonitorAlerts({ db, FieldValue, Timestamp, client, map
 
     const entityId = getDashRequestDocumentId(detail.dashBookingId);
     const canonicalRef = db.collection(DASH_RECEIPT_COLLECTION).doc(entityId);
+    const ignoreReason = getDashMonitorIgnoreReason(detail);
+    if (ignoreReason) {
+      const batch = db.batch();
+      const ignoredReceipt = {
+        dashBookingId: detail.dashBookingId,
+        notificationKey: item.notificationKey,
+        status: "monitor_ignored",
+        reason: ignoreReason,
+        monitorOnly: true,
+        processedAt: FieldValue.serverTimestamp()
+      };
+      batch.set(notificationRef, {
+        ...ignoredReceipt,
+        canonicalReceiptId: entityId
+      }, { merge: true });
+      batch.set(canonicalRef, ignoredReceipt, { merge: true });
+      await batch.commit();
+      report.ignored += 1;
+      continue;
+    }
     const canonicalSnap = await canonicalRef.get();
     if (canonicalSnap.exists && isTerminalReceiptForDashBooking(canonicalSnap.data(), detail.dashBookingId)) {
       await notificationRef.set({
@@ -2002,6 +2030,7 @@ module.exports = {
   enqueueDashReconciliation,
   enqueueDashSource,
   getDashPollingWindow,
+  getDashMonitorIgnoreReason,
   getDailyReconciliationWindows,
   getReconciliationRange,
   getWeeklyOffOccurrencesForDate,
