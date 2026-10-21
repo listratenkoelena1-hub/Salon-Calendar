@@ -5484,7 +5484,6 @@ const managerGetActivityLogContacts = httpsCallable(functions, "managerGetActivi
 const getStaffActivityLog = httpsCallable(functions, "getStaffActivityLog");
 const setStaffOnboardingState = httpsCallable(functions, "setStaffOnboardingState");
 const getAppointmentClientHistory = httpsCallable(functions, "getAppointmentClientHistory");
-const getAppointmentHistory = httpsCallable(functions, "getAppointmentHistory");
 const FCM_VAPID_KEY = "";
 // Operational pause: keep Telegram code and data intact while staffMessages
 // remains the active internal notification channel. Set to false to resume.
@@ -8780,6 +8779,101 @@ function renderAppointmentHistoryRows(rows) {
   }).join('');
 }
 
+const APPOINTMENT_HISTORY_CREATION_EVENTS = new Set([
+  'new_app',
+  'online_request_created',
+  'dash_request_created',
+  'dash_appointment_added'
+]);
+
+function getAppointmentHistoryLogDates(appointment) {
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const createdAt = appointment?.createdAt?.toDate
+    ? appointment.createdAt.toDate()
+    : null;
+  const fallback = new Date(today);
+  fallback.setDate(fallback.getDate() - 30);
+  const firstDate = createdAt instanceof Date && !Number.isNaN(createdAt.getTime())
+    ? new Date(createdAt)
+    : fallback;
+  firstDate.setHours(12, 0, 0, 0);
+
+  // Manual appointments are normally created inside the active booking window.
+  // Keep the on-demand staff lookup bounded while retaining the full recent trail.
+  const earliestAllowed = new Date(today);
+  earliestAllowed.setDate(earliestAllowed.getDate() - 179);
+  if (firstDate < earliestAllowed) firstDate.setTime(earliestAllowed.getTime());
+  if (firstDate > today) firstDate.setTime(today.getTime());
+
+  const dates = [];
+  const cursor = new Date(firstDate);
+  while (cursor <= today) {
+    dates.push(toInputDate(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+}
+
+function normalizeAppointmentHistoryEntry(entry, appointment) {
+  const createdAtMillis = Number(entry?.createdAtMillis);
+  const rawCreatedAtMillis = entry?.createdAt?.toDate
+    ? entry.createdAt.toDate().getTime()
+    : null;
+  return {
+    id: String(entry?.id || ''),
+    appointmentId: appointment.id,
+    createdAtMillis: Number.isFinite(createdAtMillis) ? createdAtMillis : rawCreatedAtMillis,
+    appointmentDate: String(appointment.date || entry?.logDate || ''),
+    appointmentStart: Number(appointment.start) || 0,
+    staffId: entry?.staffId || appointment.staffId || '',
+    staffName: entry?.staffName || '',
+    actorLabel: entry?.actorLabel || '',
+    actorKey: entry?.actorKey || '',
+    eventType: entry?.eventType || '',
+    details: entry?.details || entry?.service || 'Appointment updated'
+  };
+}
+
+function filterAppointmentHistoryEntries(entries, appointment) {
+  return (Array.isArray(entries) ? entries : [])
+    .filter(entry =>
+      String(entry?.entityId || '') === appointment.id &&
+      entry?.entityType === 'appointment' &&
+      !APPOINTMENT_HISTORY_CREATION_EVENTS.has(entry?.eventType)
+    )
+    .map(entry => normalizeAppointmentHistoryEntry(entry, appointment))
+    .filter(entry => entry.id)
+    .sort((left, right) => (right.createdAtMillis || 0) - (left.createdAtMillis || 0));
+}
+
+async function loadAppointmentHistoryRows(appointment) {
+  if (currentUserRole === 'manager') {
+    const snapshot = await getDocs(query(
+      collection(db, 'activityLog'),
+      where('entityId', '==', appointment.id)
+    ));
+    return filterAppointmentHistoryEntries(
+      snapshot.docs.map(document => ({ id: document.id, ...document.data() })),
+      appointment
+    );
+  }
+
+  const dates = getAppointmentHistoryLogDates(appointment);
+  const entries = [];
+  const batchSize = 7;
+  for (let index = 0; index < dates.length; index += batchSize) {
+    const responses = await Promise.all(
+      dates.slice(index, index + batchSize).map(logDate => getStaffActivityLog({ logDate }))
+    );
+    responses.forEach(response => {
+      const dailyEntries = response?.data?.entries;
+      if (Array.isArray(dailyEntries)) entries.push(...dailyEntries);
+    });
+  }
+  return filterAppointmentHistoryEntries(entries, appointment);
+}
+
 window.openAppointmentHistory = async () => {
   const appointment = editId ? appointments.find(item => item.id === editId) : null;
   if (!hasManualAppointmentUpdates(appointment)) return;
@@ -8797,13 +8891,11 @@ window.openAppointmentHistory = async () => {
   appointmentHistoryModal?.classList.remove('hidden');
 
   try {
-    const response = await getAppointmentHistory({ appointmentId: appointment.id });
+    const rows = await loadAppointmentHistoryRows(appointment);
     if (runId !== appointmentHistoryLoadRunId || appointmentHistoryModal?.classList.contains('hidden')) return;
-    const result = response?.data || {};
-    const rows = Array.isArray(result.rows) ? result.rows : [];
     renderAppointmentHistoryRows(rows);
     if (appointmentHistoryState) {
-      const count = Number(result.totalCount) || rows.length;
+      const count = rows.length;
       appointmentHistoryState.textContent = `${count} update${count === 1 ? '' : 's'}`;
     }
     appointmentHistoryTableWrap?.classList.remove('hidden');
@@ -16955,7 +17047,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-21.1';
+const CALENDAR_APP_VERSION = '2026-10-21.2';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';

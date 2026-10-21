@@ -79,18 +79,18 @@ test("Appointment History is offered only for changed manual appointments", () =
 });
 
 test("Appointment History reads existing activity logs without storing a second history", () => {
-  assert.match(calendarHtml, /getAppointmentHistory\(\{ appointmentId: appointment\.id \}\)/);
+  assert.match(calendarHtml, /collection\(db, 'activityLog'\)[\s\S]*?where\('entityId', '==', appointment\.id\)/);
+  assert.match(calendarHtml, /getStaffActivityLog\(\{ logDate \}\)/);
+  assert.match(calendarHtml, /APPOINTMENT_HISTORY_CREATION_EVENTS\.has\(entry\?\.eventType\)/);
   assert.match(calendarHtml, /Appointment History[\s\S]*?Date \/ Time[\s\S]*?Changed by[\s\S]*?Tap to Open/);
-  assert.match(functionsSource, /exports\.getAppointmentHistory = onCall/);
-  assert.match(functionsSource, /collection\("activityLog"\)[\s\S]*?where\("entityId", "==", appointmentId\)/);
-  assert.match(functionsSource, /APPOINTMENT_HISTORY_CREATION_EVENTS\.has\(entry\.eventType\)/);
+  assert.doesNotMatch(functionsSource, /exports\.getAppointmentHistory = onCall/);
   assert.doesNotMatch(functionsSource, /collection\("appointmentHistory"\)/);
 });
 
-test("online and Dash appointments are rejected by the Appointment History endpoint", () => {
-  assert.match(functionsSource, /function isManualCalendarAppointmentRecord\(appointment\)/);
-  assert.match(functionsSource, /!\["online_booking", "dash_booking"\]\.includes\(source\)/);
-  assert.match(functionsSource, /available: false, rows: \[\], totalCount: 0/);
+test("online and Dash appointments never request Appointment History", () => {
+  assert.match(calendarHtml, /function isManualCalendarAppointment\(appointment\)/);
+  assert.match(calendarHtml, /!\['online_booking', 'dash_booking'\]\.includes\(source\)/);
+  assert.match(calendarHtml, /if \(!hasManualAppointmentUpdates\(appointment\)\) return;/);
 });
 
 test("Anyone requests store the original choice and actual technician", () => {

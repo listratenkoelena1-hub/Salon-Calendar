@@ -28,12 +28,6 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
 
-      - name: Deploy appointment history function
-        working-directory: salon-functions
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-key.json
-        run: firebase deploy --only functions:getAppointmentHistory --project rosesnails-calendar --non-interactive
-
       - name: Deploy calendar hosting
         working-directory: salon-calendar
         env:
