@@ -43,6 +43,17 @@ test("legacy staff defaults to online booking and manager saves an explicit valu
   );
 });
 
+test("2:15 duration is available for appointments and staff procedure settings", () => {
+  assert.match(
+    calendarHtml,
+    /<select id="aDuration"[\s\S]*?<option value="9">02:15<\/option>[\s\S]*?<\/select>/
+  );
+  assert.match(
+    calendarHtml,
+    /const STAFF_BOOKING_DURATION_OPTIONS = \[[\s\S]*?\{ value: '9', label: '02:15' \}[\s\S]*?\];/
+  );
+});
+
 test("staff settings actions are outside the independently scrolling table", () => {
   const scrollStart = calendarHtml.indexOf('<div id="staffScroll">');
   const footerStart = calendarHtml.indexOf('<div class="modal-actions staff-modal-actions">');
