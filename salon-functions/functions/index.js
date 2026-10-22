@@ -1540,6 +1540,7 @@ async function readPhotoReviewFiles(files) {
 exports.mutateAppointment = onCall(
   {
     region: "us-central1",
+    memory: "512MiB",
     maxInstances: 10,
     secrets: [CLIENT_LOOKUP_PEPPER]
   },
