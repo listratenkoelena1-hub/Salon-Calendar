@@ -83,7 +83,9 @@ const {
   dateKeyInTimeZone,
   getDailyReconciliationWindows,
   getDashPollingWindow,
+  importDashAppointment,
   loadDashConfig,
+  loadDashMappings,
   makeWeeklyOccurrence,
   weeklyRuleActiveOnDate,
   runDashSyncCycle
@@ -1930,6 +1932,66 @@ exports.mutateAppointment = onCall(
         hasClientHistory: mode !== "delete" && Boolean(clientIdentity?.clientProfileId)
       };
     });
+  }
+);
+
+exports.addDashMonitorAppointment = onCall(
+  {
+    region: "us-central1",
+    memory: "512MiB",
+    maxInstances: 5
+  },
+  async (request) => {
+    const actor = await getAuthorizedCalendarActor(request);
+    const receiptId = assertAppointmentToken(request.data?.receiptId, "receiptId", { min: 12, max: 100 });
+    const receiptRef = db.collection("dashIncomingReceipts").doc(receiptId);
+    const receiptSnap = await receiptRef.get();
+    if (!receiptSnap.exists) {
+      throw new HttpsError("not-found", "This Dash Booking alert is no longer available.");
+    }
+
+    const receipt = receiptSnap.data() || {};
+    const detail = receipt.detail || null;
+    if (!detail?.dashBookingId || !receipt.notificationKey) {
+      throw new HttpsError("failed-precondition", "This Dash Booking alert cannot be added automatically.");
+    }
+
+    const [staffSnap, mappings] = await Promise.all([
+      db.collection("staff").get(),
+      loadDashMappings(db)
+    ]);
+    const staffRecords = [
+      { id: ANYONE_ID, name: "Anyone", active: true },
+      ...staffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }))
+    ];
+    const result = await importDashAppointment({
+      db,
+      FieldValue,
+      Timestamp,
+      item: {
+        notificationKey: String(receipt.notificationKey),
+        detail
+      },
+      staffRecords,
+      mappings,
+      allowConflictRetry: true
+    });
+
+    const monitorMessageRef = db.collection("staffMessages").doc(`dash_monitor_${receiptId}`);
+    const messageUpdate = {
+      dashImportStatus: result.status,
+      dashImportRequestedBy: actor.label,
+      dashImportRequestedAt: FieldValue.serverTimestamp()
+    };
+    if (["imported", "duplicate"].includes(result.status) && result.appointmentId) {
+      messageUpdate.dashImportStatus = "imported";
+      messageUpdate.entityType = "appointment";
+      messageUpdate.entityId = result.appointmentId;
+      messageUpdate.dashImportedAt = FieldValue.serverTimestamp();
+    }
+    await monitorMessageRef.set(messageUpdate, { merge: true });
+
+    return result;
   }
 );
 

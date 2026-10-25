@@ -33,6 +33,7 @@ const {
   writeClientAppointmentRecords
 } = require("./client-history-store");
 const { dedupeWeeklyOffRules } = require("./weekly-off-dedupe-core");
+const { getBookingDurationDecision } = require("./booking-duration");
 
 const ANYONE_ID = "anyone";
 const DASH_QUEUE_COLLECTION = "dashSyncQueue";
@@ -974,8 +975,24 @@ function buildDashMonitorMessage(detail = {}) {
     `${detail.date || "Unknown date"} at ${startText}.`,
     ...(detail.service ? [detail.service] : []),
     "",
-    "Please check Dash Booking. Nothing was changed in Dash Booking or Rose Calendar."
+    "Please add this appointment to the calendar. If there is not enough time, ask the manager to contact the client."
   ].join("\n");
+}
+
+function buildDashMonitorDetail(detail = {}, localStaff = null) {
+  const localDuration = localStaff?.id && localStaff.id !== ANYONE_ID
+    ? getBookingDurationDecision({
+        selectedServices: detail.service ? [detail.service] : [],
+        serviceDetails: detail.service || ""
+      }, localStaff, null).duration
+    : null;
+  return {
+    ...detail,
+    dashOriginalDuration: Number(detail.dashOriginalDuration || detail.duration) || null,
+    duration: Number.isInteger(localDuration) && localDuration > 0
+      ? localDuration
+      : detail.duration
+  };
 }
 
 function buildDashMonitorMessageDoc({ FieldValue, Timestamp, detail, localStaff, staffRecords }) {
@@ -984,7 +1001,8 @@ function buildDashMonitorMessageDoc({ FieldValue, Timestamp, detail, localStaff,
     .map(staff => staff.id);
   const isAnyone = localStaff?.id === ANYONE_ID || /^anyone$/i.test(String(detail?.staffName || "").trim());
   const assignedStaffIds = localStaff?.id && localStaff.id !== ANYONE_ID ? [localStaff.id] : [];
-  const audienceStaffIds = isAnyone ? activeStaffIds : assignedStaffIds;
+  const audienceStaffIds = activeStaffIds;
+  const importantStaffIds = isAnyone ? activeStaffIds : assignedStaffIds;
   const entityId = getDashRequestDocumentId(detail?.dashBookingId || "unknown");
   return {
     ...buildDashMessageDoc({
@@ -1000,10 +1018,12 @@ function buildDashMonitorMessageDoc({ FieldValue, Timestamp, detail, localStaff,
       conflict: false
     }),
     title: "New Dash Booking appointment",
-    visibleToAllStaff: isAnyone,
+    visibleToAllStaff: true,
     audienceStaffIds,
-    importantStaffIds: audienceStaffIds,
-    staffDefaultPriority: audienceStaffIds.length ? "key" : "secondary"
+    importantStaffIds,
+    staffDefaultPriority: "secondary",
+    dashImportReceiptId: entityId,
+    dashImportStatus: "pending"
   };
 }
 
@@ -1461,7 +1481,8 @@ async function importDashAppointment({
   Timestamp,
   item,
   staffRecords,
-  mappings
+  mappings,
+  allowConflictRetry = false
 }) {
   const detail = item.detail;
   const notificationRef = db.collection(DASH_RECEIPT_COLLECTION).doc(item.notificationKey);
@@ -1503,8 +1524,10 @@ async function importDashAppointment({
       transaction.get(receiptRef),
       transaction.get(appointmentRef)
     ]);
+    const existingStatus = String(existingReceipt.data()?.status || "");
+    const canRetryConflict = allowConflictRetry && existingStatus === "conflict";
     if (
-      (existingReceipt.exists && isTerminalIncomingStatus(existingReceipt.data()?.status)) ||
+      (existingReceipt.exists && isTerminalIncomingStatus(existingStatus) && !canRetryConflict) ||
       existingAppointment.exists
     ) {
       transaction.set(notificationRef, {
@@ -1547,6 +1570,8 @@ async function importDashAppointment({
         status: "conflict",
         conflictReason: conflict.reason,
         staffId: localStaff.id,
+        detail,
+        monitorOnly: true,
         processedAt: FieldValue.serverTimestamp()
       });
       transaction.set(notificationRef, {
@@ -1606,6 +1631,8 @@ async function importDashAppointment({
         status: "conflict",
         conflictReason: "schedule",
         staffId: localStaff.id,
+        detail,
+        monitorOnly: true,
         processedAt: FieldValue.serverTimestamp()
       });
       transaction.set(staffMessageRef, buildDashMessageDoc({
@@ -1832,6 +1859,7 @@ async function processDashMonitorAlerts({ db, FieldValue, Timestamp, client, map
     }
 
     const localStaff = resolveLocalStaffForDashName(staffRecords, detail.staffName, mappings);
+    const monitoredDetail = buildDashMonitorDetail(detail, localStaff);
     const messageRef = db.collection("staffMessages").doc(`dash_monitor_${entityId}`);
     const batch = db.batch();
     batch.set(notificationRef, {
@@ -1840,6 +1868,7 @@ async function processDashMonitorAlerts({ db, FieldValue, Timestamp, client, map
       status: "alerted",
       monitorOnly: true,
       localStaffId: localStaff?.id || "",
+      detail: monitoredDetail,
       processedAt: FieldValue.serverTimestamp()
     }, { merge: true });
     batch.set(canonicalRef, {
@@ -1848,12 +1877,13 @@ async function processDashMonitorAlerts({ db, FieldValue, Timestamp, client, map
       status: "alerted",
       monitorOnly: true,
       localStaffId: localStaff?.id || "",
+      detail: monitoredDetail,
       processedAt: FieldValue.serverTimestamp()
     }, { merge: true });
     batch.set(messageRef, buildDashMonitorMessageDoc({
       FieldValue,
       Timestamp,
-      detail,
+      detail: monitoredDetail,
       localStaff,
       staffRecords
     }));
@@ -2021,6 +2051,7 @@ module.exports = {
   DASH_RUN_COLLECTION,
   addDateKeyDays,
   buildDashMessageDoc,
+  buildDashMonitorDetail,
   buildDashMonitorMessage,
   buildDashMonitorMessageDoc,
   buildDashOutboundMismatchMessage,

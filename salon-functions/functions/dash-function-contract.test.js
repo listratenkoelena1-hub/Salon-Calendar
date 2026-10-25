@@ -32,6 +32,10 @@ test("monitor-only mode cannot queue or execute outbound Dash changes", () => {
   assert.match(runnerSource, /config\.monitorOnly[\s\S]*?processDashMonitorAlerts/);
   assert.match(runnerSource, /queue = config\.monitorOnly[\s\S]*?reason: "monitor_only"/);
   assert.match(runnerSource, /status: "alerted"[\s\S]*?monitorOnly: true/);
+  assert.match(functionsSource, /exports\.addDashMonitorAppointment = onCall/);
+  assert.match(functionsSource, /allowConflictRetry: true/);
+  assert.match(runnerSource, /visibleToAllStaff: true/);
+  assert.match(runnerSource, /dashImportReceiptId: entityId/);
 });
 
 test("does not expose the retired in-calendar Dash audit callables", () => {

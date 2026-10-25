@@ -604,7 +604,7 @@ function buildDashAppointment(detail, localStaff) {
     dashOriginBookingId: detail.dashBookingId,
     dashOriginDate: detail.date,
     dashOriginStart: detail.start,
-    dashOriginDuration: detail.duration,
+    dashOriginDuration: Number(detail.dashOriginalDuration || detail.duration),
     dashOriginStaffName: detail.staffName,
     dashStaffName: detail.staffName,
     selectedServices: [detail.service],

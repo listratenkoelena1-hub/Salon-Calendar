@@ -7,6 +7,7 @@ const {
   addDateKeyDays,
   buildDashActivityLogDoc,
   buildDashMessageDoc,
+  buildDashMonitorDetail,
   buildDashMonitorMessage,
   buildDashMonitorMessageDoc,
   buildDashOutboundMismatchMessage,
@@ -264,7 +265,7 @@ test("makes every Anyone Dash message Important for every active technician", ()
   assert.equal(message.staffDefaultPriority, "key");
 });
 
-test("monitor-only alerts target one technician, or every active technician for Anyone", () => {
+test("monitor-only alerts are visible to all and Important only for the assigned technician", () => {
   const FieldValue = { serverTimestamp: () => "SERVER_TIME" };
   const Timestamp = { fromDate: date => ({ millis: date.getTime() }) };
   const staffRecords = [
@@ -289,12 +290,15 @@ test("monitor-only alerts target one technician, or every active technician for 
     staffRecords
   });
   assert.equal(assigned.visibleToManager, true);
-  assert.equal(assigned.visibleToAllStaff, false);
-  assert.deepEqual(assigned.audienceStaffIds, ["staff-1"]);
+  assert.equal(assigned.visibleToAllStaff, true);
+  assert.deepEqual(assigned.audienceStaffIds, ["staff-1", "staff-2"]);
   assert.deepEqual(assigned.importantStaffIds, ["staff-1"]);
-  assert.equal(assigned.staffDefaultPriority, "key");
-  assert.match(assigned.body, /Please check Dash Booking/);
-  assert.match(assigned.body, /Nothing was changed in Dash Booking or Rose Calendar/);
+  assert.equal(assigned.staffDefaultPriority, "secondary");
+  assert.match(assigned.dashImportReceiptId, /^dash_[a-f0-9]{8,40}$/);
+  assert.equal(assigned.dashImportStatus, "pending");
+  assert.match(assigned.body, /Please add this appointment to the calendar/);
+  assert.match(assigned.body, /If there is not enough time, ask the manager to contact the client/);
+  assert.doesNotMatch(assigned.body, /Nothing was changed/);
 
   const anyone = buildDashMonitorMessageDoc({
     FieldValue,
@@ -306,7 +310,31 @@ test("monitor-only alerts target one technician, or every active technician for 
   assert.equal(anyone.visibleToAllStaff, true);
   assert.deepEqual(anyone.audienceStaffIds, ["staff-1", "staff-2"]);
   assert.deepEqual(anyone.importantStaffIds, ["staff-1", "staff-2"]);
+  assert.equal(anyone.staffDefaultPriority, "secondary");
   assert.doesNotMatch(buildDashMonitorMessage(detail), /Added to the calendar automatically/);
+});
+
+test("monitor-only draft uses the assigned technician procedure duration", () => {
+  const detail = {
+    dashBookingId: "dash-duration",
+    client: "Sofia",
+    date: "2026-10-22",
+    start: 12,
+    duration: 4,
+    staffName: "Tanya",
+    service: "Spa Pedicure with Gel Polish"
+  };
+  const staff = {
+    id: "staff-1",
+    bookingDurations: {
+      pedicureNoColor: 5,
+      pedicureGelPolish: 9
+    }
+  };
+  const staffDraft = buildDashMonitorDetail(detail, staff);
+  assert.equal(staffDraft.duration, 9);
+  assert.equal(staffDraft.dashOriginalDuration, 4);
+  assert.equal(buildDashMonitorDetail(detail, { id: "anyone" }).duration, 4);
 });
 
 test("uses distinct titles for ongoing Dash cancellation and reschedule events", () => {

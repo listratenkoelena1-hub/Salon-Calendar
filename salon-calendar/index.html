@@ -5485,6 +5485,7 @@ const managerGetActivityLogContacts = httpsCallable(functions, "managerGetActivi
 const getStaffActivityLog = httpsCallable(functions, "getStaffActivityLog");
 const setStaffOnboardingState = httpsCallable(functions, "setStaffOnboardingState");
 const getAppointmentClientHistory = httpsCallable(functions, "getAppointmentClientHistory");
+const addDashMonitorAppointment = httpsCallable(functions, "addDashMonitorAppointment");
 const FCM_VAPID_KEY = "";
 // Operational pause: keep Telegram code and data intact while staffMessages
 // remains the active internal notification channel. Set to false to resume.
@@ -12334,6 +12335,10 @@ function renderStaffNotifications() {
     const dashConfirmAction = item.eventType === 'dash_request_created' && isPendingDashBookingRequest(linkedAppointment)
       ? `<button type="button" class="staff-notification-dash-action" data-dash-confirm-id="${escapeHtml(item.entityId)}" data-dash-notification-id="${escapeHtml(item.id)}">Confirm</button>`
       : '';
+    const dashAddAction = item.eventType === 'dash_appointment_detected' &&
+      item.dashImportReceiptId && item.dashImportStatus !== 'imported'
+      ? `<button type="button" class="staff-notification-dash-action" data-dash-add-receipt-id="${escapeHtml(item.dashImportReceiptId)}" data-dash-notification-id="${escapeHtml(item.id)}">Add to calendar</button>`
+      : '';
     const cardActions = item.isDashPreviewDemo === true
       ? ''
       : `<button type="button" class="staff-notification-pin-action" data-pin-notification-id="${escapeHtml(item.id)}" aria-label="${isPinned ? 'Unpin message' : 'Pin message'}">${buildStaffPinIconSvg()}</button>
@@ -12347,6 +12352,7 @@ function renderStaffNotifications() {
         ${buildStaffMessageMedia(item)}
         ${photo}
         ${dashConfirmAction}
+        ${dashAddAction}
         <div class="staff-notification-footer">${escapeHtml(formatNotificationCreatedAt(item))}</div>
       </div>
     `);
@@ -12358,6 +12364,7 @@ function renderStaffNotifications() {
     card.addEventListener('click', event => {
       if (event.target.closest('[data-pin-notification-id]')) return;
       if (event.target.closest('[data-dash-confirm-id]')) return;
+      if (event.target.closest('[data-dash-add-receipt-id]')) return;
       if (card.dataset.swipeHandled === 'true') {
         card.dataset.swipeHandled = 'false';
         return;
@@ -12394,6 +12401,18 @@ function renderStaffNotifications() {
       } finally {
         if (button.isConnected) button.disabled = false;
       }
+    });
+  });
+  list.querySelectorAll('[data-dash-add-receipt-id]').forEach(button => {
+    button.addEventListener('click', async event => {
+      event.preventDefault();
+      event.stopPropagation();
+      button.disabled = true;
+      button.textContent = 'Adding…';
+      await addDashAppointmentFromMessage(
+        button.dataset.dashAddReceiptId,
+        button.dataset.dashNotificationId
+      );
     });
   });
   const mediaHydration = hydrateStaffMessageMedia();
@@ -12866,6 +12885,41 @@ async function confirmDashBookingRequestFromMessage(appointmentId, notificationI
   closeStaffNotifications();
   window.openEdit(appointmentId);
   await runAppointmentActionWithGuard(() => updateBookingRequestStatus('confirmed'));
+}
+
+async function addDashAppointmentFromMessage(receiptId, notificationId) {
+  const notification = staffNotifications.find(item => item.id === notificationId);
+  if (notification) await markStaffNotificationRead(notification);
+  closeStaffNotifications();
+
+  try {
+    const response = await addDashMonitorAppointment({ receiptId });
+    const result = response?.data || {};
+    if (result.status === 'imported') {
+      showToast('Dash Booking appointment added to the calendar', 'success');
+      return;
+    }
+    if (result.status === 'duplicate') {
+      showToast('This Dash Booking appointment is already in the calendar', 'success');
+      return;
+    }
+    if (result.status === 'conflict') {
+      if (result.reason === 'off-work') {
+        document.getElementById('offWorkConflictModal')?.classList.remove('hidden');
+      } else {
+        conflictModal.classList.remove('hidden');
+      }
+      return;
+    }
+    if (result.status === 'unmapped_staff') {
+      showToast('The Dash Booking technician is not linked. Please ask the manager to check it.', 'warning', 6000);
+      return;
+    }
+    showToast('This Dash Booking appointment could not be added automatically', 'warning', 6000);
+  } catch (error) {
+    console.error('Dash Booking appointment could not be added:', error);
+    showToast(error?.message || 'Dash Booking appointment could not be added', 'error', 6000);
+  }
 }
 
 async function openStaffNotificationItem(notificationId) {
@@ -17053,7 +17107,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-22.2';
+const CALENDAR_APP_VERSION = '2026-10-25.1';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';

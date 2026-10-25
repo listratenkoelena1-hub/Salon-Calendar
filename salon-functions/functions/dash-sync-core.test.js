@@ -381,6 +381,22 @@ test("marks a Dash appointment as history-capable when Dash exposes a stable cli
   assert.equal(Object.hasOwn(appointment, "dashClientId"), false);
 });
 
+test("keeps the original Dash duration when the Rose Calendar duration is longer", () => {
+  const appointment = buildDashAppointment({
+    dashBookingId: "dash-booking-duration",
+    client: "Sample Client",
+    date: "2026-10-02",
+    start: 12,
+    duration: 9,
+    dashOriginalDuration: 6,
+    service: "Pedicure",
+    staffName: "Tanya"
+  }, { id: "local-tanya", name: "Tanya" });
+
+  assert.equal(appointment.duration, 9);
+  assert.equal(appointment.dashOriginDuration, 6);
+});
+
 test("detects appointment and off-work conflicts for inbound Dash requests", () => {
   const detail = {
     dashBookingId: "dash-1",

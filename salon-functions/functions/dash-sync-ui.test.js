@@ -29,3 +29,11 @@ test("calendar interface has no experimental Dash audit window or callable depen
   assert.doesNotMatch(calendarHtml, /managerGetLatestDashBookingAudit/);
   assert.doesNotMatch(calendarHtml, /get\('dashAudit'\)/);
 });
+
+test("monitor-only Dash alerts can add a checked appointment from Messages", () => {
+  assert.match(calendarHtml, /httpsCallable\(functions, "addDashMonitorAppointment"\)/);
+  assert.match(calendarHtml, /data-dash-add-receipt-id/);
+  assert.match(calendarHtml, />Add to calendar<\/button>/);
+  assert.match(calendarHtml, /result\.status === 'conflict'/);
+  assert.match(calendarHtml, /offWorkConflictModal/);
+});
