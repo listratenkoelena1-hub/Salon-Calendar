@@ -34,6 +34,8 @@ test("monitor-only mode cannot queue or execute outbound Dash changes", () => {
   assert.match(runnerSource, /status: "alerted"[\s\S]*?monitorOnly: true/);
   assert.match(functionsSource, /exports\.addDashMonitorAppointment = onCall/);
   assert.match(functionsSource, /allowConflictRetry: true/);
+  assert.match(functionsSource, /requestedByLabel: actor\.label/);
+  assert.match(functionsSource, /requestedByKey: actor\.staffId \|\| actor\.uid/);
   assert.match(runnerSource, /visibleToAllStaff: true/);
   assert.match(runnerSource, /dashImportReceiptId: entityId/);
 });

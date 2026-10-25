@@ -1027,12 +1027,22 @@ function buildDashMonitorMessageDoc({ FieldValue, Timestamp, detail, localStaff,
   };
 }
 
-function buildDashActivityLogDoc({ FieldValue, detail, eventType, entityType, entityId, staffId, message }) {
+function buildDashActivityLogDoc({
+  FieldValue,
+  detail,
+  eventType,
+  entityType,
+  entityId,
+  staffId,
+  message,
+  actorLabel = "DashBooking",
+  actorKey = "dash_booking"
+}) {
   return {
     createdAt: FieldValue.serverTimestamp(),
     logDate: detail.date,
-    actorLabel: "DashBooking",
-    actorKey: "dash_booking",
+    actorLabel: String(actorLabel || "DashBooking").trim() || "DashBooking",
+    actorKey: String(actorKey || "dash_booking").trim() || "dash_booking",
     staffId: staffId || "",
     eventType,
     entityType,
@@ -1482,7 +1492,9 @@ async function importDashAppointment({
   item,
   staffRecords,
   mappings,
-  allowConflictRetry = false
+  allowConflictRetry = false,
+  requestedByLabel = "DashBooking",
+  requestedByKey = "dash_booking"
 }) {
   const detail = item.detail;
   const notificationRef = db.collection(DASH_RECEIPT_COLLECTION).doc(item.notificationKey);
@@ -1617,7 +1629,12 @@ async function importDashAppointment({
           clientName: detail.client
         })
       : null;
-    const dashAppointment = buildDashAppointment(detailWithStaff, localStaff);
+    const effectiveActorLabel = String(requestedByLabel || "DashBooking").trim() || "DashBooking";
+    const effectiveActorKey = String(requestedByKey || "dash_booking").trim() || "dash_booking";
+    const dashAppointment = {
+      ...buildDashAppointment(detailWithStaff, localStaff),
+      lastEditedBy: effectiveActorLabel
+    };
     const slots = scheduleSnap.exists
       ? cloneSlots(scheduleSnap.data()?.slots)
       : buildScheduleSlots(appointments, { date: detail.date, staffId: localStaff.id, anyoneId: ANYONE_ID });
@@ -1716,7 +1733,9 @@ async function importDashAppointment({
       entityType: "appointment",
       entityId: appointmentId,
       staffId: localStaff.id,
-      message
+      message,
+      actorLabel: effectiveActorLabel,
+      actorKey: effectiveActorKey
     }));
     return { status: "imported", appointmentId };
   });

@@ -1974,7 +1974,9 @@ exports.addDashMonitorAppointment = onCall(
       },
       staffRecords,
       mappings,
-      allowConflictRetry: true
+      allowConflictRetry: true,
+      requestedByLabel: actor.label,
+      requestedByKey: actor.staffId || actor.uid
     });
 
     const monitorMessageRef = db.collection("staffMessages").doc(`dash_monitor_${receiptId}`);

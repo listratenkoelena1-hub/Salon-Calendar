@@ -405,3 +405,25 @@ test("builds a phone-free Dash activity log entry", () => {
   assert.equal(entry.hasPrivateContact, false);
   assert.equal(Object.hasOwn(entry, "phone"), false);
 });
+
+test("attributes a user-requested Dash import while keeping Dash as its source key by default elsewhere", () => {
+  const FieldValue = { serverTimestamp: () => "SERVER_TIME" };
+  const entry = buildDashActivityLogDoc({
+    FieldValue,
+    detail: {
+      date: "2026-10-26",
+      client: "Sample Client",
+      service: "Manicure"
+    },
+    eventType: "dash_appointment_added",
+    entityType: "appointment",
+    entityId: "dash_456",
+    staffId: "staff-2",
+    message: "DASH BOOKING APPOINTMENT",
+    actorLabel: "Natalia",
+    actorKey: "staff-2"
+  });
+
+  assert.equal(entry.actorLabel, "Natalia");
+  assert.equal(entry.actorKey, "staff-2");
+});
