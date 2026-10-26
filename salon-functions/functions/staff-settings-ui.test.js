@@ -54,6 +54,13 @@ test("2:15 duration is available for appointments and staff procedure settings",
   );
 });
 
+test("staff can configure one duration for hard gel and acrylic overlays", () => {
+  assert.match(
+    calendarHtml,
+    /\{ key: 'hardGelOverlay', label: 'Hard Gel \/ Acrylic Overlay' \}/
+  );
+});
+
 test("staff settings actions are outside the independently scrolling table", () => {
   const scrollStart = calendarHtml.indexOf('<div id="staffScroll">');
   const footerStart = calendarHtml.indexOf('<div class="modal-actions staff-modal-actions">');

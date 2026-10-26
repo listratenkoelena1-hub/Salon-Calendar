@@ -18,6 +18,7 @@ const STAFF_BOOKING_DURATION_KEYS = new Set([
   "pedicureChangeColor",
   "refillNoDesign",
   "extensionsNoDesign",
+  "hardGelOverlay",
   "eyebrowWax",
   "eyebrowWaxTinting",
   "eyelashExtensions",
@@ -207,7 +208,9 @@ function getRequestedBookingDurationSlots(input = {}, staffRecord = {}) {
     } else if (!isStandaloneRemoving && (hasHandsZone || hasRefill || hasExtensions || hasGelOverlay || hasChangeColor || textMatches(segment, [/\bnail(s)?\b/]))) {
       if (hasRefill) handsMain = Math.max(handsMain, getStaffBookingDuration(staffRecord, "refillNoDesign"));
       if (hasExtensions && !hasOneNailExtension) handsMain = Math.max(handsMain, getStaffBookingDuration(staffRecord, "extensionsNoDesign"));
-      if (hasGelOverlay) handsMain = Math.max(handsMain, BOOKING_DURATION);
+      if (hasGelOverlay && !hasRefill && !hasExtensions) {
+        handsMain = Math.max(handsMain, getStaffBookingDuration(staffRecord, "hardGelOverlay"));
+      }
       if (hasChangeColor) handsMain = Math.max(handsMain, getStaffBookingDuration(staffRecord, "changeColor"));
       if (hasManicure && !hasChangeColor) {
         handsMain = Math.max(

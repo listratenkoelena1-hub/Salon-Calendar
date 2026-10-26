@@ -18,6 +18,7 @@ const staff = {
     pedicureChangeColor: 3,
     refillNoDesign: 6,
     extensionsNoDesign: 8,
+    hardGelOverlay: 9,
     eyebrowWax: 2,
     eyebrowWaxTinting: 3,
     eyelashExtensions: 8,
@@ -66,6 +67,11 @@ test("uses refill duration for hard gel instead of gel-polish duration", () => {
     serviceDetails: "Hard gel refill",
     requestedGroups: ["manicure"]
   }, differentDurations), 6);
+});
+
+test("uses one configured duration for hard gel and acrylic overlays", () => {
+  assert.equal(duration("Hard Gel Overlay", ["manicure"]), 9);
+  assert.equal(duration("Acrylic Overlay", ["acrylics"]), 9);
 });
 
 test("sums separately recognized hand and foot services from one typed line", () => {
