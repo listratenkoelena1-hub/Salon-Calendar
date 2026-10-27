@@ -5046,7 +5046,7 @@ exports.setStaffOnboardingState = onCall(
 );
 
 exports.setReleaseNoticeState = onCall(
-  { region: "us-central1" },
+  { region: "us-central1", invoker: "public" },
   async request => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "You must be signed in.");

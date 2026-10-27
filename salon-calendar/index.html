@@ -1627,6 +1627,14 @@ body.manager-user #calendarUpdateBtn {
   padding-top: 13px;
 }
 
+#releaseNoticeModal .staff-onboarding-actions button {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 86px;
+  padding-left: 18px;
+  padding-right: 18px;
+}
+
 .staff-onboarding-dismiss-option {
   display: flex !important;
   align-items: center;
@@ -1658,6 +1666,7 @@ body.manager-user #calendarUpdateBtn {
 
 @media (max-width: 600px) {
   .staff-onboarding-actions button { flex: 1 1 auto; }
+  #releaseNoticeModal .staff-onboarding-actions button { flex: 0 0 auto; }
   .staff-field-error { margin-left: 0; }
 }
 
@@ -11581,25 +11590,48 @@ function setReleaseNoticeBusy(busy) {
   });
 }
 
+function getReleaseNoticeLocalStorageKey() {
+  return `salonCalendarReleaseNotice:${auth.currentUser?.uid || 'current'}`;
+}
+
+function getReleaseNoticeLocalState() {
+  try {
+    return JSON.parse(localStorage.getItem(getReleaseNoticeLocalStorageKey()) || '{}');
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveReleaseNoticeLocalState(action) {
+  const state = {
+    version: RELEASE_NOTICE_VERSION,
+    action,
+    snoozedUntil: action === 'snooze' ? Date.now() + RELEASE_NOTICE_SNOOZE_MS : 0
+  };
+  localStorage.setItem(getReleaseNoticeLocalStorageKey(), JSON.stringify(state));
+  return state;
+}
+
 window.closeReleaseNotice = async () => {
   const neverShowAgain = document.getElementById('releaseNoticeDismissCheckbox')?.checked === true;
+  const action = neverShowAgain ? 'dismiss' : 'snooze';
+  saveReleaseNoticeLocalState(action);
+  document.getElementById('releaseNoticeModal').classList.add('hidden');
+  window.clearTimeout(releaseNoticeShowTimer);
+  if (!neverShowAgain) {
+    releaseNoticeShowTimer = window.setTimeout(
+      showReleaseNoticeWhenReady,
+      RELEASE_NOTICE_SNOOZE_MS
+    );
+  }
   setReleaseNoticeBusy(true);
   try {
     await setReleaseNoticeState({
       version: RELEASE_NOTICE_VERSION,
-      action: neverShowAgain ? 'dismiss' : 'snooze'
+      action
     });
-    document.getElementById('releaseNoticeModal').classList.add('hidden');
-    window.clearTimeout(releaseNoticeShowTimer);
-    if (!neverShowAgain) {
-      releaseNoticeShowTimer = window.setTimeout(
-        showReleaseNoticeWhenReady,
-        RELEASE_NOTICE_SNOOZE_MS
-      );
-    }
   } catch (error) {
     console.warn('Update notice state could not be saved:', error);
-    showToast('Please try again.', 'error');
   } finally {
     setReleaseNoticeBusy(false);
   }
@@ -11618,14 +11650,21 @@ function showReleaseNoticeWhenReady() {
 
 function initializeReleaseNoticeForUser(userData) {
   if (!userData) return;
+  const localState = getReleaseNoticeLocalState();
+  const localStateIsCurrent = localState.version === RELEASE_NOTICE_VERSION;
+  if (localStateIsCurrent && localState.action === 'dismiss') return;
   if (userData.releaseNoticeDismissedVersion === RELEASE_NOTICE_VERSION) return;
   releaseNoticeLanguage = 'en';
   const dismissCheckbox = document.getElementById('releaseNoticeDismissCheckbox');
   if (dismissCheckbox) dismissCheckbox.checked = false;
   renderReleaseNotice();
-  const snoozedUntil = userData.releaseNoticeSnoozedUntil?.toMillis
+  const serverSnoozedUntil = userData.releaseNoticeSnoozedUntil?.toMillis
     ? userData.releaseNoticeSnoozedUntil.toMillis()
     : 0;
+  const localSnoozedUntil = localStateIsCurrent && localState.action === 'snooze'
+    ? Number(localState.snoozedUntil || 0)
+    : 0;
+  const snoozedUntil = Math.max(serverSnoozedUntil, localSnoozedUntil);
   if (snoozedUntil > Date.now()) {
     releaseNoticeShowTimer = window.setTimeout(
       showReleaseNoticeWhenReady,
@@ -17438,7 +17477,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-27.3';
+const CALENDAR_APP_VERSION = '2026-10-27.4';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';

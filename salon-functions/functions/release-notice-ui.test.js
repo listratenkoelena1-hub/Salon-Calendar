@@ -36,6 +36,14 @@ test("Close snoozes for four hours while dismissal lasts until the notice versio
   assert.match(functionsSource, /action !== "dismiss" && action !== "snooze"/);
   assert.match(functionsSource, /releaseNoticeSnoozedUntil: Timestamp\.fromMillis\(Date\.now\(\) \+ 4 \* 60 \* 60 \* 1000\)/);
   assert.match(functionsSource, /releaseNoticeDismissedVersion: version/);
+  assert.match(functionsSource, /region: "us-central1", invoker: "public"/);
+  assert.match(calendarHtml, /saveReleaseNoticeLocalState\(action\)/);
+  assert.doesNotMatch(calendarHtml, /Update notice state could not be saved:[\s\S]{0,120}showToast/);
+});
+
+test("the update Close button is compact and right-aligned", () => {
+  assert.match(calendarHtml, /#releaseNoticeModal \.staff-onboarding-actions button \{[\s\S]*?flex: 0 0 auto;[\s\S]*?width: auto;[\s\S]*?min-width: 86px;/);
+  assert.match(calendarHtml, /\.staff-onboarding-actions \{[\s\S]*?justify-content: flex-end;/);
 });
 
 test("the same release notice version is enforced by the browser and server", () => {
