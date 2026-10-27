@@ -4044,7 +4044,7 @@ exports.twilioSmsStatus = onRequest(
 exports.sendOnlineBookingReminders = onSchedule(
   {
     region: "us-central1",
-    schedule: "every 5 minutes",
+    schedule: "every 15 minutes from 07:00 to 19:00",
     timeZone: SALON_TIME_ZONE,
     maxInstances: 1
   },

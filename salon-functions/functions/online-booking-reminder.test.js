@@ -75,7 +75,8 @@ test("candidate date keys include the next local date when the three-hour window
 
 test("the scheduled sender is idempotent and stores delivery callbacks without exposing them in the UI", () => {
   assert.match(functionsSource, /exports\.sendOnlineBookingReminders = onSchedule/);
-  assert.match(functionsSource, /schedule: "every 5 minutes"/);
+  assert.match(functionsSource, /schedule: "every 15 minutes from 07:00 to 19:00"/);
+  assert.match(functionsSource, /timeZone: SALON_TIME_ZONE/);
   assert.match(functionsSource, /doc\(`\$\{ONLINE_BOOKING_REMINDER_QUEUE_PREFIX\}\$\{appointmentId\}`\)/);
   assert.match(functionsSource, /eventType: "appointment_reminder"/);
   assert.match(functionsSource, /exports\.twilioSmsStatus = onRequest/);
