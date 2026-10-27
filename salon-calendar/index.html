@@ -5004,6 +5004,27 @@ stroke-linejoin="round">
   </div>
 </div>
 
+<div id="releaseNoticeModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="releaseNoticeTitle">
+  <div class="modal-content staff-onboarding-modal-content">
+    <div class="staff-onboarding-header">
+      <h3 id="releaseNoticeTitle" class="staff-onboarding-title">Meet the New Update</h3>
+      <div class="push-permission-language" aria-label="Update language">
+        <button id="releaseNoticeLangEnBtn" type="button" onclick="setReleaseNoticeLanguage('en')">ENG</button>
+        <button id="releaseNoticeLangUkBtn" type="button" onclick="setReleaseNoticeLanguage('uk')">UKR</button>
+        <button id="releaseNoticeLangRuBtn" type="button" onclick="setReleaseNoticeLanguage('ru')">RUS</button>
+      </div>
+    </div>
+    <div id="releaseNoticeBody" class="staff-onboarding-body"></div>
+    <label class="staff-onboarding-dismiss-option">
+      <input id="releaseNoticeDismissCheckbox" type="checkbox">
+      <span id="releaseNoticeDismissLabel">Don't show again</span>
+    </label>
+    <div class="staff-onboarding-actions">
+      <button id="releaseNoticeCloseBtn" type="button" onclick="closeReleaseNotice()">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="staffNotificationsModal" class="modal hidden">
   <div class="modal-content staff-notification-modal-content">
     <h3 class="staff-notification-title">Messages</h3>
@@ -5543,6 +5564,7 @@ const managerLookupClientByPhone = httpsCallable(functions, "managerLookupClient
 const managerGetActivityLogContacts = httpsCallable(functions, "managerGetActivityLogContacts");
 const getStaffActivityLog = httpsCallable(functions, "getStaffActivityLog");
 const setStaffOnboardingState = httpsCallable(functions, "setStaffOnboardingState");
+const setReleaseNoticeState = httpsCallable(functions, "setReleaseNoticeState");
 const getAppointmentClientHistory = httpsCallable(functions, "getAppointmentClientHistory");
 const addDashMonitorAppointment = httpsCallable(functions, "addDashMonitorAppointment");
 const detectStaffChatLanguageCall = httpsCallable(functions, "detectStaffChatLanguage");
@@ -11087,10 +11109,14 @@ const STAFF_NOTIFICATION_KEY_EVENTS = new Set([
 const PUSH_PROMPT_SNOOZE_MS = 24 * 60 * 60 * 1000;
 const PUSH_INVITE_VERSION = 'messages-chat-v3';
 const STAFF_ONBOARDING_VERSION = 'staff-onboarding-v1';
+const RELEASE_NOTICE_VERSION = 'chat-translation-v1';
+const RELEASE_NOTICE_SNOOZE_MS = 4 * 60 * 60 * 1000;
 let messagingInstance = null;
 let pushSetupAttempted = false;
 let pushPermissionLanguage = localStorage.getItem('salonCalendarPushInviteLanguage') || 'en';
 let staffOnboardingLanguage = 'en';
+let releaseNoticeLanguage = 'en';
+let releaseNoticeShowTimer = 0;
 
 function getNotificationReadKey() {
   return currentUserRole === 'manager' ? 'manager' : (currentUserStaffId || currentUserRole || 'user');
@@ -11493,6 +11519,121 @@ function initializeStaffOnboardingForUser(userData) {
   if (dismissCheckbox) dismissCheckbox.checked = false;
   renderStaffOnboarding();
   setTimeout(() => document.getElementById('staffOnboardingModal').classList.remove('hidden'), 450);
+}
+
+function getReleaseNoticeCopy(language = releaseNoticeLanguage) {
+  const copies = {
+    en: {
+      title: 'Meet the New Update',
+      paragraphs: [
+        'Chat messages can now be translated directly in Messenger. Use the language buttons in the top-right corner of a chat message to instantly view it in English, Russian, or Ukrainian—without opening a separate translator.',
+        'Communicating with your team is now easier and faster.'
+      ],
+      dismiss: "Don't show again",
+      close: 'Close'
+    },
+    uk: {
+      title: 'Знайомтеся з новим оновленням',
+      paragraphs: [
+        'Повідомлення чату тепер можна перекладати безпосередньо в Messenger. Скористайтеся кнопками вибору мови у правому верхньому куті повідомлення, щоб миттєво переглянути його англійською, російською або українською — без окремого перекладача.',
+        'Спілкуватися з командою тепер простіше й швидше.'
+      ],
+      dismiss: 'Більше не показувати',
+      close: 'Закрити'
+    },
+    ru: {
+      title: 'Знакомьтесь с новым обновлением',
+      paragraphs: [
+        'Сообщения чата теперь можно переводить прямо в Messenger. Используйте кнопки выбора языка в правом верхнем углу сообщения, чтобы мгновенно посмотреть его на английском, русском или украинском языке — без отдельного переводчика.',
+        'Общаться с командой теперь проще и быстрее.'
+      ],
+      dismiss: 'Больше не показывать',
+      close: 'Закрыть'
+    }
+  };
+  return copies[language] || copies.en;
+}
+
+function renderReleaseNotice() {
+  const copy = getReleaseNoticeCopy();
+  document.getElementById('releaseNoticeTitle').textContent = copy.title;
+  document.getElementById('releaseNoticeBody').innerHTML = copy.paragraphs
+    .map(text => `<p class="staff-onboarding-intro">${escapeHtml(text)}</p>`)
+    .join('');
+  document.getElementById('releaseNoticeDismissLabel').textContent = copy.dismiss;
+  document.getElementById('releaseNoticeCloseBtn').textContent = copy.close;
+  ['en', 'uk', 'ru'].forEach(language => {
+    const suffix = language === 'en' ? 'En' : language === 'uk' ? 'Uk' : 'Ru';
+    document.getElementById(`releaseNoticeLang${suffix}Btn`)
+      .classList.toggle('active', releaseNoticeLanguage === language);
+  });
+}
+
+window.setReleaseNoticeLanguage = language => {
+  releaseNoticeLanguage = ['en', 'uk', 'ru'].includes(language) ? language : 'en';
+  renderReleaseNotice();
+};
+
+function setReleaseNoticeBusy(busy) {
+  document.querySelectorAll('#releaseNoticeModal button, #releaseNoticeModal input').forEach(control => {
+    control.disabled = busy;
+    control.classList.toggle('action-busy', busy);
+  });
+}
+
+window.closeReleaseNotice = async () => {
+  const neverShowAgain = document.getElementById('releaseNoticeDismissCheckbox')?.checked === true;
+  setReleaseNoticeBusy(true);
+  try {
+    await setReleaseNoticeState({
+      version: RELEASE_NOTICE_VERSION,
+      action: neverShowAgain ? 'dismiss' : 'snooze'
+    });
+    document.getElementById('releaseNoticeModal').classList.add('hidden');
+    window.clearTimeout(releaseNoticeShowTimer);
+    if (!neverShowAgain) {
+      releaseNoticeShowTimer = window.setTimeout(
+        showReleaseNoticeWhenReady,
+        RELEASE_NOTICE_SNOOZE_MS
+      );
+    }
+  } catch (error) {
+    console.warn('Update notice state could not be saved:', error);
+    showToast('Please try again.', 'error');
+  } finally {
+    setReleaseNoticeBusy(false);
+  }
+};
+
+function showReleaseNoticeWhenReady() {
+  window.clearTimeout(releaseNoticeShowTimer);
+  const anotherModalIsOpen = Array.from(document.querySelectorAll('.modal:not(#releaseNoticeModal)'))
+    .some(modal => !modal.classList.contains('hidden'));
+  if (anotherModalIsOpen) {
+    releaseNoticeShowTimer = window.setTimeout(showReleaseNoticeWhenReady, 1000);
+    return;
+  }
+  document.getElementById('releaseNoticeModal')?.classList.remove('hidden');
+}
+
+function initializeReleaseNoticeForUser(userData) {
+  if (!userData) return;
+  if (userData.releaseNoticeDismissedVersion === RELEASE_NOTICE_VERSION) return;
+  releaseNoticeLanguage = 'en';
+  const dismissCheckbox = document.getElementById('releaseNoticeDismissCheckbox');
+  if (dismissCheckbox) dismissCheckbox.checked = false;
+  renderReleaseNotice();
+  const snoozedUntil = userData.releaseNoticeSnoozedUntil?.toMillis
+    ? userData.releaseNoticeSnoozedUntil.toMillis()
+    : 0;
+  if (snoozedUntil > Date.now()) {
+    releaseNoticeShowTimer = window.setTimeout(
+      showReleaseNoticeWhenReady,
+      snoozedUntil - Date.now()
+    );
+    return;
+  }
+  releaseNoticeShowTimer = window.setTimeout(showReleaseNoticeWhenReady, 700);
 }
 
 function stripNotificationHtml(value) {
@@ -17144,6 +17285,7 @@ if (bottomOffWorkBtn) {
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('calendar-container').style.display = 'block';
   initializeStaffOnboardingForUser(data);
+  initializeReleaseNoticeForUser(data);
   applyCalendarZoomLevel(calendarZoomLevel, { persist: false, redraw: true });
   updateDeclinedOnlineButton();
   updateCalendarZoomButtonVisibility();
@@ -17296,7 +17438,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-27.2';
+const CALENDAR_APP_VERSION = '2026-10-27.3';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';

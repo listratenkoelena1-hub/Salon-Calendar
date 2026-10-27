@@ -122,6 +122,7 @@ const MAX_PHOTO_BYTES = 1250000;
 const PHOTO_TTL_MS = 24 * 60 * 60 * 1000;
 const STAFF_NOTIFICATION_TTL_MS = 60 * 24 * 60 * 60 * 1000;
 const CHAT_TRANSLATION_CACHE_COLLECTION = "chatTranslations";
+const RELEASE_NOTICE_VERSION = "chat-translation-v1";
 const PUSH_DEVICE_TTL_MS = 120 * 24 * 60 * 60 * 1000;
 const PHOTO_COLLECTION = "onlineBookingPhotos";
 const PHOTO_STORAGE_PREFIX = "online-booking-photos";
@@ -5037,6 +5038,44 @@ exports.setStaffOnboardingState = onCall(
       await userRef.set({
         staffOnboardingSnoozedUntil: Timestamp.fromMillis(Date.now() + 4 * 60 * 60 * 1000),
         staffOnboardingSnoozedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+    }
+
+    return { ok: true, action, version };
+  }
+);
+
+exports.setReleaseNoticeState = onCall(
+  { region: "us-central1" },
+  async request => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "You must be signed in.");
+    }
+    const version = String(request.data?.version || "");
+    const action = String(request.data?.action || "");
+    if (version !== RELEASE_NOTICE_VERSION) {
+      throw new HttpsError("invalid-argument", "Unsupported update notice version.");
+    }
+    if (action !== "dismiss" && action !== "snooze") {
+      throw new HttpsError("invalid-argument", "Unsupported update notice action.");
+    }
+
+    const userRef = db.collection("users").doc(request.auth.uid);
+    const userSnap = await userRef.get();
+    if (!userSnap.exists) {
+      throw new HttpsError("permission-denied", "User profile not found.");
+    }
+
+    if (action === "dismiss") {
+      await userRef.set({
+        releaseNoticeDismissedVersion: version,
+        releaseNoticeDismissedAt: FieldValue.serverTimestamp(),
+        releaseNoticeSnoozedUntil: null
+      }, { merge: true });
+    } else {
+      await userRef.set({
+        releaseNoticeSnoozedUntil: Timestamp.fromMillis(Date.now() + 4 * 60 * 60 * 1000),
+        releaseNoticeSnoozedAt: FieldValue.serverTimestamp()
       }, { merge: true });
     }
 
