@@ -1981,6 +1981,65 @@ body.manager-user #calendarUpdateBtn {
   white-space: pre-wrap;
 }
 
+.staff-message-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 3px;
+}
+
+.staff-message-chat-sender {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staff-message-language-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.staff-message-language-button {
+  min-width: 29px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid rgba(47,111,103,0.28);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.74);
+  color: #2f6f67;
+  font-size: 10px;
+  line-height: 20px;
+  font-weight: 850;
+  text-align: center;
+  cursor: pointer;
+}
+
+.staff-message-language-button.active {
+  border-color: #2f6f67;
+  background: #2f6f67;
+  color: #fff;
+}
+
+.staff-message-language-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.staff-message-translation {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(47,111,103,0.15);
+  color: #214f49;
+  font-size: 14px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+
 .staff-notification-photo {
   display: inline-block;
   margin-top: 7px;
@@ -5486,6 +5545,8 @@ const getStaffActivityLog = httpsCallable(functions, "getStaffActivityLog");
 const setStaffOnboardingState = httpsCallable(functions, "setStaffOnboardingState");
 const getAppointmentClientHistory = httpsCallable(functions, "getAppointmentClientHistory");
 const addDashMonitorAppointment = httpsCallable(functions, "addDashMonitorAppointment");
+const detectStaffChatLanguageCall = httpsCallable(functions, "detectStaffChatLanguage");
+const translateStaffChatMessageCall = httpsCallable(functions, "translateStaffChatMessage");
 const FCM_VAPID_KEY = "";
 // Operational pause: keep Telegram code and data intact while staffMessages
 // remains the active internal notification channel. Set to false to resume.
@@ -5541,6 +5602,7 @@ let staffMessagesAcknowledgedIds = new Set();
 let staffMessagesMayClearUnread = false;
 let staffMessagesScrollToLatestPending = false;
 let staffMessagesLatestAnchorFrame = 0;
+const staffChatTranslationState = new Map();
 let staffMessageLatestPages = { legacy: [], canonical: [] };
 let staffMessageOldestSnapshots = { legacy: null, canonical: null };
 let staffMessageHasEarlierBySource = { legacy: false, canonical: false };
@@ -12270,6 +12332,114 @@ async function hydrateStaffMessageMedia(root = document) {
   }));
 }
 
+const STAFF_CHAT_LANGUAGE_LABELS = { en: 'EN', ru: 'RU', uk: 'UA' };
+
+function isTranslatableStaffChatMessage(item) {
+  if (!item || item._collection !== 'staffMessages') return false;
+  if (item.eventType !== 'staff_message' || item.source !== 'calendar_chat') return false;
+  const text = String(getStaffNotificationDisplayBody(item) || '').trim();
+  if (!text) return false;
+  const attachmentType = String(item.attachment?.type || '');
+  return !(attachmentType && (text === 'Photo' || text === 'Voice message'));
+}
+
+function getStaffChatTranslationEntry(item) {
+  const sourceText = String(getStaffNotificationDisplayBody(item) || '').trim();
+  let entry = staffChatTranslationState.get(item.id);
+  if (!entry || entry.sourceText !== sourceText) {
+    entry = {
+      sourceText,
+      sourceLanguage: '',
+      targetLanguages: [],
+      loadingLanguage: false,
+      detectionFailed: false,
+      translatingLanguage: '',
+      activeLanguage: '',
+      translations: {}
+    };
+    staffChatTranslationState.set(item.id, entry);
+  }
+  return entry;
+}
+
+function buildStaffChatTranslationActions(item) {
+  if (!isTranslatableStaffChatMessage(item)) return '';
+  const entry = getStaffChatTranslationEntry(item);
+  if (!entry.sourceLanguage) return '';
+  return entry.targetLanguages.map(language => {
+    const active = entry.activeLanguage === language;
+    const busy = entry.translatingLanguage === language;
+    const label = STAFF_CHAT_LANGUAGE_LABELS[language] || String(language).toUpperCase();
+    return `<button type="button" class="staff-message-language-button ${active ? 'active' : ''}" data-chat-translate-language="${escapeHtml(language)}" data-chat-translate-message-id="${escapeHtml(item.id)}" aria-label="Translate message to ${escapeHtml(label)}" ${entry.translatingLanguage ? 'disabled' : ''}>${busy ? '…' : escapeHtml(label)}</button>`;
+  }).join('');
+}
+
+function buildStaffChatTranslationBody(item) {
+  if (!isTranslatableStaffChatMessage(item)) return '';
+  const entry = getStaffChatTranslationEntry(item);
+  const translatedText = entry.activeLanguage ? entry.translations[entry.activeLanguage] : '';
+  return translatedText
+    ? `<div class="staff-message-translation" lang="${escapeHtml(entry.activeLanguage)}">${escapeHtml(translatedText)}</div>`
+    : '';
+}
+
+async function detectVisibleStaffChatLanguages(items) {
+  const pending = items
+    .filter(isTranslatableStaffChatMessage)
+    .map(item => ({ item, entry: getStaffChatTranslationEntry(item) }))
+    .filter(({ entry }) => !entry.sourceLanguage && !entry.loadingLanguage && !entry.detectionFailed)
+    .slice(0, 4);
+  if (!pending.length) return;
+  pending.forEach(({ entry }) => { entry.loadingLanguage = true; });
+  await Promise.all(pending.map(async ({ item, entry }) => {
+    try {
+      const result = await detectStaffChatLanguageCall({ messageId: item.id });
+      const data = result?.data || {};
+      entry.sourceLanguage = String(data.sourceLanguage || '');
+      entry.targetLanguages = Array.isArray(data.targetLanguages) ? data.targetLanguages.slice(0, 2) : [];
+    } catch (error) {
+      console.warn('Chat language could not be detected:', error);
+      entry.detectionFailed = true;
+    } finally {
+      entry.loadingLanguage = false;
+    }
+  }));
+  renderStaffNotifications();
+}
+
+async function handleStaffChatTranslation(messageId, targetLanguage) {
+  const item = staffNotifications.find(entry => entry.id === messageId);
+  if (!isTranslatableStaffChatMessage(item)) return;
+  const entry = getStaffChatTranslationEntry(item);
+  if (entry.activeLanguage === targetLanguage) {
+    entry.activeLanguage = '';
+    renderStaffNotifications();
+    return;
+  }
+  if (entry.translations[targetLanguage]) {
+    entry.activeLanguage = targetLanguage;
+    renderStaffNotifications();
+    return;
+  }
+  entry.translatingLanguage = targetLanguage;
+  renderStaffNotifications();
+  try {
+    const result = await translateStaffChatMessageCall({ messageId, targetLanguage });
+    const data = result?.data || {};
+    const translatedText = String(data.translatedText || '').trim();
+    if (!translatedText) throw new Error('Empty translation');
+    entry.sourceLanguage = String(data.sourceLanguage || entry.sourceLanguage);
+    entry.translations[targetLanguage] = translatedText;
+    entry.activeLanguage = targetLanguage;
+  } catch (error) {
+    console.warn('Chat message could not be translated:', error);
+    showToast('Translation is temporarily unavailable.', 'warning');
+  } finally {
+    entry.translatingLanguage = '';
+    renderStaffNotifications();
+  }
+}
+
 function renderStaffNotifications() {
   const list = document.getElementById('staffNotificationsList');
   if (!list) return;
@@ -12344,12 +12514,18 @@ function renderStaffNotifications() {
       ? ''
       : `<button type="button" class="staff-notification-pin-action" data-pin-notification-id="${escapeHtml(item.id)}" aria-label="${isPinned ? 'Unpin message' : 'Pin message'}">${buildStaffPinIconSvg()}</button>
         <button type="button" class="staff-notification-reply-action" data-reply-notification-id="${escapeHtml(item.id)}" aria-label="Reply to message">${buildStaffReplyIconSvg()}</button>`;
+    const translatableChat = isTranslatableStaffChatMessage(item);
+    const messageBody = translatableChat
+      ? `<div class="staff-message-chat-header"><strong class="staff-message-chat-sender">${escapeHtml(item.senderLabel || 'Message')}</strong><div class="staff-message-language-actions">${buildStaffChatTranslationActions(item)}</div></div>
+        <div class="staff-notification-body">${escapeHtml(getStaffNotificationDisplayBody(item))}</div>
+        ${buildStaffChatTranslationBody(item)}`
+      : `<div class="staff-notification-body">${item.senderLabel ? '<strong>' + escapeHtml(item.senderLabel) + '</strong>\n' : ''}${escapeHtml(getStaffNotificationDisplayBody(item))}</div>`;
     htmlParts.push(`
       <div class="staff-notification-card ${priority} ${unread ? 'unread' : ''} ${isPinned ? 'pinned' : ''}" style="${getStaffChatCardStyle(item)}" data-notification-id="${escapeHtml(item.id)}">
         ${cardActions}
         ${kindLabel}
         ${replyQuote}
-        <div class="staff-notification-body">${item.senderLabel ? '<strong>' + escapeHtml(item.senderLabel) + '</strong>\n' : ''}${escapeHtml(getStaffNotificationDisplayBody(item))}</div>
+        ${messageBody}
         ${buildStaffMessageMedia(item)}
         ${photo}
         ${dashConfirmAction}
@@ -12366,6 +12542,7 @@ function renderStaffNotifications() {
       if (event.target.closest('[data-pin-notification-id]')) return;
       if (event.target.closest('[data-dash-confirm-id]')) return;
       if (event.target.closest('[data-dash-add-receipt-id]')) return;
+      if (event.target.closest('[data-chat-translate-language]')) return;
       if (card.dataset.swipeHandled === 'true') {
         card.dataset.swipeHandled = 'false';
         return;
@@ -12416,6 +12593,17 @@ function renderStaffNotifications() {
       );
     });
   });
+  list.querySelectorAll('[data-chat-translate-language]').forEach(button => {
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      handleStaffChatTranslation(
+        button.dataset.chatTranslateMessageId,
+        button.dataset.chatTranslateLanguage
+      );
+    });
+  });
+  void detectVisibleStaffChatLanguages(visibleNotifications);
   const mediaHydration = hydrateStaffMessageMedia();
   if (keepLatest) {
     scrollStaffNotificationsToBottom();
@@ -17108,7 +17296,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-26.1';
+const CALENDAR_APP_VERSION = '2026-10-27.2';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';
@@ -17119,6 +17307,14 @@ function showCalendarUpdateButton() {
   button.disabled = false;
   button.textContent = 'Update';
   button.classList.remove('hidden');
+}
+
+function hideCalendarUpdateButton() {
+  const button = document.getElementById('calendarUpdateBtn');
+  if (!button) return;
+  button.disabled = false;
+  button.textContent = 'Update';
+  button.classList.add('hidden');
 }
 
 function reloadCalendarForUpdate() {
@@ -17146,7 +17342,12 @@ async function checkCalendarAppVersion({ autoApply = false } = {}) {
     if (!response.ok) return;
     const payload = await response.json();
     const availableVersion = String(payload?.version || '').trim();
-    if (!availableVersion || availableVersion === CALENDAR_APP_VERSION) return;
+    if (!availableVersion) return;
+    if (availableVersion === CALENDAR_APP_VERSION) {
+      calendarAvailableVersion = '';
+      hideCalendarUpdateButton();
+      return;
+    }
     calendarAvailableVersion = availableVersion;
     offerCalendarUpdate({ autoApply });
   } catch (error) {
@@ -17201,7 +17402,8 @@ if ('serviceWorker' in navigator) {
       reloadCalendarForUpdate();
       return;
     }
-    showCalendarUpdateButton();
+    hideCalendarUpdateButton();
+    checkCalendarAppVersion();
   });
 
   window.addEventListener('load', function() {

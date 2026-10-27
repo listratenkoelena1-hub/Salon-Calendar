@@ -78,6 +78,14 @@ const {
   buildStaffWelcomeEmail
 } = require("./staff-onboarding-core");
 const {
+  detectChatLanguage,
+  getChatLanguageOptions,
+  getChatTextHash,
+  normalizeChatLanguage,
+  normalizeChatText,
+  translateChatText
+} = require("./staff-chat-translation");
+const {
   enqueueDashReconciliation,
   enqueueDashSource,
   dateKeyInTimeZone,
@@ -113,6 +121,7 @@ const MAX_PHOTO_UPLOADS = 3;
 const MAX_PHOTO_BYTES = 1250000;
 const PHOTO_TTL_MS = 24 * 60 * 60 * 1000;
 const STAFF_NOTIFICATION_TTL_MS = 60 * 24 * 60 * 60 * 1000;
+const CHAT_TRANSLATION_CACHE_COLLECTION = "chatTranslations";
 const PUSH_DEVICE_TTL_MS = 120 * 24 * 60 * 60 * 1000;
 const PHOTO_COLLECTION = "onlineBookingPhotos";
 const PHOTO_STORAGE_PREFIX = "online-booking-photos";
@@ -1009,6 +1018,181 @@ async function requireManagerActor(request) {
   }
   return actor;
 }
+
+function getStaffChatTranslationCacheRef(messageId) {
+  return db.collection("dashSyncConfig")
+    .doc("runtime")
+    .collection(CHAT_TRANSLATION_CACHE_COLLECTION)
+    .doc(messageId);
+}
+
+function canActorReadStaffChatMessage(actor, message) {
+  if (actor.role === "manager") return message.visibleToManager !== false;
+  if (actor.role !== "staff" || !actor.staffId) return false;
+  const audience = Array.isArray(message.audienceStaffIds)
+    ? message.audienceStaffIds.map(value => String(value))
+    : [];
+  return message.visibleToAllStaff === true ||
+    audience.includes(actor.staffId) ||
+    String(message.recipientStaffId || "") === actor.staffId;
+}
+
+async function loadAuthorizedStaffChatMessage(request) {
+  const actor = await getAuthorizedCalendarActor(request);
+  if (!["manager", "staff"].includes(actor.role)) {
+    throw new HttpsError("permission-denied", "Chat translation is available to managers and staff.");
+  }
+
+  const messageId = assertAppointmentToken(request.data?.messageId, "messageId", { min: 12, max: 100 });
+  const snapshot = await db.collection("staffMessages").doc(messageId).get();
+  if (!snapshot.exists) throw new HttpsError("not-found", "Chat message not found.");
+
+  const message = snapshot.data() || {};
+  if (message.eventType !== "staff_message" || message.source !== "calendar_chat") {
+    throw new HttpsError("failed-precondition", "Only ordinary chat messages can be translated.");
+  }
+  if (!canActorReadStaffChatMessage(actor, message)) {
+    throw new HttpsError("permission-denied", "This chat message is not available to this user.");
+  }
+
+  const text = normalizeChatText(message.body);
+  if (!text) throw new HttpsError("failed-precondition", "This chat message has no text to translate.");
+  const attachmentType = String(message.attachment?.type || "");
+  if (attachmentType && ["Photo", "Voice message"].includes(text)) {
+    throw new HttpsError("failed-precondition", "Attachment-only messages cannot be translated.");
+  }
+
+  return { actor, messageId, message, text, sourceHash: getChatTextHash(text) };
+}
+
+async function getGoogleCloudTranslationAccessToken() {
+  const token = await admin.credential.applicationDefault().getAccessToken();
+  if (!token?.access_token) throw new Error("Google Cloud access token is unavailable.");
+  return token.access_token;
+}
+
+function getGoogleCloudProjectId() {
+  return process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "rosesnails-calendar";
+}
+
+async function detectAndCacheStaffChatLanguage(context, cacheData = {}) {
+  const accessToken = await getGoogleCloudTranslationAccessToken();
+  const sourceLanguage = await detectChatLanguage({
+    projectId: getGoogleCloudProjectId(),
+    accessToken,
+    text: context.text,
+    fetchImpl: fetch
+  });
+  const cacheRef = getStaffChatTranslationCacheRef(context.messageId);
+  const translations = cacheData.sourceHash === context.sourceHash && cacheData.translations
+    ? cacheData.translations
+    : {};
+  await cacheRef.set({
+    messageId: context.messageId,
+    sourceHash: context.sourceHash,
+    sourceLanguage,
+    translations,
+    updatedAt: FieldValue.serverTimestamp(),
+    expiresAt: context.message.expiresAt || Timestamp.fromMillis(Date.now() + STAFF_NOTIFICATION_TTL_MS)
+  }, { merge: true });
+  return sourceLanguage;
+}
+
+exports.detectStaffChatLanguage = onCall(
+  { region: "us-central1", maxInstances: 10 },
+  async request => {
+    const context = await loadAuthorizedStaffChatMessage(request);
+    const cacheRef = getStaffChatTranslationCacheRef(context.messageId);
+    const cacheSnapshot = await cacheRef.get();
+    const cacheData = cacheSnapshot.exists ? cacheSnapshot.data() || {} : {};
+    try {
+      const cachedLanguage = cacheData.sourceHash === context.sourceHash
+        ? normalizeChatLanguage(cacheData.sourceLanguage)
+        : "";
+      const sourceLanguage = cachedLanguage || await detectAndCacheStaffChatLanguage(context, cacheData);
+      return {
+        ok: true,
+        sourceLanguage,
+        targetLanguages: getChatLanguageOptions(sourceLanguage),
+        cached: Boolean(cachedLanguage)
+      };
+    } catch (error) {
+      console.error("Staff chat language detection failed:", error);
+      throw new HttpsError("unavailable", "Translation is temporarily unavailable.");
+    }
+  }
+);
+
+exports.translateStaffChatMessage = onCall(
+  { region: "us-central1", maxInstances: 10 },
+  async request => {
+    const context = await loadAuthorizedStaffChatMessage(request);
+    const targetLanguage = normalizeChatLanguage(request.data?.targetLanguage);
+    if (!targetLanguage) throw new HttpsError("invalid-argument", "Unsupported target language.");
+
+    const cacheRef = getStaffChatTranslationCacheRef(context.messageId);
+    let cacheSnapshot = await cacheRef.get();
+    let cacheData = cacheSnapshot.exists ? cacheSnapshot.data() || {} : {};
+    try {
+      let sourceLanguage = cacheData.sourceHash === context.sourceHash
+        ? normalizeChatLanguage(cacheData.sourceLanguage)
+        : "";
+      if (!sourceLanguage) {
+        sourceLanguage = await detectAndCacheStaffChatLanguage(context, cacheData);
+        cacheSnapshot = await cacheRef.get();
+        cacheData = cacheSnapshot.exists ? cacheSnapshot.data() || {} : {};
+      }
+      if (targetLanguage === sourceLanguage) {
+        return { ok: true, sourceLanguage, targetLanguage, translatedText: context.text, cached: true };
+      }
+      if (!getChatLanguageOptions(sourceLanguage).includes(targetLanguage)) {
+        throw new HttpsError("invalid-argument", "Unsupported target language.");
+      }
+
+      const cachedTranslation = cacheData.sourceHash === context.sourceHash
+        ? String(cacheData.translations?.[targetLanguage] || "").trim()
+        : "";
+      if (cachedTranslation) {
+        return { ok: true, sourceLanguage, targetLanguage, translatedText: cachedTranslation, cached: true };
+      }
+
+      const accessToken = await getGoogleCloudTranslationAccessToken();
+      const translated = await translateChatText({
+        projectId: getGoogleCloudProjectId(),
+        accessToken,
+        text: context.text,
+        targetLanguage,
+        fetchImpl: fetch
+      });
+      sourceLanguage = normalizeChatLanguage(translated.detectedLanguage) || sourceLanguage;
+      const latestSnapshot = await cacheRef.get();
+      const latest = latestSnapshot.exists ? latestSnapshot.data() || {} : {};
+      const translations = latest.sourceHash === context.sourceHash && latest.translations
+        ? { ...latest.translations }
+        : {};
+      translations[targetLanguage] = translated.translatedText;
+      await cacheRef.set({
+        messageId: context.messageId,
+        sourceHash: context.sourceHash,
+        sourceLanguage,
+        translations,
+        updatedAt: FieldValue.serverTimestamp(),
+        expiresAt: context.message.expiresAt || Timestamp.fromMillis(Date.now() + STAFF_NOTIFICATION_TTL_MS)
+      }, { merge: true });
+      return {
+        ok: true,
+        sourceLanguage,
+        targetLanguage,
+        translatedText: translated.translatedText,
+        cached: false
+      };
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      console.error("Staff chat translation failed:", error);
+      throw new HttpsError("unavailable", "Translation is temporarily unavailable.");
+    }
+  }
+);
 
 function getAnyoneRemainingCapacity({
   date,
