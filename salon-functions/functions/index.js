@@ -86,6 +86,11 @@ const {
   translateChatText
 } = require("./staff-chat-translation");
 const {
+  buildOnlineBookingReminderBody,
+  getReminderDateKeys,
+  isOnlineBookingReminderDue
+} = require("./online-booking-reminder");
+const {
   enqueueDashReconciliation,
   enqueueDashSource,
   dateKeyInTimeZone,
@@ -131,6 +136,8 @@ const PHOTO_BUCKET_NAME = "rosesnails-calendar.firebasestorage.app";
 const EMAIL_QUEUE_COLLECTION = "EmailQueue";
 const STAFF_CALENDAR_URL = "https://rosesnails-calendar.web.app";
 const SMS_QUEUE_COLLECTION = "SmsQueue";
+const ONLINE_BOOKING_REMINDER_QUEUE_PREFIX = "online-booking-reminder-";
+const SMS_STATUS_CALLBACK_URL = "https://us-central1-rosesnails-calendar.cloudfunctions.net/twilioSmsStatus";
 const BOOKING_VERIFICATION_COLLECTION = "onlineBookingVerificationChallenges";
 const BOOKING_VERIFICATION_RATE_COLLECTION = "onlineBookingVerificationRateLimits";
 const BOOKING_VERIFICATION_CODE_TTL_MS = 10 * 60 * 1000;
@@ -407,7 +414,7 @@ return {
 };
 }
 
-async function sendSmsViaTwilio(smsDoc) {
+async function sendSmsViaTwilio(smsDoc, { queueId = "" } = {}) {
 const accountSid = TWILIO_ACCOUNT_SID.value();
 const authToken = TWILIO_AUTH_TOKEN.value();
 if (!accountSid || !authToken || !TWILIO_FROM_NUMBER) {
@@ -419,6 +426,9 @@ const body = new URLSearchParams({
   From: TWILIO_FROM_NUMBER,
   Body: smsDoc.body
 });
+if (queueId) {
+  body.set("StatusCallback", `${SMS_STATUS_CALLBACK_URL}?queueId=${encodeURIComponent(queueId)}`);
+}
 const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
 const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
   method: "POST",
@@ -3921,7 +3931,7 @@ exports.smsQueueCreated = onDocumentCreated(
     }
 
     try {
-      const result = await sendSmsViaTwilio(data);
+      const result = await sendSmsViaTwilio(data, { queueId: event.params.id });
       if (result && result.skipped) {
         console.warn("SMS queue skipped by provider config", {
           id: event.params.id,
@@ -3930,6 +3940,7 @@ exports.smsQueueCreated = onDocumentCreated(
         });
         await ref.set({
           status: "skipped",
+          deliveryStatus: "not_sent",
           skippedAt: FieldValue.serverTimestamp(),
           error: result.reason || "skipped",
           to: FieldValue.delete(),
@@ -3961,11 +3972,165 @@ exports.smsQueueCreated = onDocumentCreated(
       });
       await ref.set({
         status: "error",
+        deliveryStatus: "send_failed",
         failedAt: FieldValue.serverTimestamp(),
         error: error && error.message ? error.message : String(error),
         to: FieldValue.delete(),
         body: FieldValue.delete()
       }, { merge: true });
+    }
+  }
+);
+
+exports.twilioSmsStatus = onRequest(
+  {
+    region: "us-central1",
+    invoker: "public",
+    secrets: [TWILIO_AUTH_TOKEN]
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).send("Method Not Allowed");
+      return;
+    }
+    if (!validateTwilioSignature(req)) {
+      res.status(403).send("Invalid Twilio signature");
+      return;
+    }
+
+    const queueId = String(req.query.queueId || "").trim();
+    const messageSid = readTwilioParam(req, "MessageSid");
+    const messageStatus = readTwilioParam(req, "MessageStatus").toLowerCase();
+    const errorCode = readTwilioParam(req, "ErrorCode");
+    const errorMessage = readTwilioParam(req, "ErrorMessage").slice(0, 500);
+    if (!queueId || !messageSid || !messageStatus) {
+      res.status(400).send("Missing status fields");
+      return;
+    }
+
+    const queueRef = db.collection(SMS_QUEUE_COLLECTION).doc(queueId);
+    const queueSnap = await queueRef.get();
+    if (!queueSnap.exists) {
+      res.status(404).send("Unknown SMS queue item");
+      return;
+    }
+    const queueData = queueSnap.data() || {};
+    if (queueData.providerMessageId && queueData.providerMessageId !== messageSid) {
+      res.status(409).send("SMS provider id mismatch");
+      return;
+    }
+
+    const update = {
+      providerMessageId: messageSid,
+      providerStatus: messageStatus,
+      deliveryStatus: messageStatus,
+      deliveryUpdatedAt: FieldValue.serverTimestamp()
+    };
+    if (messageStatus === "delivered") {
+      update.deliveredAt = FieldValue.serverTimestamp();
+      update.deliveryFailedAt = FieldValue.delete();
+      update.providerErrorCode = FieldValue.delete();
+      update.providerErrorMessage = FieldValue.delete();
+    } else if (["undelivered", "failed"].includes(messageStatus)) {
+      update.deliveryFailedAt = FieldValue.serverTimestamp();
+      update.providerErrorCode = errorCode || null;
+      update.providerErrorMessage = errorMessage || null;
+    }
+    await queueRef.set(update, { merge: true });
+    res.status(200).type("text/xml").send("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>");
+  }
+);
+
+exports.sendOnlineBookingReminders = onSchedule(
+  {
+    region: "us-central1",
+    schedule: "every 5 minutes",
+    timeZone: SALON_TIME_ZONE,
+    maxInstances: 1
+  },
+  async () => {
+    const now = new Date();
+    const dateKeys = getReminderDateKeys(now, SALON_TIME_ZONE);
+    const appointmentSnaps = await Promise.all(dateKeys.map(date => (
+      db.collection("appointments").where("date", "==", date).get()
+    )));
+    const candidates = appointmentSnaps.flatMap(snapshot => snapshot.docs);
+    if (!candidates.length) return;
+
+    const staffSnap = await db.collection("staff").get();
+    const staffRecords = staffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+    let queued = 0;
+    let duplicates = 0;
+    let skipped = 0;
+
+    for (const candidate of candidates) {
+      if (!isOnlineBookingReminderDue(candidate.data(), { now, timeZone: SALON_TIME_ZONE })) continue;
+      const appointmentId = candidate.id;
+      const appointmentRef = candidate.ref;
+      const privateRef = db.collection(APPOINTMENT_PRIVATE_COLLECTION).doc(appointmentId);
+      const queueRef = db.collection(SMS_QUEUE_COLLECTION)
+        .doc(`${ONLINE_BOOKING_REMINDER_QUEUE_PREFIX}${appointmentId}`);
+
+      const outcome = await db.runTransaction(async tx => {
+        const [appointmentSnap, privateSnap, queueSnap] = await Promise.all([
+          tx.get(appointmentRef),
+          tx.get(privateRef),
+          tx.get(queueRef)
+        ]);
+        if (queueSnap.exists) return "duplicate";
+        if (!appointmentSnap.exists) return "skipped";
+        const appointment = appointmentSnap.data() || {};
+        if (!isOnlineBookingReminderDue(appointment, { now, timeZone: SALON_TIME_ZONE })) {
+          return "skipped";
+        }
+
+        const privateContact = privateSnap.exists ? privateSnap.data() || {} : {};
+        const rawPhone = privateContact.phoneDisplay || privateContact.phoneNormalized || appointment.phone || "";
+        const to = normalizePhoneToE164(rawPhone);
+        const staffName = getStaffName(staffRecords, appointment.staffId) || "your technician";
+        const body = buildOnlineBookingReminderBody({
+          date: appointment.date,
+          start: appointment.start,
+          staffName,
+          salonPhone: SALON_PHONE_DISPLAY
+        });
+        tx.create(queueRef, {
+          status: to ? "pending" : "skipped",
+          deliveryStatus: to ? "pending" : "not_sent",
+          to: to || null,
+          from: TWILIO_FROM_NUMBER,
+          body: to ? body : null,
+          eventType: "appointment_reminder",
+          entityType: "appointment",
+          entityId: appointmentId,
+          phoneLast4: getPhoneLast4(rawPhone),
+          bookingDate: appointment.date,
+          bookingTime: slotToTime(appointment.start),
+          staffId: appointment.staffId || null,
+          staffName,
+          source: "onlineBookingReminder",
+          reminderLeadMinutes: 180,
+          createdAt: FieldValue.serverTimestamp(),
+          ...(to ? {} : {
+            skippedAt: FieldValue.serverTimestamp(),
+            error: "missing_sms_recipient"
+          })
+        });
+        return to ? "queued" : "skipped";
+      });
+
+      if (outcome === "queued") queued += 1;
+      else if (outcome === "duplicate") duplicates += 1;
+      else skipped += 1;
+    }
+
+    if (queued || duplicates || skipped) {
+      console.info("Online booking reminder scan complete", {
+        candidateCount: candidates.length,
+        queued,
+        duplicates,
+        skipped
+      });
     }
   }
 );
