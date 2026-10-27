@@ -17296,7 +17296,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-10-27.1';
+const CALENDAR_APP_VERSION = '2026-10-27.2';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';
@@ -17307,6 +17307,14 @@ function showCalendarUpdateButton() {
   button.disabled = false;
   button.textContent = 'Update';
   button.classList.remove('hidden');
+}
+
+function hideCalendarUpdateButton() {
+  const button = document.getElementById('calendarUpdateBtn');
+  if (!button) return;
+  button.disabled = false;
+  button.textContent = 'Update';
+  button.classList.add('hidden');
 }
 
 function reloadCalendarForUpdate() {
@@ -17334,7 +17342,12 @@ async function checkCalendarAppVersion({ autoApply = false } = {}) {
     if (!response.ok) return;
     const payload = await response.json();
     const availableVersion = String(payload?.version || '').trim();
-    if (!availableVersion || availableVersion === CALENDAR_APP_VERSION) return;
+    if (!availableVersion) return;
+    if (availableVersion === CALENDAR_APP_VERSION) {
+      calendarAvailableVersion = '';
+      hideCalendarUpdateButton();
+      return;
+    }
     calendarAvailableVersion = availableVersion;
     offerCalendarUpdate({ autoApply });
   } catch (error) {
@@ -17389,7 +17402,8 @@ if ('serviceWorker' in navigator) {
       reloadCalendarForUpdate();
       return;
     }
-    showCalendarUpdateButton();
+    hideCalendarUpdateButton();
+    checkCalendarAppVersion();
   });
 
   window.addEventListener('load', function() {

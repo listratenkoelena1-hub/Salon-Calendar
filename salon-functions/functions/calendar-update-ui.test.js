@@ -21,6 +21,7 @@ const versionManifest = JSON.parse(fs.readFileSync(
 test("calendar update control is hidden until a new version is ready", () => {
   assert.match(calendarHtml, /id="calendarUpdateBtn"[\s\S]*?class="hidden"/);
   assert.match(calendarHtml, /function showCalendarUpdateButton\(\)/);
+  assert.match(calendarHtml, /function hideCalendarUpdateButton\(\)/);
   assert.match(calendarHtml, /registration\.waiting && navigator\.serviceWorker\.controller/);
   assert.match(calendarHtml, /newWorker\.state === 'installed' && navigator\.serviceWorker\.controller/);
 });
@@ -44,7 +45,7 @@ test("Update activates the waiting worker and reloads after controller change", 
 test("service worker waits for the user's update action", () => {
   assert.doesNotMatch(serviceWorkerSource, /addEventListener\('install'[\s\S]*?skipWaiting/);
   assert.match(serviceWorkerSource, /event\.data\.type === 'SKIP_WAITING'/);
-  assert.match(serviceWorkerSource, /salon-cache-v6/);
+  assert.match(serviceWorkerSource, /salon-cache-v7/);
 });
 
 test("calendar checks a no-cache release manifest independently of the service worker", () => {
@@ -54,6 +55,12 @@ test("calendar checks a no-cache release manifest independently of the service w
   assert.match(calendarHtml, /visibilityState === 'visible'/);
   const embeddedVersion = calendarHtml.match(/const CALENDAR_APP_VERSION = '([^']+)'/)?.[1];
   assert.equal(embeddedVersion, versionManifest.version);
+});
+
+test("the Update control clears once the loaded release matches the manifest", () => {
+  assert.match(calendarHtml, /availableVersion === CALENDAR_APP_VERSION[\s\S]*?calendarAvailableVersion = '';[\s\S]*?hideCalendarUpdateButton\(\)/);
+  assert.match(calendarHtml, /addEventListener\('controllerchange'[\s\S]*?hideCalendarUpdateButton\(\);[\s\S]*?checkCalendarAppVersion\(\)/);
+  assert.doesNotMatch(calendarHtml, /addEventListener\('controllerchange'[\s\S]*?showCalendarUpdateButton\(\);/);
 });
 
 test("a reopened or foregrounded calendar applies a pending update automatically", () => {
