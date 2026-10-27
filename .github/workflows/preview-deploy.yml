@@ -6,7 +6,6 @@ on:
       - main
     paths:
       - 'salon-calendar/**'
-      - 'salon-functions/**'
       - '.github/workflows/preview-deploy.yml'
 
 jobs:
@@ -26,22 +25,6 @@ jobs:
         run: echo "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-key.json"
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-
-      - name: Install translation function dependencies
-        if: github.ref_name == 'feature/chat-translation-preview'
-        working-directory: salon-functions/functions
-        run: npm ci
-
-      - name: Deploy preview translation functions
-        if: github.ref_name == 'feature/chat-translation-preview'
-        working-directory: salon-functions
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-key.json
-        run: |
-          firebase deploy \
-            --only functions:detectStaffChatLanguage,functions:translateStaffChatMessage \
-            --project rosesnails-calendar \
-            --non-interactive
 
       - name: Deploy to preview channel
         working-directory: salon-calendar
