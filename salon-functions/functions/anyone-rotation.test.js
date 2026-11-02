@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { selectAnyoneCandidate, sortAnyoneCandidates } = require("./anyone-rotation");
+const { rotateAnyoneCandidates, selectAnyoneCandidate, sortAnyoneCandidates } = require("./anyone-rotation");
 
 test("Anyone candidates follow the manager's staff order", () => {
   const ordered = sortAnyoneCandidates([
@@ -21,6 +21,18 @@ test("Anyone rotation starts after the previous technician and wraps", () => {
   ];
   assert.equal(selectAnyoneCandidate(candidates, "lan").id, "natalia");
   assert.equal(selectAnyoneCandidate(candidates, "olena").id, "lan");
+});
+
+test("Anyone candidate rotation exposes every technician in fair order for split services", () => {
+  const candidates = [
+    { id: "olena", name: "Olena", order: 3 },
+    { id: "lan", name: "Lan", order: 1 },
+    { id: "natalia", name: "Natalia", order: 2 }
+  ];
+  assert.deepEqual(
+    rotateAnyoneCandidates(candidates, "lan").map(candidate => candidate.id),
+    ["natalia", "olena", "lan"]
+  );
 });
 
 test("Anyone rotation skips unavailable technicians", () => {

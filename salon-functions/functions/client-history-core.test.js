@@ -122,6 +122,15 @@ test("recognizes common typed manicure and pedicure descriptions", () => {
   }).feet.key, "regular_polish");
 });
 
+test("treats standalone nails and powder wording as a full nail extension service", () => {
+  assert.equal(parseServiceIntent("nails").hands.key, "extensions");
+  assert.equal(parseServiceIntent("nail").hands.key, "extensions");
+  assert.equal(parseServiceIntent("powder").hands.key, "extensions");
+  assert.equal(parseServiceIntent("powder nails").hands.key, "extensions");
+  assert.equal(parseServiceIntent("powder nails with design").hands.key, "extensions");
+  assert.equal(parseServiceIntent("cut nails").hands.key, "generic_manicure");
+});
+
 test("does not learn a one-nail repair as the client's usual hand service", () => {
   const summary = summarizeClientHistory([
     { status: "confirmed", staffId: "natasha", note: "One nail extension" },

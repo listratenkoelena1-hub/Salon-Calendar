@@ -3662,7 +3662,7 @@
       const hasAcrylicWork = hasText(/acrylic|acrylic powder|акрил/i);
       const hasHardGelOrRefillWork = hasText(/hard gel|builder gel|gel overlay|nail extension|full set|new set|refill|fill|correction|\bf\b|\br\b|коррекц|наращ/i);
       const hasPedicureWork = hasText(/pedicure|\bpedi\b|\bp\b|\bpm\b|\bmp\b|toe|toenail|педикюр/i) || selectedBaseGroups.includes('pedicure');
-      const hasManicureWork = hasText(/manicure|\bmani\b|\bm\b|\bpm\b|\bmp\b|nail|gel polish|shellac|regular polish|change color|french|design|shape|маникюр|ногт/i) || selectedBaseGroups.includes('manicure') || hasHardGelOrRefillWork;
+      const hasManicureWork = hasText(/manicure|\bmani\b|\bm\b|\bpm\b|\bmp\b|nail|powder|gel polish|shellac|regular polish|change color|french|design|shape|маникюр|ногт/i) || selectedBaseGroups.includes('manicure') || hasHardGelOrRefillWork;
       const hasExplicitManicureWork = hasText(/manicure|\bmani\b|\bm\b|\bpm\b|\bmp\b|gel polish|shellac|regular polish|change color|french|design|shape|маникюр/i) || selectedBaseGroups.includes('manicure');
       const shouldInferCategoryFromText = !activeChipGroup && selectedBaseGroups.length === 0;
 

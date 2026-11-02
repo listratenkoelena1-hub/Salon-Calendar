@@ -15,15 +15,18 @@ function sortAnyoneCandidates(candidates) {
   ));
 }
 
-function selectAnyoneCandidate(candidates, lastAssignedStaffId = "") {
+function rotateAnyoneCandidates(candidates, lastAssignedStaffId = "") {
   const ordered = sortAnyoneCandidates(candidates).filter(candidate => candidate?.id);
-  if (!ordered.length) return null;
-
+  if (!ordered.length) return [];
   const lastIndex = ordered.findIndex(candidate => candidate.id === lastAssignedStaffId);
   const startIndex = lastIndex >= 0 ? (lastIndex + 1) % ordered.length : 0;
+  return ordered.map((_candidate, offset) => ordered[(startIndex + offset) % ordered.length]);
+}
 
-  for (let offset = 0; offset < ordered.length; offset += 1) {
-    const candidate = ordered[(startIndex + offset) % ordered.length];
+function selectAnyoneCandidate(candidates, lastAssignedStaffId = "") {
+  const ordered = rotateAnyoneCandidates(candidates, lastAssignedStaffId);
+  if (!ordered.length) return null;
+  for (const candidate of ordered) {
     if (candidate.available !== false) return candidate;
   }
 
@@ -31,6 +34,7 @@ function selectAnyoneCandidate(candidates, lastAssignedStaffId = "") {
 }
 
 module.exports = {
+  rotateAnyoneCandidates,
   selectAnyoneCandidate,
   sortAnyoneCandidates,
   staffOrderValue

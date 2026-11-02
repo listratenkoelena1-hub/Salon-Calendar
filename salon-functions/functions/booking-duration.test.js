@@ -54,6 +54,13 @@ test("keeps a one-nail extension as a small add-on", () => {
   assert.equal(duration("One nail extension", ["manicure"]), 1);
 });
 
+test("uses the full extension duration for nails and powder requests", () => {
+  for (const serviceDetails of ["nail", "nails", "powder", "powder nails"]) {
+    assert.equal(duration(serviceDetails, ["manicure"]), 8);
+  }
+  assert.equal(duration("powder nails with design", ["manicure"]), 9);
+});
+
 test("uses refill duration for hard gel instead of gel-polish duration", () => {
   const differentDurations = {
     ...staff,

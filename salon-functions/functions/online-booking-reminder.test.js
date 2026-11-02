@@ -34,7 +34,8 @@ test("manual, pending, canceled, no-show, and opted-out appointments never recei
     { status: "request" },
     { canceled: true },
     { noShow: true },
-    { smsConsent: false }
+    { smsConsent: false },
+    { suppressClientNotifications: true }
   ];
   for (const patch of variants) {
     assert.equal(isOnlineBookingReminderDue({ ...confirmedOnline, ...patch }, { now }), false);

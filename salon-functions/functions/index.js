@@ -71,8 +71,12 @@ const {
   getBookingDurationDecision
 } = require("./booking-duration");
 const {
+  rotateAnyoneCandidates,
   selectAnyoneCandidate
 } = require("./anyone-rotation");
+const {
+  buildHandsFeetSplitRequest
+} = require("./anyone-service-split");
 const {
   STAFF_ONBOARDING_VERSION,
   buildStaffWelcomeEmail
@@ -302,7 +306,8 @@ return {
 };
 }
 function buildBookingEmailQueueDoc({ eventType, appointmentId, appointmentData, staffRecords, email }) {
-const staffName = getStaffName(staffRecords, appointmentData.staffId);
+const staffName = appointmentData.clientNotificationStaffName ||
+  getStaffName(staffRecords, appointmentData.staffId);
 const service = appointmentData.note || "";
 const content = buildBookingEmailContent(eventType, {
   client: appointmentData.client,
@@ -388,7 +393,8 @@ return "Your online booking request at Rose's Nails cannot be confirmed for the 
 }
 
 function buildBookingSmsQueueDoc({ eventType, appointmentId, appointmentData, staffRecords }) {
-const staffName = getStaffName(staffRecords, appointmentData.staffId);
+const staffName = appointmentData.clientNotificationStaffName ||
+  getStaffName(staffRecords, appointmentData.staffId);
 const to = normalizePhoneToE164(appointmentData.phone);
 const body = buildBookingSmsContent(eventType, {
   bookingDate: formatDate(appointmentData.date),
@@ -1255,7 +1261,102 @@ function getAnyoneRemainingCapacity({
     );
   }).length;
 
-  return availableStaffCount - existingAnyoneCount;
+  const singleStaffCapacity = availableStaffCount - existingAnyoneCount;
+  if (singleStaffCapacity > 0) return singleStaffCapacity;
+
+  const splitPlan = getSequentialAnyoneSplitPlan({
+    date,
+    start,
+    appointments,
+    staffRecords,
+    offWorkRecords,
+    weeklyOffRecords,
+    requestedGroups,
+    durationInput,
+    clientSummary
+  });
+  return splitPlan && existingAnyoneCount === 0 ? 1 : 0;
+}
+
+function getSequentialAnyoneSplitPlan({
+  date,
+  start,
+  appointments,
+  staffRecords,
+  offWorkRecords,
+  weeklyOffRecords,
+  requestedGroups,
+  durationInput,
+  clientSummary = null,
+  effectiveIntent = null,
+  lastAssignedStaffId = ""
+}) {
+  const splitRequest = buildHandsFeetSplitRequest({
+    ...durationInput,
+    requestedGroups
+  }, effectiveIntent);
+  if (!splitRequest) return null;
+
+  const eligibleStaff = staffRecords
+    .filter(staff => staff.id && staff.id !== ANYONE_ID)
+    .filter(staff => staff.bookingEnabled !== false)
+    .filter(staff => staff.availableForAnyone !== false);
+  const handsCandidates = rotateAnyoneCandidates(
+    eligibleStaff.filter(staff => staffCanDoServiceGroups(staff, splitRequest.hands.requestedGroups)),
+    lastAssignedStaffId
+  );
+
+  for (const handsStaff of handsCandidates) {
+    const handsDecision = getBookingDurationDecision(splitRequest.hands, handsStaff, clientSummary);
+    const handsDuration = handsDecision.duration;
+    const feetStart = start + handsDuration;
+    if (!isBookableOnlineStart({ date, start, duration: handsDuration })) continue;
+    if (!realStaffAvailable({
+      staffId: handsStaff.id,
+      date,
+      start,
+      end: feetStart,
+      appointments,
+      offWorkRecords,
+      weeklyOffRecords
+    })) continue;
+
+    const feetCandidates = rotateAnyoneCandidates(
+      eligibleStaff
+        .filter(staff => staff.id !== handsStaff.id)
+        .filter(staff => staffCanDoServiceGroups(staff, splitRequest.feet.requestedGroups)),
+      handsStaff.id
+    );
+    for (const feetStaff of feetCandidates) {
+      const feetDecision = getBookingDurationDecision(splitRequest.feet, feetStaff, clientSummary);
+      const feetDuration = feetDecision.duration;
+      if (!isBookableOnlineStart({ date, start: feetStart, duration: feetDuration })) continue;
+      if (!realStaffAvailable({
+        staffId: feetStaff.id,
+        date,
+        start: feetStart,
+        end: feetStart + feetDuration,
+        appointments,
+        offWorkRecords,
+        weeklyOffRecords
+      })) continue;
+      return {
+        hands: {
+          ...splitRequest.hands,
+          staff: handsStaff,
+          start,
+          durationDecision: handsDecision
+        },
+        feet: {
+          ...splitRequest.feet,
+          staff: feetStaff,
+          start: feetStart,
+          durationDecision: feetDecision
+        }
+      };
+    }
+  }
+  return null;
 }
 
 function getAvailabilityForDate({
@@ -3432,11 +3533,14 @@ exports.createOnlineBookingRequest = onCall(
 
     const submissionRef = db.collection("onlineBookingSubmissions").doc(requestId);
     const appointmentRef = db.collection("appointments").doc();
+    const secondaryAppointmentRef = db.collection("appointments").doc();
     const logRef = db.collection("activityLog").doc();
+    const secondaryLogRef = db.collection("activityLog").doc();
     const telegramRef = TELEGRAM_NOTIFICATIONS_PAUSED
       ? null
       : db.collection("TelegramQueue").doc();
     const staffMessageRef = db.collection("staffMessages").doc();
+    const secondaryStaffMessageRef = db.collection("staffMessages").doc();
     const emailRef = email ? db.collection(EMAIL_QUEUE_COLLECTION).doc() : null;
     const emailContactRef = email ? db.collection(BOOKING_EMAIL_CONTACT_COLLECTION).doc(appointmentRef.id) : null;
     let photoReview = null;
@@ -3448,7 +3552,10 @@ exports.createOnlineBookingRequest = onCall(
         return {
           ok: true,
           duplicate: true,
-          appointmentId: existing.appointmentId || null
+          appointmentId: existing.appointmentId || null,
+          appointmentIds: Array.isArray(existing.appointmentIds)
+            ? existing.appointmentIds
+            : [existing.appointmentId].filter(Boolean)
         };
       }
 
@@ -3463,7 +3570,10 @@ exports.createOnlineBookingRequest = onCall(
         return {
           ok: true,
           duplicate: true,
-          appointmentId: existing.appointmentId || null
+          appointmentId: existing.appointmentId || null,
+          appointmentIds: Array.isArray(existing.appointmentIds)
+            ? existing.appointmentIds
+            : [existing.appointmentId].filter(Boolean)
         };
       }
 
@@ -3544,7 +3654,9 @@ exports.createOnlineBookingRequest = onCall(
       let duration = BOOKING_DURATION;
       let standardDuration = BOOKING_DURATION;
       let onlineScheduleState = null;
+      let secondaryOnlineScheduleState = null;
       let anyoneAssignment = null;
+      let splitAssignment = null;
       if (requestedStaffId === ANYONE_ID) {
         if (!isBookableOnlineStart({ date, start, duration: ANYONE_REQUIRED_DURATION })) {
           throw new HttpsError("failed-precondition", "This time is no longer available.");
@@ -3597,7 +3709,26 @@ exports.createOnlineBookingRequest = onCall(
           String(anyoneAssignmentSnapshot?.data()?.lastAssignedStaffId || "")
         );
         if (!anyoneAssignment) {
-          throw new HttpsError("failed-precondition", "This time is no longer available.");
+          splitAssignment = getSequentialAnyoneSplitPlan({
+            date,
+            start,
+            appointments,
+            staffRecords,
+            offWorkRecords,
+            weeklyOffRecords,
+            requestedGroups,
+            durationInput: { selectedServices, serviceDetails },
+            clientSummary,
+            effectiveIntent: effectiveServiceIntent,
+            lastAssignedStaffId: String(anyoneAssignmentSnapshot?.data()?.lastAssignedStaffId || "")
+          });
+          if (!splitAssignment) {
+            throw new HttpsError("failed-precondition", "This time is no longer available.");
+          }
+          anyoneAssignment = {
+            ...splitAssignment.hands.staff,
+            durationDecision: splitAssignment.hands.durationDecision
+          };
         }
 
         assignedStaffId = anyoneAssignment.id;
@@ -3660,6 +3791,50 @@ exports.createOnlineBookingRequest = onCall(
         throw error;
       }
 
+      if (splitAssignment) {
+        const secondaryScheduleRef = db.collection(APPOINTMENT_SCHEDULE_COLLECTION)
+          .doc(getScheduleId(date, splitAssignment.feet.staff.id));
+        const secondaryScheduleSnap = await tx.get(secondaryScheduleRef);
+        const secondaryScheduleSlots = secondaryScheduleSnap.exists
+          ? cloneSlots(secondaryScheduleSnap.data()?.slots)
+          : buildScheduleSlots(appointments, {
+              date,
+              staffId: splitAssignment.feet.staff.id,
+              anyoneId: ANYONE_ID
+            });
+        try {
+          secondaryOnlineScheduleState = {
+            ref: secondaryScheduleRef,
+            slots: reserveAppointmentSlots(secondaryScheduleSlots, {
+              id: secondaryAppointmentRef.id,
+              date,
+              staffId: splitAssignment.feet.staff.id,
+              start: splitAssignment.feet.start,
+              duration: splitAssignment.feet.durationDecision.duration,
+              canceled: false,
+              noShow: false
+            }, secondaryAppointmentRef.id)
+          };
+        } catch (error) {
+          if (error?.code === "appointment-conflict") {
+            throw new HttpsError("failed-precondition", "This time is no longer available.");
+          }
+          throw error;
+        }
+      }
+
+      const primarySelectedServices = splitAssignment
+        ? splitAssignment.hands.selectedServices
+        : selectedServices;
+      const primaryServiceDetails = splitAssignment
+        ? splitAssignment.hands.serviceDetails
+        : serviceDetails;
+      const groupAppointmentIds = splitAssignment
+        ? [appointmentRef.id, secondaryAppointmentRef.id]
+        : [appointmentRef.id];
+      const groupStaffNames = splitAssignment
+        ? [splitAssignment.hands.staff.name || "Staff", splitAssignment.feet.staff.name || "Staff"]
+        : [getStaffName(staffRecords, assignedStaffId)];
       const appointmentData = stripPrivateAppointmentFields({
         date,
         staffId: assignedStaffId,
@@ -3679,8 +3854,18 @@ exports.createOnlineBookingRequest = onCall(
         bookingStandardDuration: standardDuration,
         serviceFingerprint,
         serviceIntent: effectiveServiceIntent,
+        onlineBookingGroupId: appointmentRef.id,
+        onlineBookingGroupAppointmentIds: groupAppointmentIds,
+        onlineBookingSegment: splitAssignment ? "hands" : null,
+        onlineBookingSegmentIndex: 0,
+        onlineBookingSegmentCount: splitAssignment ? 2 : 1,
+        clientNotificationStaffName: groupStaffNames.join(" and "),
+        suppressClientNotifications: false,
         client,
-        note: buildRequestNote({ selectedServices, serviceDetails }),
+        note: buildRequestNote({
+          selectedServices: primarySelectedServices,
+          serviceDetails: primaryServiceDetails
+        }),
         noShow: false,
         canceled: false,
         cancelComment: null,
@@ -3688,7 +3873,7 @@ exports.createOnlineBookingRequest = onCall(
         source: "online_booking",
         status: "request",
         selectedLanguage,
-        selectedServices,
+        selectedServices: primarySelectedServices,
         requestWarning: null,
         photoRefs: photoReview ? photoReview.refs : [],
         photoLinks: photoReview ? [photoReview.url] : [],
@@ -3712,6 +3897,33 @@ exports.createOnlineBookingRequest = onCall(
         lastActionAt: FieldValue.serverTimestamp()
       });
 
+      const secondaryAppointmentData = splitAssignment
+        ? stripPrivateAppointmentFields({
+            ...appointmentData,
+            staffId: splitAssignment.feet.staff.id,
+            anyoneAssignedStaffId: splitAssignment.feet.staff.id,
+            start: splitAssignment.feet.start,
+            duration: splitAssignment.feet.durationDecision.duration,
+            bookingStandardDuration: splitAssignment.feet.durationDecision.standardDuration,
+            serviceFingerprint: splitAssignment.feet.durationDecision.serviceFingerprint,
+            serviceIntent: splitAssignment.feet.durationDecision.effectiveIntent,
+            onlineBookingSegment: "feet",
+            onlineBookingSegmentIndex: 1,
+            suppressClientNotifications: true,
+            note: buildRequestNote({
+              selectedServices: splitAssignment.feet.selectedServices,
+              serviceDetails: splitAssignment.feet.serviceDetails
+            }),
+            selectedServices: splitAssignment.feet.selectedServices,
+            photoRefs: [],
+            photoLinks: [],
+            photoReviewToken: null,
+            photoReviewUrl: null,
+            createdMutationId: `${requestId}_feet`,
+            lastMutationId: `${requestId}_feet`
+          })
+        : null;
+
       if (onlineScheduleState) {
         tx.set(onlineScheduleState.ref, {
           schemaVersion: SCHEDULE_SCHEMA_VERSION,
@@ -3722,10 +3934,23 @@ exports.createOnlineBookingRequest = onCall(
         });
       }
 
+      if (secondaryOnlineScheduleState) {
+        tx.set(secondaryOnlineScheduleState.ref, {
+          schemaVersion: SCHEDULE_SCHEMA_VERSION,
+          date,
+          staffId: splitAssignment.feet.staff.id,
+          slots: secondaryOnlineScheduleState.slots,
+          updatedAt: FieldValue.serverTimestamp()
+        });
+      }
+
       if (anyoneAssignmentRef && anyoneAssignment) {
+        const lastAssignedStaffId = splitAssignment
+          ? splitAssignment.feet.staff.id
+          : assignedStaffId;
         tx.set(anyoneAssignmentRef, {
-          lastAssignedStaffId: assignedStaffId,
-          lastAppointmentId: appointmentRef.id,
+          lastAssignedStaffId,
+          lastAppointmentId: splitAssignment ? secondaryAppointmentRef.id : appointmentRef.id,
           lastAssignedAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
           version: 1
@@ -3741,8 +3966,19 @@ exports.createOnlineBookingRequest = onCall(
         appointment: appointmentData,
         identity: clientIdentity
       });
+      if (secondaryAppointmentData) {
+        tx.set(secondaryAppointmentRef, secondaryAppointmentData);
+        writeClientAppointmentRecords(tx, {
+          db,
+          FieldValue,
+          appointmentId: secondaryAppointmentRef.id,
+          appointment: secondaryAppointmentData,
+          identity: clientIdentity
+        });
+      }
       tx.set(submissionRef, {
         appointmentId: appointmentRef.id,
+        appointmentIds: groupAppointmentIds,
         emailProvided: Boolean(email),
         createdAt: FieldValue.serverTimestamp(),
         status: "created"
@@ -3763,6 +3999,23 @@ exports.createOnlineBookingRequest = onCall(
         service: appointmentData.note,
         details: buildAppointmentLogDetails(appointmentData, staffRecords)
       });
+      if (secondaryAppointmentData) {
+        tx.set(secondaryLogRef, {
+          createdAt: FieldValue.serverTimestamp(),
+          logDate: date,
+          actorLabel: "Online Booking",
+          actorKey: "online_booking",
+          staffId: secondaryAppointmentData.staffId,
+          eventType: "online_request_created",
+          entityType: "appointment",
+          entityId: secondaryAppointmentRef.id,
+          client,
+          hasPrivateContact: true,
+          emailProvided: Boolean(email),
+          service: secondaryAppointmentData.note,
+          details: buildAppointmentLogDetails(secondaryAppointmentData, staffRecords)
+        });
+      }
 
       if (emailContactRef) {
         tx.set(emailContactRef, buildBookingEmailContactDoc({
@@ -3776,7 +4029,11 @@ exports.createOnlineBookingRequest = onCall(
         tx.set(emailRef, buildBookingEmailQueueDoc({
           eventType: "booking_request_received",
           appointmentId: appointmentRef.id,
-          appointmentData: { ...appointmentData, phone },
+          appointmentData: {
+            ...appointmentData,
+            phone,
+            note: buildRequestNote({ selectedServices, serviceDetails })
+          },
           staffRecords,
           email
         }));
@@ -3813,12 +4070,32 @@ exports.createOnlineBookingRequest = onCall(
         source: "online_booking",
         messageGroupId
       }));
+      if (secondaryAppointmentData) {
+        const secondaryMessage = buildOnlineBookingTelegramMessage(secondaryAppointmentData, staffRecords);
+        tx.set(secondaryStaffMessageRef, buildCanonicalStaffMessageDoc({
+          message: secondaryMessage,
+          eventType: "online_request_created",
+          entityType: "appointment",
+          entityId: secondaryAppointmentRef.id,
+          staffId: secondaryAppointmentData.staffId,
+          staffName: getStaffName(staffRecords, secondaryAppointmentData.staffId),
+          staffRecords,
+          importantToAllStaff: true,
+          source: "online_booking",
+          messageGroupId: `online-booking-${secondaryAppointmentRef.id}`
+        }));
+      }
 
       return {
         ok: true,
         duplicate: false,
         appointmentId: appointmentRef.id,
-        assignedStaffId
+        appointmentIds: groupAppointmentIds,
+        assignedStaffId,
+        assignedStaffIds: splitAssignment
+          ? [assignedStaffId, splitAssignment.feet.staff.id]
+          : [assignedStaffId],
+        splitAssignment: Boolean(splitAssignment)
       };
     });
       return result;
@@ -4087,7 +4364,9 @@ exports.sendOnlineBookingReminders = onSchedule(
         const privateContact = privateSnap.exists ? privateSnap.data() || {} : {};
         const rawPhone = privateContact.phoneDisplay || privateContact.phoneNormalized || appointment.phone || "";
         const to = normalizePhoneToE164(rawPhone);
-        const staffName = getStaffName(staffRecords, appointment.staffId) || "your technician";
+        const staffName = appointment.clientNotificationStaffName ||
+          getStaffName(staffRecords, appointment.staffId) ||
+          "your technician";
         const body = buildOnlineBookingReminderBody({
           date: appointment.date,
           start: appointment.start,
@@ -4157,6 +4436,7 @@ exports.appointmentStatusEmailUpdated = onDocumentUpdated(
       }
       return;
     }
+    if (after.suppressClientNotifications === true) return;
     if (before.status === after.status) return;
 
     if (after.status === "confirmed" && hasOnlineBookingDeclineHistory(before)) {

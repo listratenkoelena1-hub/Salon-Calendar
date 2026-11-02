@@ -187,7 +187,7 @@ function classifyHands(text, hasMarker = false) {
     return makeZone("one_nail_extension", "One nail extension");
   }
   const refill = /\b(refill|fill|correction)\b|^[fr]$|коррекц/iu.test(text);
-  const newSet = /\b(new set|full set|extensions?|ext)\b|наращ/iu.test(text);
+  const newSet = /\b(new set|full set|extensions?|ext|powder(?:\s+nails?)?)\b|^\s*nails?\b|наращ/iu.test(text);
   if (/\bacrylic\b|акрил/iu.test(text)) {
     if (refill) return makeZone("acrylic_refill", "Acrylic refill");
     if (newSet) return makeZone("acrylic_new_set", "Acrylic new set");
@@ -302,7 +302,7 @@ function parseServiceIntent(input = {}) {
 
     if (handsMarker) context = "hands";
     else if (feetMarker) context = "feet";
-    else if (/\b(acrylic|hard gel|builder gel|builder|strong gel|refill|nail extension|full set|new set)\b|акрил|наращ|коррекц|тверд(?:ый|ого)\s+гель|жестк(?:ий|ого)\s+гель/iu.test(text)) context = "hands";
+    else if (/\b(acrylic|hard gel|builder gel|builder|strong gel|refill|nail extension|full set|new set|powder(?:\s+nails?)?)\b|акрил|наращ|коррекц|тверд(?:ый|ого)\s+гель|жестк(?:ий|ого)\s+гель/iu.test(text)) context = "hands";
     else if (/\b(deluxe|toenail)\b/iu.test(text) && intent.feet) context = "feet";
     else if (!context && groupContext) context = groupContext;
 

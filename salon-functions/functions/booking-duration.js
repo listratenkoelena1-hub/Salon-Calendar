@@ -167,7 +167,7 @@ function getRequestedBookingDurationSlots(input = {}, staffRecord = {}) {
     const hasRegularPolish = textMatches(segment, [/\bregular\s*(?:polish|colou?r)\b/, /обычн(?:ый|ого)\s+лак/]);
     const hasChangeColor = textMatches(segment, [/\bchange\s*(?:gel\s*)?colou?r\b/, /\bpolish\s*change\b/, /\bcolou?r\s*change\b/, /\bapply\s*gel\s*polish\b/, /^\s*toes?\s*$/, /смена\s+цвета/]);
     const hasRefill = shortTokens.has("f") || shortTokens.has("r") || textMatches(segment, [/\brefill\b/, /\bfill\b/, /\bcorrection\b/, /коррекц/]);
-    const hasExtensions = textMatches(segment, [/\bextension(s)?\b/, /\bext\b/, /\bnew\s*set\b/, /\bfull\s*set\b/, /наращ/]);
+    const hasExtensions = textMatches(segment, [/\bextension(s)?\b/, /\bext\b/, /\bnew\s*set\b/, /\bfull\s*set\b/, /\bpowder(?:\s+nails?)?\b/, /^\s*nails?\b/, /наращ/]);
     const hasGelOverlay = textMatches(segment, [/\bgel\s*overlay\b/, /\boverlay\b/, /\bbuilder\s*gel\b/, /\bhard\s*gel\b/, /\bstrong\s*gel\b/, /тверд(?:ый|ого)\s+гель/, /жестк(?:ий|ого)\s+гель/]);
     const hasGelPolish = hasGel && !hasGelOverlay;
     const hasOneNailExtension = textMatches(segment, [/\bone\s*nail\s*extension\b/]);

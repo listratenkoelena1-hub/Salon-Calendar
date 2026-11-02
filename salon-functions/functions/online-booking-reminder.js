@@ -53,6 +53,7 @@ function getMinutesUntilAppointment(appointment, now = new Date(), timeZone = DE
 
 function isOnlineBookingReminderDue(appointment, options = {}) {
   if (!appointment || appointment.source !== "online_booking") return false;
+  if (appointment.suppressClientNotifications === true) return false;
   if (appointment.status !== "confirmed") return false;
   if (appointment.canceled === true || appointment.noShow === true) return false;
   if (appointment.smsConsent === false) return false;
