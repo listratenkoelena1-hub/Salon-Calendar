@@ -1,46 +1,132 @@
-name: Deploy to production
+name: Deploy production
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - salon-functions/**
+      - salon-calendar/**
+      - .github/workflows/production-deploy.yml
   workflow_dispatch:
     inputs:
-      confirm:
-        description: 'Type "deploy" to confirm publishing to the live sites'
-        required: true
       target:
-        description: 'Which live site(s) to publish'
+        description: Production component to deploy
         required: true
+        default: all
         type: choice
         options:
-          - booking
-          - calendar
-          - both
+          - all
+          - functions
+          - hosting
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
-    if: github.repository == 'listratenkoelena1-hub/Salon-Calendar' && github.event.inputs.confirm == 'deploy'
+    if: github.repository == 'listratenkoelena1-hub/Salon-Calendar'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - name: Check out main
+        uses: actions/checkout@v7
         with:
-          node-version: 20
+          fetch-depth: 0
 
-      - run: npm install -g firebase-tools
-
-      - name: Write service account key
-        run: echo "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-key.json"
+      - name: Select changed components
+        id: changes
+        shell: bash
         env:
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-
-      - name: Deploy live hosting
-        working-directory: salon-calendar
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-key.json
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+          MANUAL_TARGET: ${{ inputs.target }}
         run: |
-          case "${{ github.event.inputs.target }}" in
-            booking) ONLY="hosting:booking" ;;
-            calendar) ONLY="hosting:calendar" ;;
-            both) ONLY="hosting:booking,hosting:calendar" ;;
-          esac
-          firebase deploy --only "$ONLY" --project rosesnails-calendar --non-interactive
+          deploy_functions=false
+          deploy_hosting=false
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            case "$MANUAL_TARGET" in
+              all) deploy_functions=true; deploy_hosting=true ;;
+              functions) deploy_functions=true ;;
+              hosting) deploy_hosting=true ;;
+              *) echo "Unsupported target: $MANUAL_TARGET" >&2; exit 1 ;;
+            esac
+          elif [[ -z "$BEFORE_SHA" || "$BEFORE_SHA" =~ ^0+$ ]]; then
+            deploy_functions=true
+            deploy_hosting=true
+          else
+            changed_files="$(git diff --name-only "$BEFORE_SHA" "$CURRENT_SHA")"
+            if grep -qE '^salon-functions/' <<<"$changed_files"; then
+              deploy_functions=true
+            fi
+            if grep -qE '^salon-calendar/' <<<"$changed_files"; then
+              deploy_hosting=true
+            fi
+            if grep -qE '^\.github/workflows/production-deploy\.yml$' <<<"$changed_files"; then
+              deploy_functions=true
+              deploy_hosting=true
+            fi
+          fi
+
+          echo "functions=$deploy_functions" >> "$GITHUB_OUTPUT"
+          echo "hosting=$deploy_hosting" >> "$GITHUB_OUTPUT"
+          echo "Functions: $deploy_functions"
+          echo "Hosting: $deploy_hosting"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: salon-functions/functions/package-lock.json
+
+      - name: Install Functions dependencies
+        if: steps.changes.outputs.functions == 'true'
+        working-directory: salon-functions/functions
+        run: npm ci
+
+      - name: Test Functions
+        if: steps.changes.outputs.functions == 'true'
+        working-directory: salon-functions/functions
+        run: npm test
+
+      - name: Authenticate to Google Cloud without a stored key
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: rosesnails-calendar
+          workload_identity_provider: projects/1000239390265/locations/global/workloadIdentityPools/github-actions/providers/salon-calendar-main
+          service_account: github-production-deployer@rosesnails-calendar.iam.gserviceaccount.com
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@15.34.2
+
+      - name: Deploy Functions
+        if: steps.changes.outputs.functions == 'true'
+        working-directory: salon-functions
+        run: firebase deploy --only functions --project rosesnails-calendar --non-interactive
+
+      - name: Deploy public booking site
+        if: steps.changes.outputs.hosting == 'true'
+        working-directory: salon-calendar
+        run: firebase deploy --only hosting:booking --project rosesnails-calendar --non-interactive
+
+      - name: Deploy staff calendar site
+        if: steps.changes.outputs.hosting == 'true'
+        working-directory: salon-calendar
+        run: firebase deploy --only hosting:calendar --project rosesnails-calendar --non-interactive
+
+      - name: Verify production sites
+        if: steps.changes.outputs.hosting == 'true'
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --retry 3 --retry-delay 5 https://rosesnailsbooking.web.app/booking > /dev/null
+          curl --fail --silent --show-error --retry 3 --retry-delay 5 https://rosesnails-calendar.web.app/ > /dev/null
