@@ -12,18 +12,22 @@ const bookingFiles = [
   path.join(calendarRoot, "booking-public", "online-booking.html")
 ];
 
-test("all booking entry points contain the same cancellation experience", () => {
+test("all booking entry points contain the same secure management experience", () => {
   const pages = bookingFiles.map(file => fs.readFileSync(file, "utf8"));
   assert.equal(pages[1], pages[0]);
   assert.equal(pages[2], pages[0]);
 
   const page = pages[0];
-  assert.match(page, /Appointments cannot be rescheduled online\./);
+  assert.match(page, /Manage \/ Reschedule appointment/);
+  assert.match(page, /Keep this appointment and book another/);
+  assert.match(page, /rescheduleOnlineBookingAppointment/);
+  assert.match(page, /appointmentId: state\.rescheduleAppointmentId/);
+  assert.match(page, /sessionToken: state\.appointmentSessionToken/);
   assert.match(page, /Online cancellation is available until 3 hours before the appointment\./);
   assert.match(page, /Cancellation comment \(optional\)/);
   assert.match(page, /maxlength="500"/);
   assert.match(page, /comment: cancellationCommentInput\.value\.trim\(\)/);
-  assert.match(page, /Confirmed and pending online appointments can be cancelled until 3 hours/);
+  assert.match(page, /Confirmed and pending online appointments can be rescheduled or cancelled until 3 hours/);
 });
 
 test("booking preview remains isolated to localhost and Firebase preview channels", () => {

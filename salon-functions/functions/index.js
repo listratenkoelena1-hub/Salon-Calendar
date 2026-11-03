@@ -1582,7 +1582,16 @@ function buildOnlineBookingTelegramMessage(data, staffRecords) {
 function buildAppointmentLogDetails(data, staffRecords) {
   const staffName = getStaffName(staffRecords, data.staffId);
   const base = data.note ? `${data.client} - ${data.note}` : data.client;
-  return `${base}; ${formatDate(data.date)}, at ${slotToTime(data.start)}; ${staffName}`;
+  const durationMinutes = Math.max(1, Number(data.duration) || 1) * 15;
+  const durationText = durationMinutes % 60
+    ? `${Math.floor(durationMinutes / 60) ? `${Math.floor(durationMinutes / 60)} hr ` : ""}${durationMinutes % 60} min`
+    : `${durationMinutes / 60} hr`;
+  const source = data.source === "dash_booking"
+    ? "Dash Booking"
+    : (data.source === "online_booking" || data.type === "online_booking_request"
+        ? "Online Booking"
+        : "Calendar");
+  return `${base}; ${formatDate(data.date)}, at ${slotToTime(data.start)}; ${staffName}; duration ${durationText}; source ${source}`;
 }
 
 // Ð´Ð°Ñ‚Ð° Ð±ÐµÐ· Ð³Ð¾Ð´Ð°: Friday, January 23
@@ -2726,7 +2735,7 @@ exports.getAppointmentClientHistory = onCall(
         actorLabel: entry.actorLabel,
         actorKey: entry.actorKey,
         eventType: entry.eventType,
-        details: entry.service || redactPhoneLikeText(appointment?.note),
+        details: entry.details || entry.service || redactPhoneLikeText(appointment?.note),
         source: entry.source || String(appointment?.source || "")
       };
     });
@@ -2745,7 +2754,7 @@ exports.getAppointmentClientHistory = onCall(
         actorLabel: String(appointment.lastEditedBy || (appointment.source === "online_booking" ? "Online Booking" : "Calendar")),
         actorKey: String(appointment.source || "calendar"),
         eventType: getClientHistoryFallbackEventType(appointment),
-        details: redactPhoneLikeText(appointment.note),
+        details: buildAppointmentLogDetails(appointment, staffRecords),
         source: String(appointment.source || "")
       });
     });
@@ -3029,10 +3038,18 @@ function buildBookingManagementAppointment(appointment, staffRecords, salonNow =
     id: appointment.id,
     status: appointment.status === "confirmed" ? "confirmed" : "request",
     date: String(appointment.date || ""),
+    start: Number.isFinite(start) && start >= 0 ? start : null,
     time: Number.isFinite(start) && start >= 0 ? slotToTime(start) : "Morning",
+    duration: Math.max(1, Number(appointment.duration) || 1),
+    staffId: String(appointment.staffId || ""),
+    requestedStaffId: String(appointment.requestedStaffId || appointment.staffId || ""),
     technician: getStaffName(staffRecords, appointment.staffId),
     service: String(appointment.note || selectedServiceText || "Service details not provided").trim().slice(0, 600),
+    selectedServices: Array.isArray(appointment.selectedServices)
+      ? appointment.selectedServices.map(item => String(item || "").trim()).filter(Boolean).slice(0, 12)
+      : [],
     canCancel: cancellationEligibility.allowed,
+    canReschedule: cancellationEligibility.allowed,
     cancellationMinimumNoticeMinutes: CLIENT_CANCELLATION_MIN_NOTICE_MINUTES
   };
 }
@@ -3471,6 +3488,207 @@ exports.cancelOnlineBookingAppointment = onCall(
         ok: true,
         appointmentId,
         comment: cancellationComment
+      };
+    });
+  }
+);
+
+exports.rescheduleOnlineBookingAppointment = onCall(
+  {
+    region: "us-central1",
+    maxInstances: 10
+  },
+  async (request) => {
+    const input = request.data || {};
+    const challengeId = assertAppointmentToken(input.challengeId, "challengeId", { min: 12, max: 100 });
+    const sessionToken = assertAppointmentToken(input.sessionToken, "sessionToken", { min: 32, max: 200 });
+    const appointmentId = assertAppointmentToken(input.appointmentId, "appointmentId", { min: 12, max: 100 });
+    const date = assertDate(input.date);
+    const start = assertSlot(input.start);
+    const staffId = assertString(input.staffId, "staffId", { min: 1, max: 80 });
+    if (staffId === ANYONE_ID) {
+      throw new HttpsError("invalid-argument", "Please select a technician for the rescheduled appointment.");
+    }
+
+    const challengeRef = db.collection(BOOKING_VERIFICATION_COLLECTION).doc(challengeId);
+    const appointmentRef = db.collection("appointments").doc(appointmentId);
+    const privateAppointmentRef = db.collection(APPOINTMENT_PRIVATE_COLLECTION).doc(appointmentId);
+    const logRef = db.collection("activityLog").doc();
+    const staffMessageRef = db.collection("staffMessages").doc();
+    const sessionTokenHash = buildSessionTokenHash(sessionToken);
+    const salonNow = getSalonNowParts();
+    const nowMs = Date.now();
+    const mutationId = `online_reschedule_${crypto.randomBytes(12).toString("base64url")}`;
+
+    return db.runTransaction(async tx => {
+      const challengeSnap = await tx.get(challengeRef);
+      if (!challengeSnap.exists) {
+        throw new HttpsError("unauthenticated", "Your secure session has expired. Please verify your phone again.");
+      }
+      const challenge = challengeSnap.data() || {};
+      const sessionExpiresAtMs = challenge.sessionExpiresAt?.toMillis ? challenge.sessionExpiresAt.toMillis() : 0;
+      if (
+        challenge.status !== "verified" ||
+        !sessionExpiresAtMs ||
+        sessionExpiresAtMs <= nowMs ||
+        !secureHashesEqual(challenge.sessionTokenHash, sessionTokenHash)
+      ) {
+        throw new HttpsError("unauthenticated", "Your secure session has expired. Please verify your phone again.");
+      }
+
+      const appointmentSnap = await tx.get(appointmentRef);
+      if (!appointmentSnap.exists) throw new HttpsError("not-found", "This appointment is no longer available.");
+      const before = appointmentSnap.data() || {};
+      const privateAppointmentSnap = before.hasPrivateContact === true
+        ? await tx.get(privateAppointmentRef)
+        : null;
+      const privateAppointment = privateAppointmentSnap?.exists ? privateAppointmentSnap.data() || {} : null;
+      const linkedPrivateAppointment = Boolean(
+        privateAppointment?.clientProfileId &&
+        challenge.clientProfileId &&
+        String(privateAppointment.clientProfileId) === String(challenge.clientProfileId) &&
+        isUpcomingOnlineAppointmentRecord(before, salonNow)
+      );
+      const linkedLegacyAppointment = !privateAppointment && isUpcomingAppointmentForClient(before, {
+        phoneDigits: String(challenge.phoneDigits || ""),
+        clientName: String(challenge.clientName || ""),
+        today: salonNow.date,
+        currentMinutes: salonNow.minutes
+      });
+      if (!linkedPrivateAppointment && !linkedLegacyAppointment) {
+        throw new HttpsError("failed-precondition", "This appointment is no longer available to manage.");
+      }
+
+      const eligibility = getClientCancellationEligibility(before, {
+        today: salonNow.date,
+        currentMinutes: salonNow.minutes,
+        minimumNoticeMinutes: CLIENT_CANCELLATION_MIN_NOTICE_MINUTES
+      });
+      if (!eligibility.allowed) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Online rescheduling is available until 3 hours before the appointment. Please call the salon at 780-406-6767."
+        );
+      }
+
+      const staffSnap = await tx.get(db.collection("staff"));
+      const staffRecords = getActiveStaffRecords(staffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })));
+      const selectedStaff = staffRecords.find(staff => staff.id === staffId && staff.bookingEnabled !== false);
+      if (!selectedStaff) throw new HttpsError("failed-precondition", "Selected technician is not available.");
+      const requestedGroups = getRequestedServiceGroups({
+        selectedServices: before.selectedServices,
+        serviceDetails: before.note,
+        serviceGroups: before.serviceGroups
+      });
+      if (!staffCanDoServiceGroups(selectedStaff, requestedGroups)) {
+        throw new HttpsError("failed-precondition", "Selected technician does not provide one of the requested services.");
+      }
+
+      const duration = Math.max(1, Number(before.duration) || 1);
+      if (!isBookableOnlineStart({ date, start, duration })) {
+        throw new HttpsError("failed-precondition", "Please choose another available time.");
+      }
+      const appointmentsSnap = await tx.get(db.collection("appointments").where("date", "==", date));
+      const appointments = appointmentsSnap.docs
+        .filter(docSnap => docSnap.id !== appointmentId)
+        .map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+      const offWorkSnap = await tx.get(db.collection("OffWork").where("date", "==", date));
+      const weeklyOffSnap = await tx.get(db.collection("WeeklyOff"));
+      if (!realStaffAvailable({
+        staffId,
+        date,
+        start,
+        end: start + duration,
+        appointments,
+        offWorkRecords: offWorkSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })),
+        weeklyOffRecords: weeklyOffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }))
+      })) {
+        throw new HttpsError("already-exists", "This time is no longer available.");
+      }
+
+      const after = {
+        ...before,
+        date,
+        start,
+        staffId,
+        requestedStaffId: staffId,
+        autoAssignedFromAnyone: false,
+        anyoneAssignedStaffId: null,
+        lastEditedBy: "Online Booking Client",
+        lastAction: "move",
+        lastActionAt: FieldValue.serverTimestamp(),
+        lastMutationId: mutationId,
+        lastMutationMode: "online_client_reschedule",
+        revision: (Number(before.revision) || 0) + 1
+      };
+      const scheduleStates = await loadAppointmentScheduleStates(tx, [before, after]);
+      updateAppointmentScheduleStates(scheduleStates, before, after, appointmentId);
+      writeAppointmentScheduleStates(tx, scheduleStates);
+      tx.set(appointmentRef, after);
+      if (privateAppointment) {
+        writeClientAppointmentRecords(tx, {
+          db,
+          FieldValue,
+          appointmentId,
+          appointment: after,
+          identity: {
+            clientId: privateAppointment.clientId,
+            clientProfileId: privateAppointment.clientProfileId,
+            phoneNormalized: privateAppointment.phoneNormalized,
+            phoneDisplay: privateAppointment.phoneDisplay,
+            phoneLast4: privateAppointment.phoneLast4,
+            phoneKey: privateAppointment.phoneHash
+          }
+        });
+      }
+
+      const oldStaffName = getStaffName(staffRecords, before.staffId);
+      const newStaffName = getStaffName(staffRecords, staffId);
+      const changeDetails = [
+        `date ${before.date} -> ${date}`,
+        `time ${slotToTime(Number(before.start) || 0)} -> ${slotToTime(start)}`,
+        `staff ${oldStaffName} -> ${newStaffName}`,
+        `duration ${duration * 15} min`
+      ].join("; ");
+      tx.set(logRef, {
+        createdAt: FieldValue.serverTimestamp(),
+        logDate: date,
+        actorLabel: "Online Booking Client",
+        actorKey: "online_booking_client",
+        staffId,
+        staffName: newStaffName,
+        eventType: "moved",
+        entityType: "appointment",
+        entityId: appointmentId,
+        client: before.client,
+        phone: before.hasPrivateContact === true ? null : (before.phone || null),
+        service: before.note || "",
+        details: `Client rescheduled online; changed: ${changeDetails}`,
+        source: "online_booking"
+      });
+
+      const message = `Online appointment for ${before.client || "Client"} was rescheduled by the client from ${formatDate(before.date)} at ${slotToTime(Number(before.start) || 0)} with ${oldStaffName} to ${formatDate(date)} at ${slotToTime(start)} with ${newStaffName}.`;
+      const staffMessage = buildCanonicalStaffMessageDoc({
+        message,
+        eventType: "moved",
+        entityType: "appointment",
+        entityId: appointmentId,
+        staffId,
+        staffName: newStaffName,
+        staffRecords,
+        source: "online_booking",
+        messageGroupId: `online-booking-reschedule-${appointmentId}-${mutationId}`
+      });
+      staffMessage.importantStaffIds = [...new Set([before.staffId, staffId].filter(id => id && id !== ANYONE_ID))];
+      tx.set(staffMessageRef, staffMessage);
+      tx.set(challengeRef, {
+        sessionLastUsedAt: FieldValue.serverTimestamp(),
+        managedAppointmentIds: FieldValue.arrayUnion(appointmentId)
+      }, { merge: true });
+
+      return {
+        ok: true,
+        appointment: buildBookingManagementAppointment({ id: appointmentId, ...after }, staffRecords, salonNow)
       };
     });
   }
@@ -5303,7 +5521,7 @@ exports.dashSyncEveryFifteenMinutes = onSchedule(
     schedule: "every 15 minutes",
     timeZone: SALON_TIME_ZONE,
     memory: "1GiB",
-    timeoutSeconds: 300,
+    timeoutSeconds: 1800,
     maxInstances: 1,
     concurrency: 1,
     secrets: [DASH_BOOKING_EMAIL, DASH_BOOKING_PASSWORD]
@@ -5336,7 +5554,10 @@ exports.dashSyncEveryFifteenMinutes = onSchedule(
       Timestamp,
       email,
       password,
-      config
+      config,
+      calendarMonitorHorizonDays: pollingWindow.morningReconciliation && config.monitorOnly
+        ? config.horizonDays
+        : 1
     });
   }
 );

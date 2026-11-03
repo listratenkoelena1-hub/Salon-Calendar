@@ -1890,7 +1890,7 @@
             </header>
             <div class="content">
               <div class="note">If you do not hear from us soon, please <a class="salon-phone-link" href="tel:+17804066767">call salon</a>.</div>
-              <div class="security-copy"><strong>Need to cancel?</strong><br>Confirmed and pending online appointments can be cancelled until 3 hours before the appointment. Return to the start screen and select “Already have an appointment?” To change the date or time, cancel the existing appointment and submit a new request.</div>
+              <div class="security-copy"><strong>Need to make a change?</strong><br>Confirmed and pending online appointments can be rescheduled or cancelled until 3 hours before the appointment. Return to the start screen and select “Already have an appointment?”</div>
             </div>
             <nav class="actions">
               <button class="btn" id="startOver" type="button">Start Over</button>
@@ -1901,16 +1901,16 @@
           <section class="screen" data-screen="appointment-choice">
             <header>
               <h2>Upcoming appointment found</h2>
-              <p class="lead">We found one or more upcoming appointments requested through this online booking page. You can review or cancel them, or request a new appointment.</p>
+              <p class="lead">We found one or more upcoming appointments requested through this online booking page. You can review, reschedule, or cancel them, or keep them and book another appointment.</p>
             </header>
             <div class="content decision-content">
-              <div class="security-copy"><strong>Online changes</strong><br>Appointments cannot be rescheduled online. To change the date or time, cancel the existing appointment and submit a new request.<br><br>Online cancellation is available until 3 hours before the appointment.</div>
+              <div class="security-copy"><strong>Online changes</strong><br>You can securely reschedule or cancel an appointment until 3 hours before it starts. We will notify the salon and affected technicians.</div>
               <div class="security-copy">For privacy, appointment details remain hidden until your phone number is verified.</div>
-              <button class="btn choice-button" id="requestNewFromChoice" type="button">Request a new appointment</button>
+              <button class="btn choice-button" id="requestNewFromChoice" type="button">Keep this appointment and book another</button>
             </div>
             <nav class="actions">
               <button class="btn" id="appointmentChoiceBack" type="button">Back</button>
-              <button class="btn primary" id="manageAppointments" type="button">Manage appointments</button>
+              <button class="btn primary" id="manageAppointments" type="button">Manage / Reschedule appointment</button>
             </nav>
           </section>
 
@@ -1984,7 +1984,8 @@
             <div class="content decision-content">
               <div class="review" id="appointmentDetails"></div>
               <div class="security-copy" id="appointmentCancellationPolicy"></div>
-              <button class="btn choice-button" id="requestNewFromDetails" type="button">Request a new appointment</button>
+              <button class="btn primary" id="rescheduleAppointment" type="button">Reschedule appointment</button>
+              <button class="btn choice-button" id="requestNewFromDetails" type="button">Keep this appointment and book another</button>
             </div>
             <nav class="actions">
               <button class="btn" id="appointmentDetailsBack" type="button">Back</button>
@@ -2022,6 +2023,17 @@
             <nav class="actions">
               <button class="btn" id="finishAppointmentManagement" type="button">Done</button>
               <button class="btn primary" id="requestNewAfterCancellation" type="button">Request a new appointment</button>
+            </nav>
+          </section>
+
+          <section class="screen" data-screen="reschedule-complete">
+            <header>
+              <h2>Appointment rescheduled</h2>
+              <p class="lead" id="rescheduleCompleteMessage">Your appointment was moved. The salon and the technicians have been notified.</p>
+            </header>
+            <div class="content"></div>
+            <nav class="actions">
+              <button class="btn primary" id="finishReschedule" type="button">Done</button>
             </nav>
           </section>
         </div>
@@ -2132,6 +2144,7 @@
     const sendOnlineBookingVerificationCode = httpsCallable(firebaseFunctions, "sendOnlineBookingVerificationCode");
     const verifyOnlineBookingCode = httpsCallable(firebaseFunctions, "verifyOnlineBookingCode");
     const cancelOnlineBookingAppointment = httpsCallable(firebaseFunctions, "cancelOnlineBookingAppointment");
+    const rescheduleOnlineBookingAppointment = httpsCallable(firebaseFunctions, "rescheduleOnlineBookingAppointment");
 
     const PRIVACY_CONSENT_VERSION = "privacy-consent-v3-2026-09-06";
     const BOOKING_PUBLIC_URL = "https://rosesnailsbooking.web.app";
@@ -2209,6 +2222,7 @@
       appointmentLookupPending: false,
       managedAppointments: [],
       selectedAppointmentId: '',
+      rescheduleAppointmentId: '',
       verificationChallengeId: '',
       appointmentSessionToken: '',
       appointmentSessionExpiresAt: '',
@@ -2656,7 +2670,8 @@
       'appointments-list': ['Your appointments', 85],
       'appointment-details': ['Your appointments', 90],
       'cancel-confirmation': ['Cancel appointment', 95],
-      'cancellation-complete': ['Appointment cancelled', 100]
+      'cancellation-complete': ['Appointment cancelled', 100],
+      'reschedule-complete': ['Appointment rescheduled', 100]
     };
 
 
@@ -2933,6 +2948,7 @@
 
     function beginNewAppointmentRequest() {
       state.manageIntent = false;
+      state.rescheduleAppointmentId = '';
       state.selectedAppointmentId = '';
       state.managedAppointments = [];
       clearVerifiedAppointmentAccess();
@@ -3047,14 +3063,34 @@
         </div>
       `).join('');
       const canCancel = appointment.canCancel !== false;
+      const canReschedule = appointment.canReschedule !== false;
       const cancelButton = document.getElementById('cancelAppointment');
+      const rescheduleButton = document.getElementById('rescheduleAppointment');
       const policy = document.getElementById('appointmentCancellationPolicy');
       cancelButton.disabled = !canCancel;
+      rescheduleButton.disabled = !canReschedule;
       policy.classList.toggle('warning', !canCancel);
       policy.textContent = canCancel
         ? 'Online cancellation is available until 3 hours before the appointment.'
         : 'This appointment starts in less than 3 hours. Online cancellation is no longer available. Please call the salon at 780-406-6767.';
       return true;
+    }
+
+    function beginAppointmentReschedule() {
+      const appointment = getSelectedManagedAppointment();
+      if (!appointment || appointment.canReschedule === false) return;
+      state.rescheduleAppointmentId = appointment.id;
+      state.selectedServices = Array.isArray(appointment.selectedServices)
+        ? appointment.selectedServices.slice(0, 12)
+        : [];
+      serviceText.value = appointment.service || state.selectedServices.join(', ');
+      dateInput.value = appointment.date || dateInput.value;
+      updateDateDisplay();
+      state.staff = '';
+      state.time = '';
+      sendRequestButton.textContent = 'Reschedule appointment';
+      refreshAvailability();
+      go(2);
     }
 
     function renderCancellationSummary() {
@@ -3138,7 +3174,14 @@
     bookingNextButtons[0]?.addEventListener('click', () => runUpcomingAppointmentCheck());
     bookingNextButtons[1]?.addEventListener('click', () => go(2));
     bookingNextButtons[2]?.addEventListener('click', () => go(3));
-    document.querySelectorAll('[data-back]').forEach(button => button.addEventListener('click', () => go(state.step - 1)));
+    document.querySelectorAll('[data-back]').forEach(button => button.addEventListener('click', () => {
+      if (state.rescheduleAppointmentId && state.screen === 'schedule') {
+        renderAppointmentDetails();
+        showScreen('appointment-details');
+        return;
+      }
+      go(state.step - 1);
+    }));
     existingAppointmentLink.addEventListener('click', () => runUpcomingAppointmentCheck({ manageRequested: true }));
     [nameInput, phoneInput, emailInput, consentInput].forEach(el => el.addEventListener('input', () => {
       if (contactHelper.classList.contains('visible')) validateContact(true);
@@ -3172,6 +3215,7 @@
     document.getElementById('appointmentDetailsBack').addEventListener('click', () => showScreen('appointments-list'));
     document.getElementById('cancelConfirmationBack').addEventListener('click', () => showScreen('appointment-details'));
     document.getElementById('requestNewFromDetails').addEventListener('click', beginNewAppointmentRequest);
+    document.getElementById('rescheduleAppointment').addEventListener('click', beginAppointmentReschedule);
     document.getElementById('requestNewAfterCancellation').addEventListener('click', beginNewAppointmentRequest);
 
     document.getElementById('sendVerificationCode').addEventListener('click', event => {
@@ -3290,6 +3334,14 @@
     });
     document.getElementById('finishAppointmentManagement').addEventListener('click', () => {
       state.manageIntent = false;
+      state.selectedAppointmentId = '';
+      state.managedAppointments = [];
+      clearVerifiedAppointmentAccess();
+      showScreen('contact');
+    });
+    document.getElementById('finishReschedule').addEventListener('click', () => {
+      state.manageIntent = false;
+      state.rescheduleAppointmentId = '';
       state.selectedAppointmentId = '';
       state.managedAppointments = [];
       clearVerifiedAppointmentAccess();
@@ -3590,7 +3642,7 @@
           meta: getStaffMeta(item)
         }));
 
-      if (hasAnyoneAvailability) {
+      if (hasAnyoneAvailability && !state.rescheduleAppointmentId) {
         realStaff.push({
           id: 'anyone',
           name: 'Anyone Available',
@@ -4143,6 +4195,9 @@
           <div class="review-value">${value || '-'}</div>
         </div>
       `).join('');
+      sendRequestButton.textContent = state.rescheduleAppointmentId
+        ? 'Reschedule appointment'
+        : 'Send Request';
     }
 
     sendRequestButton.addEventListener('click', async () => {
@@ -4150,7 +4205,13 @@
       if (start == null) return;
 
       if (APPOINTMENT_PREVIEW_ENABLED) {
-        go(4);
+        if (state.rescheduleAppointmentId) {
+          await waitForPreview();
+          state.rescheduleAppointmentId = '';
+          showScreen('reschedule-complete');
+        } else {
+          go(4);
+        }
         return;
       }
 
@@ -4158,27 +4219,46 @@
       sendRequestButton.textContent = 'Sending...';
 
       try {
-        await createOnlineBookingRequest({
-          requestId: makeRequestId(),
-          client: nameInput.value.trim(),
-          phone: phoneInput.value.trim(),
-          email: emailInput.value.trim(),
-          date: dateInput.value,
-          staffId: state.staff || 'anyone',
-          start,
-          selectedLanguage: 'English',
-          serviceGroups: getSelectedServiceGroups(),
-          selectedServices: serviceText.value
-            .split(/[,;]/)
-            .map(item => item.trim())
-            .filter(Boolean)
-            .slice(0, 12),
-          serviceDetails: serviceText.value.trim(),
-          photos: state.photos.filter(Boolean).map(photo => ({ name: photo.name, dataUrl: photo.dataUrl })),
-          consentAccepted: consentInput.checked,
-          consentVersion: PRIVACY_CONSENT_VERSION
-        });
-        go(4);
+        if (state.rescheduleAppointmentId) {
+          const result = await rescheduleOnlineBookingAppointment({
+            challengeId: state.verificationChallengeId,
+            sessionToken: state.appointmentSessionToken,
+            appointmentId: state.rescheduleAppointmentId,
+            date: dateInput.value,
+            staffId: state.staff,
+            start
+          });
+          const updated = result?.data?.appointment;
+          if (updated?.id) {
+            state.managedAppointments = state.managedAppointments.map(item => item.id === updated.id ? updated : item);
+          }
+          state.rescheduleAppointmentId = '';
+          document.getElementById('rescheduleCompleteMessage').textContent =
+            'Your appointment was moved. The salon and the technicians have been notified.';
+          showScreen('reschedule-complete');
+        } else {
+          await createOnlineBookingRequest({
+            requestId: makeRequestId(),
+            client: nameInput.value.trim(),
+            phone: phoneInput.value.trim(),
+            email: emailInput.value.trim(),
+            date: dateInput.value,
+            staffId: state.staff || 'anyone',
+            start,
+            selectedLanguage: 'English',
+            serviceGroups: getSelectedServiceGroups(),
+            selectedServices: serviceText.value
+              .split(/[,;]/)
+              .map(item => item.trim())
+              .filter(Boolean)
+              .slice(0, 12),
+            serviceDetails: serviceText.value.trim(),
+            photos: state.photos.filter(Boolean).map(photo => ({ name: photo.name, dataUrl: photo.dataUrl })),
+            consentAccepted: consentInput.checked,
+            consentVersion: PRIVACY_CONSENT_VERSION
+          });
+          go(4);
+        }
       } catch (error) {
         const rawMessage = error?.message || '';
         const message = /no longer available|available time|technician is not available|does not provide/i.test(rawMessage)
@@ -4187,13 +4267,14 @@
         alert(message);
       } finally {
         sendRequestButton.disabled = false;
-        sendRequestButton.textContent = 'Send Request';
+        sendRequestButton.textContent = state.rescheduleAppointmentId ? 'Reschedule appointment' : 'Send Request';
       }
     });
     document.getElementById('startOver').addEventListener('click', () => {
       state.manageIntent = false;
       state.managedAppointments = [];
       state.selectedAppointmentId = '';
+      state.rescheduleAppointmentId = '';
       clearVerifiedAppointmentAccess();
       state.selectedCategories = [];
       state.selectedServices = [];

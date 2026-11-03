@@ -112,6 +112,8 @@ function isTerminalIncomingStatus(value) {
     "duplicate",
     "alerted",
     "monitor_ignored",
+    "calendar_alerted",
+    "matched_existing",
     "baseline",
     "baseline_parse_error"
   ].includes(String(value || ""));
@@ -1912,6 +1914,157 @@ async function processDashMonitorAlerts({ db, FieldValue, Timestamp, client, map
   return report;
 }
 
+function normalizeDashMatchText(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLocaleLowerCase("en-CA")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function findDashCalendarMatch(detail, appointments, localStaff) {
+  const dashId = String(detail?.dashBookingId || "").trim();
+  const byDashId = appointments.filter(appointment =>
+    dashId && String(appointment.dashBookingId || "").trim() === dashId
+  );
+  if (byDashId.length === 1) return { appointment: byDashId[0], confidence: "dash_id" };
+
+  const client = normalizeDashMatchText(detail?.client);
+  const service = normalizeDashMatchText(detail?.service);
+  const staffId = String(localStaff?.id || "");
+  const exactPlacement = appointments.filter(appointment =>
+    appointment.canceled !== true &&
+    appointment.noShow !== true &&
+    String(appointment.date || "") === String(detail?.date || "") &&
+    Number(appointment.start) === Number(detail?.start) &&
+    (!staffId || staffId === ANYONE_ID || String(appointment.staffId || "") === staffId)
+  );
+  const strong = exactPlacement.filter(appointment => {
+    const appointmentClient = normalizeDashMatchText(appointment.client);
+    const appointmentService = normalizeDashMatchText(appointment.note);
+    const sameClient = client && appointmentClient && (client === appointmentClient || client.includes(appointmentClient) || appointmentClient.includes(client));
+    const sameService = !service || !appointmentService || service.includes(appointmentService) || appointmentService.includes(service);
+    return sameClient && sameService;
+  });
+  return strong.length === 1
+    ? { appointment: strong[0], confidence: "placement_client_service" }
+    : { appointment: null, confidence: strong.length > 1 ? "ambiguous" : "none" };
+}
+
+async function processDashCalendarMonitorAlerts({
+  db,
+  FieldValue,
+  Timestamp,
+  client,
+  mappings,
+  startDate = dateKeyInTimeZone(),
+  horizonDays = 1
+}) {
+  const range = getReconciliationRange(startDate, horizonDays);
+  const [observed, staffSnap, appointmentSnap] = await Promise.all([
+    client.readCalendarRange({ startDate: range.startDate, endDate: range.endDate }),
+    db.collection("staff").get(),
+    db.collection("appointments").where("date", ">=", range.startDate).where("date", "<=", range.endDate).get()
+  ]);
+  const staffRecords = [
+    { id: ANYONE_ID, name: "Anyone", active: true },
+    ...staffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }))
+  ];
+  const appointments = appointmentSnap.docs.map(docSnap => ({ id: docSnap.id, ref: docSnap.ref, ...docSnap.data() }));
+  const report = { scanned: 0, alerted: 0, matchedExisting: 0, ignored: 0, ambiguous: 0 };
+
+  for (const detail of observed.appointments || []) {
+    report.scanned += 1;
+    const ignoreReason = getDashMonitorIgnoreReason(detail);
+    if (ignoreReason || !detail?.dashBookingId) {
+      report.ignored += 1;
+      continue;
+    }
+    const entityId = getDashRequestDocumentId(detail.dashBookingId);
+    const canonicalRef = db.collection(DASH_RECEIPT_COLLECTION).doc(entityId);
+    const canonicalSnap = await canonicalRef.get();
+    if (canonicalSnap.exists && isTerminalReceiptForDashBooking(canonicalSnap.data(), detail.dashBookingId)) {
+      report.ignored += 1;
+      continue;
+    }
+
+    const localStaff = resolveLocalStaffForDashName(staffRecords, detail.staffName, mappings);
+    const monitoredDetail = buildDashMonitorDetail(detail, localStaff);
+    const match = findDashCalendarMatch(monitoredDetail, appointments, localStaff);
+    const messageRef = db.collection("staffMessages").doc(`dash_calendar_${entityId}`);
+    const batch = db.batch();
+
+    if (match.appointment) {
+      const appointmentRef = db.collection("appointments").doc(match.appointment.id);
+      batch.set(appointmentRef, {
+        source: "dash_booking",
+        dashBookingId: detail.dashBookingId,
+        dashOriginDate: detail.date,
+        dashOriginStart: detail.start,
+        dashOriginDuration: detail.duration,
+        dashOriginStaffName: detail.staffName || "",
+        dashCalendarMatchedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+      batch.set(db.collection("activityLog").doc(), buildDashActivityLogDoc({
+        FieldValue,
+        detail: monitoredDetail,
+        eventType: "dash_appointment_matched",
+        entityType: "appointment",
+        entityId: match.appointment.id,
+        staffId: match.appointment.staffId || localStaff?.id || "",
+        message: `Dash Booking source linked to the existing calendar appointment (${match.confidence}).`
+      }));
+      const messageDoc = buildDashMonitorMessageDoc({ FieldValue, Timestamp, detail: monitoredDetail, localStaff, staffRecords });
+      messageDoc.title = "Dash Booking appointment found";
+      messageDoc.body = [
+        "DASH BOOKING APPOINTMENT FOUND",
+        `${detail.client || "A client"} · ${detail.date || "Unknown date"} at ${minutesToTime(slotToMinutes(detail.start))}.`,
+        detail.service || "",
+        "",
+        "This appointment is already in Rose Calendar. Its source was marked as Dash Booking."
+      ].filter(Boolean).join("\n");
+      messageDoc.entityType = "appointment";
+      messageDoc.entityId = match.appointment.id;
+      messageDoc.dashImportStatus = "matched_existing";
+      batch.set(messageRef, messageDoc);
+      batch.set(canonicalRef, {
+        dashBookingId: detail.dashBookingId,
+        status: "matched_existing",
+        monitorOnly: true,
+        localAppointmentId: match.appointment.id,
+        matchConfidence: match.confidence,
+        detail: monitoredDetail,
+        processedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+      await batch.commit();
+      report.matchedExisting += 1;
+      continue;
+    }
+
+    const messageDoc = buildDashMonitorMessageDoc({ FieldValue, Timestamp, detail: monitoredDetail, localStaff, staffRecords });
+    if (match.confidence === "ambiguous") {
+      messageDoc.title = "Dash Booking needs review";
+      messageDoc.body += "\n\nMore than one Rose Calendar appointment may match. Please check manually.";
+      messageDoc.importantStaffIds = messageDoc.audienceStaffIds;
+      report.ambiguous += 1;
+    }
+    batch.set(messageRef, messageDoc);
+    batch.set(canonicalRef, {
+      dashBookingId: detail.dashBookingId,
+      status: "calendar_alerted",
+      monitorOnly: true,
+      localStaffId: localStaff?.id || "",
+      matchConfidence: match.confidence,
+      detail: monitoredDetail,
+      processedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    await batch.commit();
+    report.alerted += 1;
+  }
+  return report;
+}
+
 async function initializeDashIncomingBaseline({ db, FieldValue, client }) {
   const items = await client.readDashEvents({
     knownNotificationKeys: new Set(),
@@ -1969,7 +2122,8 @@ async function runDashSyncCycle({
   email,
   password,
   executablePath = "",
-  config: suppliedConfig = null
+  config: suppliedConfig = null,
+  calendarMonitorHorizonDays = 1
 }) {
   const config = suppliedConfig
     ? buildDefaultConfig(suppliedConfig)
@@ -2027,13 +2181,31 @@ async function runDashSyncCycle({
     const page = await createAuthenticatedDashPage(browser, { email, password });
     const client = createDashBrowserClient(page, { dryRun: config.monitorOnly || !config.writeEnabled });
     const mappings = await loadDashMappings(db);
-    const incoming = config.inboundEnabled
+    const incomingNotifications = config.inboundEnabled
       ? config.inboundBaselineComplete
         ? config.monitorOnly
           ? await processDashMonitorAlerts({ db, FieldValue, Timestamp, client, mappings })
           : await processDashIncoming({ db, FieldValue, Timestamp, client, mappings })
         : await initializeDashIncomingBaseline({ db, FieldValue, client })
       : { disabled: true };
+    let incomingCalendar = { disabled: true };
+    if (config.inboundEnabled && config.monitorOnly && config.inboundBaselineComplete) {
+      const today = dateKeyInTimeZone();
+      const scanDays = clampInteger(calendarMonitorHorizonDays, 1, config.horizonDays, 1);
+      const offset = scanDays > 1
+        ? 0
+        : Math.floor(Date.now() / (15 * 60 * 1000)) % Math.max(1, config.horizonDays);
+      incomingCalendar = await processDashCalendarMonitorAlerts({
+        db,
+        FieldValue,
+        Timestamp,
+        client,
+        mappings,
+        startDate: addDateKeyDays(today, offset),
+        horizonDays: scanDays
+      });
+    }
+    const incoming = { notifications: incomingNotifications, calendar: incomingCalendar };
     const queue = config.monitorOnly
       ? { disabled: true, reason: "monitor_only" }
       : await processDashQueue({
@@ -2073,6 +2245,7 @@ module.exports = {
   buildDashMonitorDetail,
   buildDashMonitorMessage,
   buildDashMonitorMessageDoc,
+  findDashCalendarMatch,
   buildDashOutboundMismatchMessage,
   buildDashActivityLogDoc,
   buildDashEventDocumentId,
@@ -2088,6 +2261,7 @@ module.exports = {
   getReconciliationRange,
   getWeeklyOffOccurrencesForDate,
   importDashAppointment,
+  processDashCalendarMonitorAlerts,
   cancelDashAppointment,
   rescheduleDashAppointment,
   initializeDashIncomingBaseline,

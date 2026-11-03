@@ -8698,16 +8698,18 @@ function updateClientHistoryLink(appointment = null) {
   if (clientHistoryLink) clientHistoryLink.disabled = !visible;
 }
 
-function isManualCalendarAppointment(appointment) {
+function supportsAppointmentHistory(appointment) {
   if (!appointment?.id) return false;
-  const source = String(appointment.source || '').trim().toLowerCase();
   const type = String(appointment.type || '').trim().toLowerCase();
-  return !['online_booking', 'dash_booking'].includes(source) &&
-    !['online_booking_request', 'dash_booking_request'].includes(type);
+  const status = String(appointment.status || '').trim().toLowerCase();
+  // Pending requests keep Client History only. Once an online request is
+  // confirmed it is a real calendar appointment and can also have its own
+  // change trail, just like appointments created manually.
+  return !(type === 'online_booking_request' && status === 'request');
 }
 
 function hasManualAppointmentUpdates(appointment) {
-  if (!isManualCalendarAppointment(appointment)) return false;
+  if (!supportsAppointmentHistory(appointment)) return false;
   if (Number(appointment.revision) > 1) return true;
   const action = String(appointment.lastAction || '').trim().toLowerCase();
   return Boolean(action && action !== 'create');
@@ -10974,7 +10976,9 @@ function buildAppointmentLogDetails(data, original = null) {
   if (original && data.lastAction === 'move') {
     const oldTime = formatAppointmentLogWhen(original);
     const newTime = formatAppointmentLogWhen(data);
-    return base + '; moved from ' + (oldTime || 'previous time') + ' to ' + (newTime || 'new time');
+    const changes = buildAppointmentLogChanges(data, original);
+    return base + '; moved from ' + (oldTime || 'previous time') + ' to ' + (newTime || 'new time') +
+      (changes ? '; ' + changes : '');
   }
 
   const appointmentTime = formatAppointmentLogWhen(data);
@@ -11007,7 +11011,7 @@ function buildAppointmentLogDetails(data, original = null) {
     parts.push(isDeclinedOnlineBookingRequest(data)
       ? 'declined online booking deleted'
       : 'deleted');
-  } else if (original && data.lastAction === 'edit') {
+  } else if (original) {
     const changes = buildAppointmentLogChanges(data, original);
     if (changes) parts.push(changes);
   }

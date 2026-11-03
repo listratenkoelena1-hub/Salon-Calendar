@@ -19,6 +19,7 @@ const {
   getDashMonitorIgnoreReason,
   getReconciliationRange,
   getWeeklyOffOccurrencesForDate,
+  findDashCalendarMatch,
   isTerminalIncomingStatus,
   isTerminalReceiptForDashBooking,
   makeWeeklyOccurrence,
@@ -68,10 +69,55 @@ test("retries incomplete incoming receipts but not terminal Dash outcomes", () =
   assert.equal(isTerminalIncomingStatus("duplicate"), true);
   assert.equal(isTerminalIncomingStatus("alerted"), true);
   assert.equal(isTerminalIncomingStatus("monitor_ignored"), true);
+  assert.equal(isTerminalIncomingStatus("calendar_alerted"), true);
+  assert.equal(isTerminalIncomingStatus("matched_existing"), true);
   assert.equal(isTerminalIncomingStatus("baseline"), true);
   assert.equal(isTerminalIncomingStatus("baseline_parse_error"), true);
   assert.equal(isTerminalIncomingStatus("unmapped_staff"), false);
   assert.equal(isTerminalIncomingStatus("parse_error"), false);
+});
+
+test("calendar fallback links one strong local match even after a Dash notification was read", () => {
+  const detail = {
+    dashBookingId: "dash-42",
+    date: "2026-11-05",
+    start: 12,
+    client: "Miss Rosa",
+    service: "Gel polish manicure"
+  };
+  const result = findDashCalendarMatch(detail, [{
+    id: "rose-appointment",
+    date: "2026-11-05",
+    start: 12,
+    staffId: "olga",
+    client: "Miss Rosa",
+    note: "Gel polish manicure"
+  }], { id: "olga" });
+  assert.equal(result.appointment.id, "rose-appointment");
+  assert.equal(result.confidence, "placement_client_service");
+});
+
+test("calendar fallback refuses to guess between ambiguous local appointments", () => {
+  const detail = {
+    dashBookingId: "dash-43",
+    date: "2026-11-05",
+    start: 12,
+    client: "Barbara",
+    service: "Manicure"
+  };
+  const duplicate = {
+    date: "2026-11-05",
+    start: 12,
+    staffId: "olga",
+    client: "Barbara",
+    note: "Manicure"
+  };
+  const result = findDashCalendarMatch(detail, [
+    { id: "one", ...duplicate },
+    { id: "two", ...duplicate }
+  ], { id: "olga" });
+  assert.equal(result.appointment, null);
+  assert.equal(result.confidence, "ambiguous");
 });
 
 test("deduplicates changing Dash notification labels by the permanent appointment id", () => {
