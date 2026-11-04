@@ -60,6 +60,10 @@ function textMatches(text, patterns) {
   return patterns.some(pattern => pattern.test(text));
 }
 
+function isRepairRequest(text) {
+  return /\b(?:fix|fixing|fixed|repair|repairing|repaired)\b/iu.test(String(text || ""));
+}
+
 function getRequestedBookingDurationSegments(input = {}) {
   const serviceDetails = String(input.serviceDetails || "").trim();
   if (serviceDetails) {
@@ -145,6 +149,7 @@ function getRequestedBookingDurationSlots(input = {}, staffRecord = {}) {
   let feetMain = 0;
   let removingAddOn = 0;
   let otherAddOns = 0;
+  let repairDuration = 0;
   let hasOneNailExtensionOnly = false;
   const frenchZones = new Set();
   const designZones = new Set();
@@ -174,6 +179,7 @@ function getRequestedBookingDurationSlots(input = {}, staffRecord = {}) {
     const hasGelOverlay = textMatches(segment, [/\bgel\s*overlay\b/, /\boverlay\b/, /\bbuilder\s*gel\b/, /\bhard\s*gel\b/, /\bstrong\s*gel\b/, /тверд(?:ый|ого)\s+гель/, /жестк(?:ий|ого)\s+гель/]);
     const hasGelPolish = hasGel && !hasGelOverlay;
     const hasOneNailExtension = isSingleNailServicePhrase(segment);
+    const hasRepair = isRepairRequest(segment);
     const hasPolishService = hasGelPolish || hasNoColor || hasRegularPolish || hasDeluxe;
     const hasManicure = hasCompactCombo || shortTokens.has("m") || textMatches(segment, [/\bmanicure\b/, /\bmani\b/, /маникюр/]) ||
       (hasHandsZone && !hasFeetZone && hasPolishService);
@@ -249,11 +255,13 @@ function getRequestedBookingDurationSlots(input = {}, staffRecord = {}) {
     }
 
     if (hasOneNailExtension) hasOneNailExtensionOnly = true;
+    if (hasRepair) repairDuration = Math.max(repairDuration, 2);
     if (isNailMaintenancePhrase(segment) && !wantsRemoving) otherAddOns += 1;
   });
 
   let total = handsMain + feetMain + removingAddOn + otherAddOns;
-  if (hasOneNailExtensionOnly && handsMain === 0) total += 1;
+  if (hasOneNailExtensionOnly && handsMain === 0 && repairDuration === 0) total += 1;
+  total = Math.max(total, repairDuration);
   total += frenchZones.size;
   total += designZones.size;
   return total > 0 ? Math.max(1, Math.min(MAX_BOOKING_DURATION, total)) : BOOKING_DURATION;

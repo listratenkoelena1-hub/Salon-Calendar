@@ -5,11 +5,13 @@ const assert = require("node:assert/strict");
 const {
   applyHistoryPreferences,
   chooseProfileMatch,
+  filterClientHistoryRecordsForIdentity,
   getClientNoShowWarning,
   getNameMatch,
   getPersonalizedDuration,
   getServiceFingerprint,
   hashPhone,
+  isSameClientName,
   normalizeClientName,
   normalizePhone,
   parseServiceIntent,
@@ -68,11 +70,30 @@ test("normalizes supported phone formats and rejects incomplete numbers", () => 
 
 test("keeps short names strict and accepts small spelling mistakes in longer names", () => {
   assert.equal(normalizeClientName("  Darlène "), "darlene");
+  assert.equal(isSameClientName("  nina cardinal ", "Nina   Cardinal"), true);
+  assert.equal(isSameClientName("Nina Cardinal", "Nina Cardin"), false);
   assert.deepEqual(getNameMatch("Darlene", "Darlene"), { type: "exact", distance: 0, score: 1 });
   assert.equal(getNameMatch("Li", "Lu"), null);
   assert.equal(getNameMatch("Darlene", "Darlne")?.type, "close");
   assert.equal(getNameMatch("Griselda", "Grizelda")?.type, "close");
   assert.equal(getNameMatch("Barbara", "Deborah"), null);
+});
+
+test("joins historic profile branches when only the client name capitalization differs", () => {
+  const records = [
+    { id: "first", clientId: "phone-client", clientProfileId: "lowercase-profile", client: "nina cardinal" },
+    { id: "second", clientId: "phone-client", clientProfileId: "titlecase-profile", client: "Nina Cardinal" },
+    { id: "third", clientId: "phone-client", clientProfileId: "other-person", client: "Nina Cardin" },
+    { id: "fourth", clientId: "different-phone", clientProfileId: "different", client: "Nina Cardinal" }
+  ];
+  assert.deepEqual(
+    filterClientHistoryRecordsForIdentity(records, {
+      clientId: "phone-client",
+      clientProfileId: "titlecase-profile",
+      clientNameNormalized: "nina cardinal"
+    }).map(record => record.id),
+    ["first", "second"]
+  );
 });
 
 test("selects a unique close profile but does not guess between tied people on one phone", () => {

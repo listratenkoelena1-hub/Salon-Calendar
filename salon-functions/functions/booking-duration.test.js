@@ -53,7 +53,20 @@ test("handles design once and never treats no design as an add-on", () => {
 test("keeps a one-nail extension as a small add-on", () => {
   assert.equal(duration("One nail extension", ["manicure"]), 1);
   assert.equal(duration("One fake nail", ["manicure"]), 1);
-  assert.equal(duration("Repair one nail", ["manicure"]), 1);
+});
+
+test("reserves thirty minutes for fix and repair requests", () => {
+  for (const serviceDetails of [
+    "fix",
+    "fixing",
+    "fix one nail",
+    "one nail fix",
+    "repair one nail",
+    "repair broken nail"
+  ]) {
+    assert.equal(duration(serviceDetails, ["manicure"]), 2);
+  }
+  assert.equal(duration("One nail extension", ["manicure"]), 1);
 });
 
 test("uses the full extension duration for nails and powder requests", () => {

@@ -55,6 +55,27 @@ function normalizeClientName(value) {
     .trim();
 }
 
+function isSameClientName(leftValue, rightValue) {
+  const left = normalizeClientName(leftValue);
+  const right = normalizeClientName(rightValue);
+  return Boolean(left && right && left === right);
+}
+
+function filterClientHistoryRecordsForIdentity(records, identity = {}) {
+  const clientProfileId = String(identity.clientProfileId || "");
+  const clientId = String(identity.clientId || "");
+  const clientNameNormalized = normalizeClientName(identity.clientNameNormalized || identity.clientName || "");
+  return (Array.isArray(records) ? records : []).filter(record => (
+    String(record?.clientProfileId || "") === clientProfileId ||
+    Boolean(
+      clientId &&
+      clientNameNormalized &&
+      String(record?.clientId || "") === clientId &&
+      normalizeClientName(record?.client) === clientNameNormalized
+    )
+  ));
+}
+
 function damerauLevenshtein(leftValue, rightValue) {
   const left = String(leftValue || "");
   const right = String(rightValue || "");
@@ -189,7 +210,8 @@ function isSingleNailServicePhrase(text) {
 
 function isNailMaintenancePhrase(text) {
   const value = String(text || "");
-  return /\b(?:cut|trim|shorten|file)\s+(?:my\s+|the\s+)?nails?\b/iu.test(value) ||
+  return /\b(?:fix|fixing|fixed|repair|repairing|repaired)\b/iu.test(value) ||
+    /\b(?:cut|trim|shorten|file)\s+(?:my\s+|the\s+)?nails?\b/iu.test(value) ||
     /\bnails?\s+(?:cut|trim|shortening|filing)\b/iu.test(value) ||
     /\bnail\s*trim\b/iu.test(value) ||
     /\bchange\s+(?:my\s+|the\s+)?nails?\s+shape\b/iu.test(value) ||
@@ -612,6 +634,7 @@ module.exports = {
   applyHistoryPreferences,
   chooseProfileMatch,
   damerauLevenshtein,
+  filterClientHistoryRecordsForIdentity,
   getAllowedNameDistance,
   getNameMatch,
   getClientNoShowWarning,
@@ -623,6 +646,7 @@ module.exports = {
   isNailMaintenancePhrase,
   isSingleNailServicePhrase,
   hashPhone,
+  isSameClientName,
   normalizeClientName,
   normalizePhone,
   normalizeServiceText,

@@ -38,6 +38,7 @@ const {
 } = require("./appointment-schedule");
 const {
   applyHistoryPreferences,
+  filterClientHistoryRecordsForIdentity,
   getClientNoShowWarning,
   getServiceFingerprint,
   normalizePhone,
@@ -2570,6 +2571,28 @@ function buildManagerClientHistoryAppointment(appointment) {
   };
 }
 
+async function loadClientHistoryForPrivateIdentity(privateData, limit = 120) {
+  const clientProfileId = String(privateData?.clientProfileId || "");
+  const clientId = String(privateData?.clientId || "");
+  const clientNameNormalized = normalizeClientName(privateData?.clientNameNormalized || "");
+  if (!clientProfileId) return [];
+
+  const historySnapshot = clientId
+    ? await db.collection(CLIENT_HISTORY_COLLECTION)
+        .where("clientId", "==", clientId)
+        .limit(limit)
+        .get()
+    : await db.collection(CLIENT_HISTORY_COLLECTION)
+        .where("clientProfileId", "==", clientProfileId)
+        .limit(limit)
+        .get();
+
+  return filterClientHistoryRecordsForIdentity(
+    historySnapshot.docs.map(document => ({ id: document.id, ...document.data() })),
+    { clientProfileId, clientId, clientNameNormalized }
+  );
+}
+
 exports.managerGetClientHistory = onCall(
   {
     region: "us-central1",
@@ -2587,12 +2610,9 @@ exports.managerGetClientHistory = onCall(
       return { ok: true, appointmentId, available: false, past: [], future: [], totalCount: 0 };
     }
     const privateData = privateSnapshot.data() || {};
-    const historySnapshot = await db.collection(CLIENT_HISTORY_COLLECTION)
-      .where("clientProfileId", "==", String(privateData.clientProfileId))
-      .limit(120)
-      .get();
-    const appointmentIds = historySnapshot.docs
-      .map(document => document.id)
+    const historyRecords = await loadClientHistoryForPrivateIdentity(privateData);
+    const appointmentIds = historyRecords
+      .map(record => record.id)
       .filter(id => id !== appointmentId);
     const appointments = [];
     for (let index = 0; index < appointmentIds.length; index += 50) {
@@ -2610,10 +2630,7 @@ exports.managerGetClientHistory = onCall(
     const future = appointments
       .filter(item => String(item.date || "") >= today)
       .sort((left, right) => String(left.date).localeCompare(String(right.date)) || Number(left.start) - Number(right.start));
-    const summary = summarizeClientHistory(historySnapshot.docs.map(document => ({
-      id: document.id,
-      ...document.data()
-    })));
+    const summary = summarizeClientHistory(historyRecords);
     return {
       ok: true,
       appointmentId,
@@ -2690,17 +2707,14 @@ exports.getAppointmentClientHistory = onCall(
       return { ok: true, appointmentId, available: false, clientName: "", rows: [], appointments: [] };
     }
 
-    const [historySnapshot, staffSnapshot] = await Promise.all([
-      db.collection(CLIENT_HISTORY_COLLECTION)
-        .where("clientProfileId", "==", clientProfileId)
-        .limit(120)
-        .get(),
+    const [historyRecords, staffSnapshot] = await Promise.all([
+      loadClientHistoryForPrivateIdentity(privateData),
       db.collection("staff").get()
     ]);
     const staffRecords = staffSnapshot.docs.map(document => ({ id: document.id, ...document.data() }));
     const appointmentIds = [...new Set([
       appointmentId,
-      ...historySnapshot.docs.map(document => String(document.data()?.appointmentId || document.id))
+      ...historyRecords.map(record => String(record.appointmentId || record.id))
     ].filter(Boolean))];
 
     const appointments = [];
