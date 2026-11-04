@@ -72,7 +72,7 @@ test("Client History phone is conditionally returned only to a manager", () => {
 test("Appointment History is offered for changed calendar appointments", () => {
   assert.match(calendarHtml, /id="appointmentHistoryLink"[^>]*>Appointment History<\/button>/);
   assert.match(calendarHtml, /function supportsAppointmentHistory\(appointment\)/);
-  assert.match(calendarHtml, /type === 'online_booking_request' && status === 'request'/);
+  assert.match(calendarHtml, /source !== 'online_booking' && source !== 'dash_booking'/);
   assert.match(calendarHtml, /Number\(appointment\.revision\) > 1/);
   assert.match(calendarHtml, /action && action !== 'create'/);
   assert.match(calendarHtml, /updateClientHistoryLink\(a\);\s*updateAppointmentHistoryLink\(a\);/);
@@ -87,9 +87,10 @@ test("Appointment History reads existing activity logs without storing a second 
   assert.doesNotMatch(functionsSource, /collection\("appointmentHistory"\)/);
 });
 
-test("pending online requests keep Client History only while confirmed updates gain Appointment History", () => {
+test("each appointment exposes one source-appropriate history link", () => {
   assert.match(calendarHtml, /function supportsAppointmentHistory\(appointment\)/);
-  assert.match(calendarHtml, /type === 'online_booking_request' && status === 'request'/);
+  assert.match(calendarHtml, /usesClientHistory = source === 'online_booking' \|\| source === 'dash_booking'/);
+  assert.match(calendarHtml, /source !== 'online_booking' && source !== 'dash_booking'/);
   assert.match(calendarHtml, /if \(!hasManualAppointmentUpdates\(appointment\)\) return;/);
 });
 

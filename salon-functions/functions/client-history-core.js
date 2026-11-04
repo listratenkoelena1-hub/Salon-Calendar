@@ -470,6 +470,44 @@ function summarizeClientHistory(records, { minimumPreferenceCount = 2 } = {}) {
   };
 }
 
+function getClientNoShowWarning(records, referenceDate = "") {
+  const referenceMs = /^\d{4}-\d{2}-\d{2}$/.test(String(referenceDate || ""))
+    ? Date.parse(`${referenceDate}T23:59:59Z`)
+    : Date.now();
+  const windowStartMs = referenceMs - (365 * 24 * 60 * 60 * 1000);
+  const completed = (Array.isArray(records) ? records : [])
+    .filter(recordCountsTowardPreferences)
+    .filter(record => {
+      const value = recordSortValue(record);
+      return value > 0 && value <= referenceMs;
+    })
+    .sort((left, right) => recordSortValue(right) - recordSortValue(left));
+  const rollingNoShowCount = completed.filter(record => (
+    record.noShow === true && recordSortValue(record) >= windowStartMs
+  )).length;
+
+  let consecutiveNoShowCount = 0;
+  for (const record of completed) {
+    if (record.noShow === true) {
+      consecutiveNoShowCount += 1;
+      continue;
+    }
+    if (record.canceled === true || String(record.status || "").toLowerCase() === "canceled") continue;
+    break;
+  }
+
+  if (rollingNoShowCount >= 5) {
+    return `This client has ${rollingNoShowCount} No Shows in the last 12 months.`;
+  }
+  if (consecutiveNoShowCount === 1) {
+    return "This client did not attend their previous appointment.";
+  }
+  if (consecutiveNoShowCount > 1) {
+    return `This client missed their last ${consecutiveNoShowCount} appointments.`;
+  }
+  return "";
+}
+
 function preferenceToZone(preference) {
   if (!preference?.key) return null;
   return {
@@ -550,6 +588,7 @@ module.exports = {
   damerauLevenshtein,
   getAllowedNameDistance,
   getNameMatch,
+  getClientNoShowWarning,
   getPersonalizedDuration,
   getPhoneDigits,
   getPhoneLast4,

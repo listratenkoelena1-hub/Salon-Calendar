@@ -342,8 +342,8 @@ test("monitor-only alerts are visible to all and Important only for the assigned
   assert.equal(assigned.staffDefaultPriority, "secondary");
   assert.match(assigned.dashImportReceiptId, /^dash_[a-f0-9]{8,40}$/);
   assert.equal(assigned.dashImportStatus, "pending");
-  assert.match(assigned.body, /Please add this appointment to the calendar/);
-  assert.match(assigned.body, /If there is not enough time, ask the manager to contact the client/);
+  assert.match(assigned.body, /Please check your time availability/);
+  assert.match(assigned.body, /If you have enough time, add this appointment to Calendar/);
   assert.doesNotMatch(assigned.body, /Nothing was changed/);
 
   const anyone = buildDashMonitorMessageDoc({
@@ -411,7 +411,7 @@ test("uses distinct titles for ongoing Dash cancellation and reschedule events",
   }).title, "Dash Booking time mismatch");
 });
 
-test("warns about a shorter Rose interval without instructing the bridge to edit Dash", () => {
+test("warns about a shorter Calendar interval without instructing the bridge to edit Dash", () => {
   const message = buildDashOutboundMismatchMessage({
     client: "Prit",
     date: "2026-09-28",
@@ -424,7 +424,7 @@ test("warns about a shorter Rose interval without instructing the bridge to edit
   }, { name: "Olha" }, "dash-origin-shorter");
 
   assert.match(message, /DASH BOOKING TIME MISMATCH/);
-  assert.match(message, /Rose Calendar: 2026-09-28, 15:30-18:00/);
+  assert.match(message, /Calendar: 2026-09-28, 15:30-18:00/);
   assert.match(message, /Dash Booking: 2026-09-28, 15:30-18:30/);
   assert.match(message, /Dash Booking was not changed/);
   assert.doesNotMatch(message, /updated automatically|shorten/i);

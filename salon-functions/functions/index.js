@@ -38,6 +38,7 @@ const {
 } = require("./appointment-schedule");
 const {
   applyHistoryPreferences,
+  getClientNoShowWarning,
   getServiceFingerprint,
   normalizePhone,
   parseServiceIntent,
@@ -1576,7 +1577,10 @@ function buildOnlineBookingTelegramMessage(data, staffRecords) {
   const assignmentLine = data.requestedStaffId === ANYONE_ID && data.staffId !== ANYONE_ID
     ? `\nAssigned to <b>${staffName}</b> by the Anyone rotation.`
     : "";
-  return `ONLINE BOOKING REQUEST\n${data.client} requested <b>${requestedStaffName}</b> - <u>${formatDate(data.date)}</u> at <i>${slotToTime(data.start)}</i>.${noteLine}${photoLine}${assignmentLine}`;
+  const warningLine = data.requestWarning
+    ? `\n\n⚠️ <b>${escapeHtml(data.requestWarning)}</b>`
+    : "";
+  return `ONLINE BOOKING REQUEST\n${data.client} requested <b>${requestedStaffName}</b> - <u>${formatDate(data.date)}</u> at <i>${slotToTime(data.start)}</i>.${noteLine}${photoLine}${assignmentLine}${warningLine}`;
 }
 
 function buildAppointmentLogDetails(data, staffRecords) {
@@ -3806,12 +3810,13 @@ exports.createOnlineBookingRequest = onCall(
         allowCloseNameMatch: true
       });
       const cachedClientSummary = getCachedProfileSummary(clientIdentity?.profileData);
-      const clientHistory = clientIdentity?.clientProfileId && !cachedClientSummary
+      const clientHistory = clientIdentity?.clientProfileId
         ? await loadClientHistoryInTransaction(tx, db, clientIdentity.clientProfileId)
         : [];
       const clientSummary = cachedClientSummary || (
         clientHistory.length ? summarizeClientHistory(clientHistory) : null
       );
+      const clientNoShowWarning = getClientNoShowWarning(clientHistory, getSalonNowParts().date);
 
       const staffSnap = await tx.get(db.collection("staff"));
       const staffRecords = getActiveStaffRecords(staffSnap.docs.map(docSnap => ({
@@ -4092,7 +4097,7 @@ exports.createOnlineBookingRequest = onCall(
         status: "request",
         selectedLanguage,
         selectedServices: primarySelectedServices,
-        requestWarning: null,
+        requestWarning: clientNoShowWarning || null,
         photoRefs: photoReview ? photoReview.refs : [],
         photoLinks: photoReview ? [photoReview.url] : [],
         photoReviewToken: photoReview ? photoReview.token : null,

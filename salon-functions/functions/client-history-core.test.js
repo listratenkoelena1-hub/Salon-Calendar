@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const {
   applyHistoryPreferences,
   chooseProfileMatch,
+  getClientNoShowWarning,
   getNameMatch,
   getPersonalizedDuration,
   getServiceFingerprint,
@@ -15,6 +16,46 @@ const {
   stripPrivateAppointmentFields,
   summarizeClientHistory
 } = require("./client-history-core");
+
+test("warns about recent No Shows, resets after attendance, and keeps a rolling twelve-month high-risk count", () => {
+  const record = (date, values = {}) => ({
+    status: "confirmed",
+    staffId: "elena",
+    note: "Manicure",
+    date,
+    ...values
+  });
+  assert.equal(
+    getClientNoShowWarning([record("2026-10-20", { noShow: true })], "2026-11-04"),
+    "This client did not attend their previous appointment."
+  );
+  assert.equal(
+    getClientNoShowWarning([
+      record("2026-10-20", { noShow: true }),
+      record("2026-10-01", { noShow: true })
+    ], "2026-11-04"),
+    "This client missed their last 2 appointments."
+  );
+  assert.equal(
+    getClientNoShowWarning([
+      record("2026-10-25"),
+      record("2026-10-20", { noShow: true })
+    ], "2026-11-04"),
+    ""
+  );
+  assert.equal(
+    getClientNoShowWarning([
+      record("2026-10-25"),
+      record("2026-10-20", { noShow: true }),
+      record("2026-08-20", { noShow: true }),
+      record("2026-06-20", { noShow: true }),
+      record("2026-04-20", { noShow: true }),
+      record("2026-01-20", { noShow: true }),
+      record("2025-10-20", { noShow: true })
+    ], "2026-11-04"),
+    "This client has 5 No Shows in the last 12 months."
+  );
+});
 
 test("normalizes supported phone formats and rejects incomplete numbers", () => {
   assert.equal(normalizePhone("(780) 555-0123"), "+17805550123");

@@ -90,13 +90,13 @@ function buildDashOutboundMismatchMessage(appointment, localStaff, reason) {
     appointment?.dashOriginDuration
   );
   const explanation = reason === "dash-origin-shorter"
-    ? `${client}'s time in Rose Calendar is shorter than the confirmed Dash Booking appointment.`
-    : `${client}'s date, time, or technician in Rose Calendar no longer matches Dash Booking.`;
+    ? `${client}'s time in Calendar is shorter than the confirmed Dash Booking appointment.`
+    : `${client}'s date, time, or technician in Calendar no longer matches Dash Booking.`;
   return [
     "DASH BOOKING TIME MISMATCH",
     explanation,
     "",
-    `Rose Calendar: ${roseInterval} · ${roseStaff}`,
+    `Calendar: ${roseInterval} · ${roseStaff}`,
     `Dash Booking: ${dashInterval} · ${dashStaff}`,
     "",
     "Dash Booking was not changed. Please check this appointment manually."
@@ -977,7 +977,7 @@ function buildDashMonitorMessage(detail = {}) {
     `${detail.date || "Unknown date"} at ${startText}.`,
     ...(detail.service ? [detail.service] : []),
     "",
-    "Please add this appointment to the calendar. If there is not enough time, ask the manager to contact the client."
+    "Please check your time availability. If you have enough time, add this appointment to Calendar."
   ].join("\n");
 }
 
@@ -1997,15 +1997,53 @@ async function processDashCalendarMonitorAlerts({
 
     if (match.appointment) {
       const appointmentRef = db.collection("appointments").doc(match.appointment.id);
-      batch.set(appointmentRef, {
-        source: "dash_booking",
-        dashBookingId: detail.dashBookingId,
-        dashOriginDate: detail.date,
-        dashOriginStart: detail.start,
-        dashOriginDuration: detail.duration,
-        dashOriginStaffName: detail.staffName || "",
-        dashCalendarMatchedAt: FieldValue.serverTimestamp()
-      }, { merge: true });
+      await db.runTransaction(async transaction => {
+        const privateRef = db.collection("appointmentPrivate").doc(match.appointment.id);
+        const privateSnap = await transaction.get(privateRef);
+        let clientIdentity = privateSnap.exists
+          ? identityFromPrivateData(privateSnap.data() || {})
+          : null;
+        if (!clientIdentity && detail.dashClientId) {
+          clientIdentity = await planExternalClientIdentityInTransaction({
+            transaction,
+            db,
+            FieldValue,
+            provider: "dash_booking",
+            externalId: detail.dashClientId,
+            clientName: detail.client
+          });
+        }
+        const linkedAppointment = {
+          ...match.appointment,
+          source: "dash_booking",
+          dashBookingId: detail.dashBookingId,
+          dashOriginDate: detail.date,
+          dashOriginStart: detail.start,
+          dashOriginDuration: detail.duration,
+          dashOriginStaffName: detail.staffName || "",
+          hasClientHistory: Boolean(clientIdentity?.clientProfileId)
+        };
+        transaction.set(appointmentRef, {
+          source: linkedAppointment.source,
+          dashBookingId: linkedAppointment.dashBookingId,
+          dashOriginDate: linkedAppointment.dashOriginDate,
+          dashOriginStart: linkedAppointment.dashOriginStart,
+          dashOriginDuration: linkedAppointment.dashOriginDuration,
+          dashOriginStaffName: linkedAppointment.dashOriginStaffName,
+          hasClientHistory: linkedAppointment.hasClientHistory,
+          dashCalendarMatchedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+        if (clientIdentity) {
+          applyClientIdentityPlan(transaction, clientIdentity, FieldValue);
+          writeClientAppointmentRecords(transaction, {
+            db,
+            FieldValue,
+            appointmentId: match.appointment.id,
+            appointment: linkedAppointment,
+            identity: clientIdentity
+          });
+        }
+      });
       batch.set(db.collection("activityLog").doc(), buildDashActivityLogDoc({
         FieldValue,
         detail: monitoredDetail,
@@ -2016,13 +2054,14 @@ async function processDashCalendarMonitorAlerts({
         message: `Dash Booking source linked to the existing calendar appointment (${match.confidence}).`
       }));
       const messageDoc = buildDashMonitorMessageDoc({ FieldValue, Timestamp, detail: monitoredDetail, localStaff, staffRecords });
-      messageDoc.title = "Dash Booking appointment found";
+      messageDoc.title = "Dash Booking appointment received";
       messageDoc.body = [
-        "DASH BOOKING APPOINTMENT FOUND",
+        "NEW APPOINTMENT RECEIVED THROUGH DASH BOOKING",
         `${detail.client || "A client"} · ${detail.date || "Unknown date"} at ${minutesToTime(slotToMinutes(detail.start))}.`,
         detail.service || "",
         "",
-        "This appointment is already in Rose Calendar. Its source was marked as Dash Booking."
+        `Booked with ${detail.staffName || localStaff?.name || "a technician"}.`,
+        "This appointment is already in Calendar."
       ].filter(Boolean).join("\n");
       messageDoc.entityType = "appointment";
       messageDoc.entityId = match.appointment.id;
@@ -2045,7 +2084,7 @@ async function processDashCalendarMonitorAlerts({
     const messageDoc = buildDashMonitorMessageDoc({ FieldValue, Timestamp, detail: monitoredDetail, localStaff, staffRecords });
     if (match.confidence === "ambiguous") {
       messageDoc.title = "Dash Booking needs review";
-      messageDoc.body += "\n\nMore than one Rose Calendar appointment may match. Please check manually.";
+      messageDoc.body += "\n\nMore than one Calendar appointment may match. Please check manually.";
       messageDoc.importantStaffIds = messageDoc.audienceStaffIds;
       report.ambiguous += 1;
     }
