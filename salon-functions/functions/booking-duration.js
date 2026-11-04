@@ -3,6 +3,9 @@
 const {
   applyHistoryPreferences,
   getPersonalizedDuration,
+  isFullNailExtensionPhrase,
+  isNailMaintenancePhrase,
+  isSingleNailServicePhrase,
   parseServiceIntent
 } = require("./client-history-core");
 
@@ -167,10 +170,10 @@ function getRequestedBookingDurationSlots(input = {}, staffRecord = {}) {
     const hasRegularPolish = textMatches(segment, [/\bregular\s*(?:polish|colou?r)\b/, /обычн(?:ый|ого)\s+лак/]);
     const hasChangeColor = textMatches(segment, [/\bchange\s*(?:gel\s*)?colou?r\b/, /\bpolish\s*change\b/, /\bcolou?r\s*change\b/, /\bapply\s*gel\s*polish\b/, /^\s*toes?\s*$/, /смена\s+цвета/]);
     const hasRefill = shortTokens.has("f") || shortTokens.has("r") || textMatches(segment, [/\brefill\b/, /\bfill\b/, /\bcorrection\b/, /коррекц/]);
-    const hasExtensions = textMatches(segment, [/\bextension(s)?\b/, /\bext\b/, /\bnew\s*set\b/, /\bfull\s*set\b/, /\bpowder(?:\s+nails?)?\b/, /^\s*nails?\b/, /наращ/]);
+    const hasExtensions = isFullNailExtensionPhrase(segment);
     const hasGelOverlay = textMatches(segment, [/\bgel\s*overlay\b/, /\boverlay\b/, /\bbuilder\s*gel\b/, /\bhard\s*gel\b/, /\bstrong\s*gel\b/, /тверд(?:ый|ого)\s+гель/, /жестк(?:ий|ого)\s+гель/]);
     const hasGelPolish = hasGel && !hasGelOverlay;
-    const hasOneNailExtension = textMatches(segment, [/\bone\s*nail\s*extension\b/]);
+    const hasOneNailExtension = isSingleNailServicePhrase(segment);
     const hasPolishService = hasGelPolish || hasNoColor || hasRegularPolish || hasDeluxe;
     const hasManicure = hasCompactCombo || shortTokens.has("m") || textMatches(segment, [/\bmanicure\b/, /\bmani\b/, /маникюр/]) ||
       (hasHandsZone && !hasFeetZone && hasPolishService);
@@ -246,8 +249,7 @@ function getRequestedBookingDurationSlots(input = {}, staffRecord = {}) {
     }
 
     if (hasOneNailExtension) hasOneNailExtensionOnly = true;
-    if (textMatches(segment, [/\bcut\s*nails?\b/, /\bcut\s*toe\s*nails?\b/, /\bnail\s*trim\b/, /\btoenail\s*trim\b/])) otherAddOns += 1;
-    if (textMatches(segment, [/\bchange\s*nails?\s*shape\b/, /\breshape\b/])) otherAddOns += 1;
+    if (isNailMaintenancePhrase(segment) && !wantsRemoving) otherAddOns += 1;
   });
 
   let total = handsMain + feetMain + removingAddOn + otherAddOns;

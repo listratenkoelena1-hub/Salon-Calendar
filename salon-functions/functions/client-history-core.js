@@ -182,12 +182,38 @@ function makeZone(key, label, explicit = true) {
   return { key, label, explicit, design: null };
 }
 
+function isSingleNailServicePhrase(text) {
+  return /\b(?:one|1|single)\s+(?:fake\s+)?nail(?:\s+(?:extension|repair|fix))?\b/iu.test(String(text || "")) ||
+    /\b(?:repair|fix)\s+(?:one|1|a single)\s+nail\b/iu.test(String(text || ""));
+}
+
+function isNailMaintenancePhrase(text) {
+  const value = String(text || "");
+  return /\b(?:cut|trim|shorten|file)\s+(?:my\s+|the\s+)?nails?\b/iu.test(value) ||
+    /\bnails?\s+(?:cut|trim|shortening|filing)\b/iu.test(value) ||
+    /\bnail\s*trim\b/iu.test(value) ||
+    /\bchange\s+(?:my\s+|the\s+)?nails?\s+shape\b/iu.test(value) ||
+    /\bchange\s+(?:the\s+)?shape(?:\s+of\s+(?:my\s+|the\s+)?nails?)?\b/iu.test(value) ||
+    /\breshape\s+(?:my\s+|the\s+)?nails?\b/iu.test(value) ||
+    /\b(?:remove|removing|removal|take\s*off)\b[^.;,]*\b(?:nails?|extensions?|acrylic|gel)\b/iu.test(value) ||
+    /\bnails?\s+removal\b/iu.test(value);
+}
+
+function isFullNailExtensionPhrase(text) {
+  const value = String(text || "");
+  if (isSingleNailServicePhrase(value)) return false;
+  if (/\b(new set|full set|powder(?:\s+nails?)?)\b|наращ/iu.test(value)) return true;
+  if (isNailMaintenancePhrase(value)) return false;
+  if (/\b(?:extensions?|ext)\b/iu.test(value)) return true;
+  return /\bnails?\b/iu.test(value);
+}
+
 function classifyHands(text, hasMarker = false) {
-  if (/\bone\s+nail\s+extension\b/iu.test(text)) {
+  if (isSingleNailServicePhrase(text)) {
     return makeZone("one_nail_extension", "One nail extension");
   }
   const refill = /\b(refill|fill|correction)\b|^[fr]$|коррекц/iu.test(text);
-  const newSet = /\b(new set|full set|extensions?|ext|powder(?:\s+nails?)?)\b|^\s*nails?\b|наращ/iu.test(text);
+  const newSet = isFullNailExtensionPhrase(text);
   if (/\bacrylic\b|акрил/iu.test(text)) {
     if (refill) return makeZone("acrylic_refill", "Acrylic refill");
     if (newSet) return makeZone("acrylic_new_set", "Acrylic new set");
@@ -593,6 +619,9 @@ module.exports = {
   getPhoneDigits,
   getPhoneLast4,
   getServiceFingerprint,
+  isFullNailExtensionPhrase,
+  isNailMaintenancePhrase,
+  isSingleNailServicePhrase,
   hashPhone,
   normalizeClientName,
   normalizePhone,

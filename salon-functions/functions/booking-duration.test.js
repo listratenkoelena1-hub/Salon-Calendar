@@ -52,13 +52,34 @@ test("handles design once and never treats no design as an add-on", () => {
 
 test("keeps a one-nail extension as a small add-on", () => {
   assert.equal(duration("One nail extension", ["manicure"]), 1);
+  assert.equal(duration("One fake nail", ["manicure"]), 1);
+  assert.equal(duration("Repair one nail", ["manicure"]), 1);
 });
 
 test("uses the full extension duration for nails and powder requests", () => {
-  for (const serviceDetails of ["nail", "nails", "powder", "powder nails"]) {
+  for (const serviceDetails of [
+    "nail",
+    "nails",
+    "powder",
+    "powder nails",
+    "coffin nails",
+    "square nails",
+    "short nails",
+    "long nails",
+    "new nails"
+  ]) {
     assert.equal(duration(serviceDetails, ["manicure"]), 8);
   }
   assert.equal(duration("powder nails with design", ["manicure"]), 9);
+});
+
+test("does not turn nail maintenance, removal, or one-nail work into a full set", () => {
+  assert.equal(duration("cut nails", ["manicure"]), 1);
+  assert.equal(duration("nail trim", ["manicure"]), 1);
+  assert.equal(duration("change nail shape", ["manicure"]), 1);
+  assert.equal(duration("reshape nails", ["manicure"]), 1);
+  assert.equal(duration("remove nails", ["manicure"]), 2);
+  assert.equal(duration("take off old extensions", ["manicure"]), 2);
 });
 
 test("uses refill duration for hard gel instead of gel-polish duration", () => {

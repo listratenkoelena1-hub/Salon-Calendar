@@ -164,12 +164,29 @@ test("recognizes common typed manicure and pedicure descriptions", () => {
 });
 
 test("treats standalone nails and powder wording as a full nail extension service", () => {
-  assert.equal(parseServiceIntent("nails").hands.key, "extensions");
-  assert.equal(parseServiceIntent("nail").hands.key, "extensions");
-  assert.equal(parseServiceIntent("powder").hands.key, "extensions");
-  assert.equal(parseServiceIntent("powder nails").hands.key, "extensions");
+  for (const text of [
+    "nails",
+    "nail",
+    "powder",
+    "powder nails",
+    "coffin nails",
+    "square nails",
+    "short nails",
+    "long nails",
+    "new nails"
+  ]) {
+    assert.equal(parseServiceIntent(text).hands.key, "extensions", text);
+  }
   assert.equal(parseServiceIntent("powder nails with design").hands.key, "extensions");
-  assert.equal(parseServiceIntent("cut nails").hands.key, "generic_manicure");
+});
+
+test("keeps maintenance and single-nail phrases out of full extensions", () => {
+  for (const text of ["cut nails", "nail trim", "change nail shape", "reshape nails", "remove nails"]) {
+    assert.equal(parseServiceIntent(text).hands.key, "generic_manicure", text);
+  }
+  for (const text of ["one nail extension", "one fake nail", "repair one nail"]) {
+    assert.equal(parseServiceIntent(text).hands.key, "one_nail_extension", text);
+  }
 });
 
 test("does not learn a one-nail repair as the client's usual hand service", () => {
