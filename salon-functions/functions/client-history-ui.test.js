@@ -69,6 +69,13 @@ test("Client History phone is conditionally returned only to a manager", () => {
   assert.match(calendarHtml, /currentUserRole === 'manager' && result\.phone/);
 });
 
+test("Client History anchors identity to the normalized phone and staff to the appointment", () => {
+  assert.doesNotMatch(functionsSource, /\.where\("client", "in"/);
+  assert.match(functionsSource, /\.where\("clientId", "==", clientId\)/);
+  assert.match(functionsSource, /staffId: String\(appointment\?\.staffId \|\| entry\.staffId \|\| ""\)/);
+  assert.match(functionsSource, /historyRecords\.forEach\(record =>/);
+});
+
 test("Appointment History is offered for changed calendar appointments", () => {
   assert.match(calendarHtml, /id="appointmentHistoryLink"[^>]*>Appointment History<\/button>/);
   assert.match(calendarHtml, /function supportsAppointmentHistory\(appointment\)/);

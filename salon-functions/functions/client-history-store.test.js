@@ -151,6 +151,34 @@ test("reuses the correct person branch for a small unique spelling mistake", asy
   assert.deepEqual(aliasWrite.data.aliases, ["Naomii"]);
 });
 
+test("reuses one full-name profile for a first-name booking on the same phone", async () => {
+  const db = new FakeDb();
+  const key = hashPhone("7805550123", "test-pepper");
+  const transaction = new FakeTransaction({
+    [`${CLIENT_PHONE_INDEX_COLLECTION}/${key}`]: { clientId: "client-one" },
+    [`${CLIENT_COLLECTION}/client-one`]: { profileIds: ["nina-cardinal"] },
+    [`${CLIENT_PROFILE_COLLECTION}/nina-cardinal`]: {
+      clientId: "client-one",
+      displayName: "Nina Cardinal",
+      nameNormalized: "nina cardinal",
+      aliases: []
+    }
+  });
+  const plan = await planClientIdentityInTransaction({
+    transaction,
+    db,
+    FieldValue,
+    pepper: "test-pepper",
+    phone: "+1 780 555 0123",
+    clientName: "nina"
+  });
+
+  assert.equal(plan.clientId, "client-one");
+  assert.equal(plan.clientProfileId, "nina-cardinal");
+  assert.equal(plan.matchType, "first_name");
+  assert.equal(plan.createdProfile, false);
+});
+
 test("creates a separate person branch when another name uses the same phone", async () => {
   const db = new FakeDb();
   const key = hashPhone("7805550123", "test-pepper");

@@ -107,6 +107,7 @@ test("legacy client cancellations use the current Online Booking Log label", () 
 
 test("Log offers the client cancellation event and hides non-addition Dash event filters", () => {
   assert.match(calendarHtml, /value="online_client_canceled">Online cancellation by client/);
+  assert.match(calendarHtml, /value="online_client_moved">Online moving by client/);
   assert.match(calendarHtml, /value="dash_appointment_added">Dash Booking added/);
   assert.doesNotMatch(calendarHtml, /value="dash_appointment_rescheduled">Dash Booking changed/);
   assert.doesNotMatch(calendarHtml, /value="dash_appointment_canceled">Dash Booking canceled/);

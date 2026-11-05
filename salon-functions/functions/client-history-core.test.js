@@ -4,7 +4,6 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   applyHistoryPreferences,
-  buildClientNameQueryVariants,
   chooseProfileMatch,
   filterClientHistoryRecordsForIdentity,
   getClientNoShowWarning,
@@ -12,6 +11,7 @@ const {
   getPersonalizedDuration,
   getServiceFingerprint,
   hashPhone,
+  isCompatibleClientName,
   isSameClientName,
   normalizeClientName,
   normalizePhone,
@@ -80,10 +80,11 @@ test("keeps short names strict and accepts small spelling mistakes in longer nam
   assert.equal(getNameMatch("Barbara", "Deborah"), null);
 });
 
-test("joins historic profile branches when only the client name capitalization differs", () => {
+test("joins name variants only when they belong to the same normalized phone client", () => {
   const records = [
     { id: "first", clientId: "phone-client", clientProfileId: "lowercase-profile", client: "nina cardinal" },
     { id: "second", clientId: "phone-client", clientProfileId: "titlecase-profile", client: "Nina Cardinal" },
+    { id: "short", clientId: "phone-client", clientProfileId: "short-profile", client: "Nina" },
     { id: "third", clientId: "phone-client", clientProfileId: "other-person", client: "Nina Cardin" },
     { id: "fourth", clientId: "different-phone", clientProfileId: "different", client: "Nina Cardinal" }
   ];
@@ -93,22 +94,19 @@ test("joins historic profile branches when only the client name capitalization d
       clientProfileId: "titlecase-profile",
       clientNameNormalized: "nina cardinal"
     }).map(record => record.id),
-    ["first", "second"]
+    ["first", "second", "short"]
   );
-  assert.deepEqual(buildClientNameQueryVariants("nina cardinal"), [
-    "nina cardinal",
-    "Nina Cardinal",
-    "NINA CARDINAL"
-  ]);
   assert.deepEqual(
     filterClientHistoryRecordsForIdentity(records, {
       clientId: "different-current-client",
       clientProfileId: "different-current-profile",
       clientNameNormalized: "nina cardinal"
-    }, { allowExactFullNameFallback: true }).map(record => record.id),
-    ["first", "second", "fourth"]
+    }).map(record => record.id),
+    []
   );
-  assert.deepEqual(buildClientNameQueryVariants("Nina"), []);
+  assert.equal(isCompatibleClientName("Nina", "Nina Cardinal"), true);
+  assert.equal(isCompatibleClientName("Nina", "Nina Cardin"), true);
+  assert.equal(isCompatibleClientName("Nina Cardinal", "Nina Cardin"), false);
 });
 
 test("selects a unique close profile but does not guess between tied people on one phone", () => {
@@ -117,6 +115,10 @@ test("selects a unique close profile but does not guess between tied people on o
     { id: "deborah", displayName: "Deborah", aliases: [] }
   ];
   assert.equal(chooseProfileMatch("Darlne", profiles)?.profile.id, "darlene");
+  assert.equal(chooseProfileMatch("Nina", [
+    { id: "nina-cardinal", displayName: "Nina Cardinal" },
+    { id: "deborah", displayName: "Deborah" }
+  ])?.profile.id, "nina-cardinal");
 
   const ambiguous = chooseProfileMatch("Maria", [
     { id: "marla", displayName: "Marla" },

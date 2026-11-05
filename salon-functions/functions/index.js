@@ -38,7 +38,6 @@ const {
 } = require("./appointment-schedule");
 const {
   applyHistoryPreferences,
-  buildClientNameQueryVariants,
   filterClientHistoryRecordsForIdentity,
   getClientNoShowWarning,
   getServiceFingerprint,
@@ -2614,22 +2613,9 @@ async function loadClientHistoryForPrivateIdentity(privateData, limit = 120) {
         .limit(limit)
         .get();
 
-  const nameVariants = buildClientNameQueryVariants(clientNameNormalized);
-  const exactNameSnapshot = nameVariants.length
-    ? await db.collection(CLIENT_HISTORY_COLLECTION)
-        .where("client", "in", nameVariants)
-        .limit(limit)
-        .get()
-    : null;
-  const recordsById = new Map();
-  [...identitySnapshot.docs, ...(exactNameSnapshot?.docs || [])].forEach(document => {
-    recordsById.set(document.id, { id: document.id, ...document.data() });
-  });
-
   return filterClientHistoryRecordsForIdentity(
-    [...recordsById.values()],
-    { clientProfileId, clientId, clientNameNormalized },
-    { allowExactFullNameFallback: nameVariants.length > 0 }
+    identitySnapshot.docs.map(document => ({ id: document.id, ...document.data() })),
+    { clientProfileId, clientId, clientNameNormalized }
   );
 }
 
@@ -2663,6 +2649,13 @@ exports.managerGetClientHistory = onCall(
         if (snapshot.exists) appointments.push({ id: snapshot.id, ...snapshot.data() });
       });
     }
+    const appointmentIdsLoaded = new Set(appointments.map(appointment => appointment.id));
+    historyRecords.forEach(record => {
+      const recordId = String(record.appointmentId || record.id || "");
+      if (!recordId || appointmentIdsLoaded.has(recordId)) return;
+      appointments.push({ id: recordId, ...record });
+      appointmentIdsLoaded.add(recordId);
+    });
     const today = getSalonNowParts().date;
     const past = appointments
       .filter(item => String(item.date || "") < today)
@@ -2788,8 +2781,10 @@ exports.getAppointmentClientHistory = onCall(
         createdAtMillis: entry.createdAtMillis,
         appointmentDate: String(appointment?.date || entry.logDate || ""),
         appointmentStart: Number(appointment?.start) || 0,
-        staffId: entry.staffId || String(appointment?.staffId || ""),
-        staffName: entry.staffName || getStaffName(staffRecords, appointment?.staffId),
+        staffId: String(appointment?.staffId || entry.staffId || ""),
+        staffName: appointment?.staffId
+          ? getStaffName(staffRecords, appointment.staffId)
+          : (entry.staffName || getStaffName(staffRecords, entry.staffId)),
         actorLabel: entry.actorLabel,
         actorKey: entry.actorKey,
         eventType: entry.eventType,
@@ -3715,7 +3710,7 @@ exports.rescheduleOnlineBookingAppointment = onCall(
         actorKey: "online_booking",
         staffId,
         staffName: newStaffName,
-        eventType: "moved",
+        eventType: "online_client_moved",
         entityType: "appointment",
         entityId: appointmentId,
         client: before.client,

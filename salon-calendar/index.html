@@ -5193,6 +5193,7 @@ stroke-linejoin="round">
           <option value="online_request_confirmed">Online request confirmed</option>
           <option value="online_request_declined">Online request declined</option>
           <option value="online_client_canceled">Online cancellation by client</option>
+          <option value="online_client_moved">Online moving by client</option>
           <option value="dash_appointment_added">Dash Booking added</option>
           <option value="off_created">New off work</option>
           <option value="off_updated">Off work updated</option>
@@ -13562,6 +13563,7 @@ function getActivityLogEventLabel(eventType) {
     online_request_confirmed: 'Online request confirmed',
     online_request_declined: 'Online request declined',
     online_client_canceled: 'Online cancellation by client',
+    online_client_moved: 'Online moving by client',
     dash_appointment_added: 'Dash Booking added',
     off_created: 'New off work',
     off_updated: 'Off work updated',
@@ -17448,7 +17450,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-11-05.3';
+const CALENDAR_APP_VERSION = '2026-11-05.4';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';
