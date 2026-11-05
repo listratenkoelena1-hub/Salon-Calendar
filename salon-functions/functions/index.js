@@ -103,6 +103,7 @@ const {
   dateKeyInTimeZone,
   getDailyReconciliationWindows,
   getDashPollingWindow,
+  buildDashMonitorOutcomeMessage,
   importDashAppointment,
   loadDashConfig,
   loadDashMappings,
@@ -2298,9 +2299,19 @@ exports.addDashMonitorAppointment = onCall(
     };
     if (["imported", "duplicate"].includes(result.status) && result.appointmentId) {
       messageUpdate.dashImportStatus = "imported";
+      messageUpdate.title = result.status === "duplicate"
+        ? "Dash Booking appointment already in Calendar"
+        : "Dash Booking appointment added";
+      messageUpdate.body = buildDashMonitorOutcomeMessage(detail, result.status);
+      messageUpdate.eventType = "dash_appointment_added";
       messageUpdate.entityType = "appointment";
       messageUpdate.entityId = result.appointmentId;
       messageUpdate.dashImportedAt = FieldValue.serverTimestamp();
+    } else if (result.status === "conflict") {
+      messageUpdate.title = "Dash Booking — no available time";
+      messageUpdate.body = buildDashMonitorOutcomeMessage(detail, "conflict");
+      messageUpdate.eventType = "dash_appointment_conflict";
+      messageUpdate.entityType = "dashBooking";
     }
     await monitorMessageRef.set(messageUpdate, { merge: true });
 

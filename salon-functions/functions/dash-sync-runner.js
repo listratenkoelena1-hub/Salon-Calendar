@@ -989,6 +989,41 @@ function buildDashMonitorMessage(detail = {}) {
   ].join("\n");
 }
 
+function buildDashMonitorOutcomeMessage(detail = {}, outcome = "conflict") {
+  const startMinutes = slotToMinutes(detail.start);
+  const startText = Number.isFinite(startMinutes) ? minutesToTime(startMinutes) : "unknown time";
+  const client = detail.client || "The client";
+  const appointmentLine = `${detail.date || "Unknown date"} at ${startText}${detail.staffName ? ` with ${detail.staffName}` : ""}.`;
+
+  if (outcome === "imported") {
+    return [
+      "DASH BOOKING APPOINTMENT ADDED",
+      `${client} was added to Calendar.`,
+      appointmentLine,
+      "",
+      "Tap this message to open the appointment."
+    ].join("\n");
+  }
+
+  if (outcome === "duplicate") {
+    return [
+      "DASH BOOKING APPOINTMENT ALREADY IN CALENDAR",
+      `${client} is already in Calendar.`,
+      appointmentLine,
+      "",
+      "Tap this message to open the appointment."
+    ].join("\n");
+  }
+
+  return [
+    "DASH BOOKING — NO AVAILABLE TIME",
+    `${client} was not added to Calendar.`,
+    appointmentLine,
+    "",
+    "There is no available space in Calendar at this time."
+  ].join("\n");
+}
+
 function buildDashMonitorDetail(detail = {}, localStaff = null) {
   const localDuration = localStaff?.id && localStaff.id !== ANYONE_ID
     ? getBookingDurationDecision({
@@ -2291,6 +2326,7 @@ module.exports = {
   buildDashMessageDoc,
   buildDashMonitorDetail,
   buildDashMonitorMessage,
+  buildDashMonitorOutcomeMessage,
   buildDashMonitorMessageDoc,
   findDashCalendarMatch,
   buildDashOutboundMismatchMessage,

@@ -9,6 +9,7 @@ const {
   buildDashMessageDoc,
   buildDashMonitorDetail,
   buildDashMonitorMessage,
+  buildDashMonitorOutcomeMessage,
   buildDashMonitorMessageDoc,
   buildDashOutboundMismatchMessage,
   buildDefaultConfig,
@@ -368,6 +369,25 @@ test("monitor-only alerts are visible to all and Important only for the assigned
   assert.deepEqual(anyone.importantStaffIds, ["staff-1", "staff-2"]);
   assert.equal(anyone.staffDefaultPriority, "secondary");
   assert.doesNotMatch(buildDashMonitorMessage(detail), /Added to the calendar automatically/);
+});
+
+test("replaces a Dash monitor prompt with clear imported and conflict outcomes", () => {
+  const detail = {
+    client: "Sofia",
+    date: "2026-10-22",
+    start: 12,
+    staffName: "Tanya"
+  };
+  const imported = buildDashMonitorOutcomeMessage(detail, "imported");
+  assert.match(imported, /DASH BOOKING APPOINTMENT ADDED/);
+  assert.match(imported, /Sofia was added to Calendar/);
+  assert.match(imported, /Tap this message to open the appointment/);
+
+  const conflict = buildDashMonitorOutcomeMessage(detail, "conflict");
+  assert.match(conflict, /NO AVAILABLE TIME/);
+  assert.match(conflict, /Sofia was not added to Calendar/);
+  assert.match(conflict, /There is no available space in Calendar at this time/);
+  assert.doesNotMatch(conflict, /Tap this message/);
 });
 
 test("monitor-only draft uses the assigned technician procedure duration", () => {
