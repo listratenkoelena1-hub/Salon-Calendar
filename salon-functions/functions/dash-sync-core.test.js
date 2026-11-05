@@ -7,6 +7,7 @@ const {
   appointmentToDashBlock,
   buildCanonicalBlockKey,
   buildDashAppointment,
+  buildDashStaffMessage,
   dashOriginAppointmentToDashTailBlock,
   findDashRequestConflict,
   getDashRequestDocumentId,
@@ -414,4 +415,18 @@ test("detects appointment and off-work conflicts for inbound Dash requests", () 
     offWork: [{ id: "off-1", date: detail.date, staffId: detail.staffId, start: 10, end: 18 }]
   }).reason, "off-work");
   assert.deepEqual(findDashRequestConflict({ detail }), { conflict: false });
+});
+
+test("Dash conflicts clearly tell the manager to offer the client another time", () => {
+  const message = buildDashStaffMessage({
+    client: "Doris",
+    staffName: "Olena",
+    date: "2026-11-05",
+    start: 8,
+    duration: 8,
+    service: "Gel Nails Extension"
+  }, { conflict: { conflict: true, reason: "appointment" } });
+  assert.match(message, /There is no available time in Calendar for this appointment/);
+  assert.match(message, /manager needs to contact the client and offer another time/);
+  assert.doesNotMatch(message, /resolve the conflict/);
 });

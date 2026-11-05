@@ -386,7 +386,8 @@ test("replaces a Dash monitor prompt with clear imported and conflict outcomes",
   const conflict = buildDashMonitorOutcomeMessage(detail, "conflict");
   assert.match(conflict, /NO AVAILABLE TIME/);
   assert.match(conflict, /Sofia was not added to Calendar/);
-  assert.match(conflict, /There is no available space in Calendar at this time/);
+  assert.match(conflict, /There is no available time in Calendar for this appointment/);
+  assert.match(conflict, /manager needs to contact the client and offer another time/);
   assert.doesNotMatch(conflict, /Tap this message/);
 });
 

@@ -687,9 +687,7 @@ function buildDashStaffMessage(detail, { eventType = "dash_appointment_added", c
   ];
   if (conflict?.conflict) {
     lines.push("");
-    lines.push(conflict.reason === "off-work"
-      ? "This Dash appointment is already confirmed, but the technician is off during this time. Please resolve the conflict."
-      : "This Dash appointment is already confirmed, but the time overlaps the salon calendar. Please resolve the conflict.");
+    lines.push("There is no available time in Calendar for this appointment. The manager needs to contact the client and offer another time.");
   } else {
     lines.push("");
     lines.push("Added to the calendar automatically.");

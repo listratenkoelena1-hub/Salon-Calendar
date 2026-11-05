@@ -1020,7 +1020,7 @@ function buildDashMonitorOutcomeMessage(detail = {}, outcome = "conflict") {
     `${client} was not added to Calendar.`,
     appointmentLine,
     "",
-    "There is no available space in Calendar at this time."
+    "There is no available time in Calendar for this appointment. The manager needs to contact the client and offer another time."
   ].join("\n");
 }
 
