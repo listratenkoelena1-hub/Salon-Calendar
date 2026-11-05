@@ -1081,11 +1081,12 @@ function buildDashActivityLogDoc({
   staffId,
   message,
   actorLabel = "DashBooking",
-  actorKey = "dash_booking"
+  actorKey = "dash_booking",
+  actionDate = dateKeyInTimeZone()
 }) {
   return {
     createdAt: FieldValue.serverTimestamp(),
-    logDate: detail.date,
+    logDate: actionDate,
     actorLabel: String(actorLabel || "DashBooking").trim() || "DashBooking",
     actorKey: String(actorKey || "dash_booking").trim() || "dash_booking",
     staffId: staffId || "",

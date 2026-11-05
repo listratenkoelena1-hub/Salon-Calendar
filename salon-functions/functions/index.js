@@ -67,6 +67,7 @@ const {
 } = require("./client-history-store");
 const {
   ACTIVITY_LOG_PAGE_LIMIT,
+  getActivityLogCreatedAtSearchRange,
   isVisibleActivityLogEventType,
   redactPhoneLikeText,
   serializeStaffActivityLogEntry
@@ -2516,11 +2517,17 @@ exports.managerGetActivityLogContacts = onCall(
   async request => {
     await requireManagerActor(request);
     const logDate = assertDate(request.data?.logDate);
+    const createdAtRange = getActivityLogCreatedAtSearchRange(logDate);
     const logSnapshot = await db.collection("activityLog")
-      .where("logDate", "==", logDate)
-      .limit(150)
+      .where("createdAt", ">=", Timestamp.fromDate(createdAtRange.start))
+      .where("createdAt", "<", Timestamp.fromDate(createdAtRange.end))
+      .limit(ACTIVITY_LOG_PAGE_LIMIT + 1)
       .get();
     const appointmentIds = [...new Set(logSnapshot.docs
+      .filter(document => {
+        const createdAt = document.data()?.createdAt;
+        return createdAt?.toDate && dateKeyInTimeZone(createdAt.toDate(), SALON_TIME_ZONE) === logDate;
+      })
       .map(document => document.data() || {})
       .filter(entry => entry.entityType === "appointment")
       .map(entry => String(entry.entityId || ""))
@@ -2553,12 +2560,18 @@ exports.getStaffActivityLog = onCall(
   async request => {
     await getAuthorizedCalendarActor(request);
     const logDate = assertDate(request.data?.logDate);
+    const createdAtRange = getActivityLogCreatedAtSearchRange(logDate);
     const logSnapshot = await db.collection("activityLog")
-      .where("logDate", "==", logDate)
-      .limit(ACTIVITY_LOG_PAGE_LIMIT + 1)
+      .where("createdAt", ">=", Timestamp.fromDate(createdAtRange.start))
+      .where("createdAt", "<", Timestamp.fromDate(createdAtRange.end))
+      .limit(ACTIVITY_LOG_PAGE_LIMIT * 2 + 1)
       .get();
-    const truncated = logSnapshot.size > ACTIVITY_LOG_PAGE_LIMIT;
-    const entries = logSnapshot.docs
+    const dailyDocuments = logSnapshot.docs.filter(document => {
+      const createdAt = document.data()?.createdAt;
+      return createdAt?.toDate && dateKeyInTimeZone(createdAt.toDate(), SALON_TIME_ZONE) === logDate;
+    });
+    const truncated = dailyDocuments.length > ACTIVITY_LOG_PAGE_LIMIT;
+    const entries = dailyDocuments
       .map(serializeStaffActivityLogEntry)
       .filter(entry => isVisibleActivityLogEventType(entry.eventType))
       .slice(0, ACTIVITY_LOG_PAGE_LIMIT);
@@ -3697,9 +3710,9 @@ exports.rescheduleOnlineBookingAppointment = onCall(
       ].join("; ");
       tx.set(logRef, {
         createdAt: FieldValue.serverTimestamp(),
-        logDate: date,
-        actorLabel: "Online Booking Client",
-        actorKey: "online_booking_client",
+        logDate: salonNow.date,
+        actorLabel: "Online Booking",
+        actorKey: "online_booking",
         staffId,
         staffName: newStaffName,
         eventType: "moved",
@@ -3747,6 +3760,7 @@ exports.createOnlineBookingRequest = onCall(
   },
   async (request) => {
     const input = request.data || {};
+    const actionLogDate = getSalonNowParts().date;
 
     const requestId = assertString(input.requestId, "requestId", { min: 12, max: 80 });
     if (!/^[A-Za-z0-9_-]+$/.test(requestId)) {
@@ -4250,7 +4264,7 @@ exports.createOnlineBookingRequest = onCall(
 
       tx.set(logRef, {
         createdAt: FieldValue.serverTimestamp(),
-        logDate: date,
+        logDate: actionLogDate,
         actorLabel: "Online Booking",
         actorKey: "online_booking",
         staffId: assignedStaffId,
@@ -4266,7 +4280,7 @@ exports.createOnlineBookingRequest = onCall(
       if (secondaryAppointmentData) {
         tx.set(secondaryLogRef, {
           createdAt: FieldValue.serverTimestamp(),
-          logDate: date,
+          logDate: actionLogDate,
           actorLabel: "Online Booking",
           actorKey: "online_booking",
           staffId: secondaryAppointmentData.staffId,

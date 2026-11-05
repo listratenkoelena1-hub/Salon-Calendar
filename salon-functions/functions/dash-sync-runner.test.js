@@ -474,11 +474,12 @@ test("builds a phone-free Dash activity log entry", () => {
     entityType: "appointment",
     entityId: "dash_123",
     staffId: "staff-1",
-    message: "DASH BOOKING APPOINTMENT"
+    message: "DASH BOOKING APPOINTMENT",
+    actionDate: "2026-11-05"
   });
 
   assert.equal(entry.actorLabel, "DashBooking");
-  assert.equal(entry.logDate, "2026-10-03");
+  assert.equal(entry.logDate, "2026-11-05");
   assert.equal(entry.hasPrivateContact, false);
   assert.equal(Object.hasOwn(entry, "phone"), false);
 });

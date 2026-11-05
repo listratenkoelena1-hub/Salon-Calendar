@@ -13600,19 +13600,6 @@ function getActivityLogCreatedDate(entry) {
   return date ? toInputDate(date) : '';
 }
 
-async function repairActivityLogDate(entry) {
-  const createdDate = getActivityLogCreatedDate(entry);
-  if (!entry?.id || !createdDate || entry.logDate === createdDate) return;
-
-  try {
-    await updateDoc(doc(db, 'activityLog', entry.id), {
-      logDate: createdDate
-    });
-  } catch (err) {
-    console.warn('Activity log date was not repaired:', err);
-  }
-}
-
 async function writeActivityLogEntry(entry) {
   try {
     await addDoc(collection(db, 'activityLog'), {
@@ -13811,9 +13798,10 @@ async function loadSanitizedStaffActivityLog(logDate, loadRunId) {
         createdAt: hasCreatedAt && Number.isFinite(createdAtMillis) ? new Date(createdAtMillis) : null
       };
     });
-    await mergeOnlineClientCancellationLogFallbacks(logDate, loadRunId);
-    if (loadRunId !== activityLogContactLoadRunId) return;
     renderActivityLog();
+    if (currentUserRole === 'manager') {
+      await hydrateManagerActivityLogContacts(logDate, loadRunId);
+    }
     if (result.truncated === true) {
       console.warn('Activity log reached the safe daily display limit.');
     }
@@ -13822,63 +13810,6 @@ async function loadSanitizedStaffActivityLog(logDate, loadRunId) {
     console.warn('Sanitized activity log was not loaded:', error);
     activityLogEntries = [];
     renderActivityLog();
-  }
-}
-
-function normalizeActivityLogDisplayEntry(entry = {}) {
-  if (
-    entry.eventType === 'canceled' &&
-    (entry.actorKey === 'online_booking_client' || entry.lastMutationMode === 'online_client_cancel')
-  ) {
-    return {
-      ...entry,
-      actorLabel: 'Online Booking',
-      actorKey: 'online_booking',
-      eventType: 'online_client_canceled'
-    };
-  }
-  return entry;
-}
-
-async function mergeOnlineClientCancellationLogFallbacks(logDate, loadRunId) {
-  if (!logDate) return;
-  try {
-    const snapshot = await getDocs(query(
-      collection(db, 'appointments'),
-      where('lastMutationMode', '==', 'online_client_cancel'),
-      limit(100)
-    ));
-    if (loadRunId !== activityLogContactLoadRunId) return;
-
-    snapshot.docs.forEach(document => {
-      const appointment = document.data() || {};
-      const canceledAt = appointment.canceledAt?.toDate ? appointment.canceledAt.toDate() : null;
-      if (!canceledAt || toInputDate(canceledAt) !== logDate) return;
-      const alreadyListed = activityLogEntries.some(entry =>
-        String(entry.entityId || '') === document.id &&
-        ['online_client_canceled', 'canceled'].includes(String(entry.eventType || ''))
-      );
-      if (alreadyListed) return;
-
-      activityLogEntries.push({
-        id: `online-client-cancel-${document.id}`,
-        createdAt: appointment.canceledAt,
-        logDate,
-        actorLabel: 'Online Booking',
-        actorKey: 'online_booking',
-        staffId: appointment.staffId || '',
-        staffName: getActivityLogStaffName(appointment.staffId),
-        eventType: 'online_client_canceled',
-        entityType: 'appointment',
-        entityId: document.id,
-        client: appointment.client || '',
-        service: appointment.note || '',
-        details: `${appointment.client || 'Client'} canceled the appointment through Online Booking.`,
-        source: 'online_booking'
-      });
-    });
-  } catch (error) {
-    console.warn('Online client cancellation Log fallback was not loaded:', error);
   }
 }
 
@@ -13900,32 +13831,7 @@ function loadActivityLogForDate() {
   activityLogEntries = [];
   renderActivityLog();
 
-  if (currentUserRole !== 'manager') {
-    loadSanitizedStaffActivityLog(dateStr, loadRunId);
-    return;
-  }
-
-  activityLogUnsubscribe = onSnapshot(
-    query(
-      collection(db, 'activityLog'),
-      where('logDate', '==', dateStr)
-    ),
-    snap => {
-      activityLogEntries = snap.docs.map(d => normalizeActivityLogDisplayEntry({ id: d.id, ...d.data() }));
-      activityLogEntries.forEach(repairActivityLogDate);
-      renderActivityLog();
-      hydrateManagerActivityLogContacts(dateStr, loadRunId);
-      void mergeOnlineClientCancellationLogFallbacks(dateStr, loadRunId).then(() => {
-        if (loadRunId !== activityLogContactLoadRunId) return;
-        renderActivityLog();
-      });
-    },
-    err => {
-      console.warn('Activity log was not loaded:', err);
-      activityLogEntries = [];
-      renderActivityLog();
-    }
-  );
+  loadSanitizedStaffActivityLog(dateStr, loadRunId);
 }
 
 function populateLogFilters() {
@@ -17542,7 +17448,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-11-05.2';
+const CALENDAR_APP_VERSION = '2026-11-05.3';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';

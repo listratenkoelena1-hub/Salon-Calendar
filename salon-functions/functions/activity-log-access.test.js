@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const {
   ACTIVITY_LOG_PAGE_LIMIT,
+  getActivityLogCreatedAtSearchRange,
   isVisibleActivityLogEventType,
   normalizeActivityLogDisplayFields,
   redactPhoneLikeText,
@@ -17,6 +18,7 @@ const calendarHtml = fs.readFileSync(
   path.join(__dirname, "..", "..", "salon-calendar", "index.html"),
   "utf8"
 );
+const functionsSource = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
 
 test("phone-like text is removed from staff-visible log content", () => {
   assert.equal(redactPhoneLikeText("Call 780-555-0123"), "Call [phone hidden]");
@@ -74,6 +76,15 @@ test("timestamp conversion and server page limit stay bounded", () => {
   assert.equal(ACTIVITY_LOG_PAGE_LIMIT, 500);
 });
 
+test("daily Log searches by action timestamp instead of appointment date", () => {
+  const range = getActivityLogCreatedAtSearchRange("2026-11-05");
+  assert.equal(range.start.toISOString(), "2026-11-04T00:00:00.000Z");
+  assert.equal(range.end.toISOString(), "2026-11-07T00:00:00.000Z");
+  assert.match(functionsSource, /\.where\("createdAt", ">=", Timestamp\.fromDate\(createdAtRange\.start\)\)/);
+  assert.doesNotMatch(functionsSource, /\.where\("logDate", "==", logDate\)/);
+  assert.doesNotMatch(calendarHtml, /where\('logDate', '==', dateStr\)/);
+});
+
 test("daily Log keeps only the initial Dash addition event", () => {
   assert.equal(isVisibleActivityLogEventType("dash_appointment_added"), true);
   assert.equal(isVisibleActivityLogEventType("dash_appointment_rescheduled"), false);
@@ -101,5 +112,5 @@ test("Log offers the client cancellation event and hides non-addition Dash event
   assert.doesNotMatch(calendarHtml, /value="dash_appointment_canceled">Dash Booking canceled/);
   assert.doesNotMatch(calendarHtml, /value="dash_appointment_conflict">Dash Booking conflict/);
   assert.doesNotMatch(calendarHtml, /value: 'dash_booking', label: '@DashBooking'/);
-  assert.match(calendarHtml, /where\('lastMutationMode', '==', 'online_client_cancel'\)/);
+  assert.doesNotMatch(calendarHtml, /where\('logDate', '==', dateStr\)/);
 });

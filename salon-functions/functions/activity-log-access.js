@@ -25,6 +25,15 @@ function timestampToMillis(value) {
   return null;
 }
 
+function getActivityLogCreatedAtSearchRange(dateKey) {
+  const center = Date.parse(`${String(dateKey || "")}T12:00:00.000Z`);
+  if (!Number.isFinite(center)) return null;
+  return {
+    start: new Date(center - 36 * 60 * 60 * 1000),
+    end: new Date(center + 36 * 60 * 60 * 1000)
+  };
+}
+
 function isVisibleActivityLogEventType(eventType) {
   const normalized = String(eventType || "");
   return !normalized.startsWith("dash_") || normalized === "dash_appointment_added";
@@ -67,6 +76,7 @@ function serializeStaffActivityLogEntry(document) {
 
 module.exports = {
   ACTIVITY_LOG_PAGE_LIMIT,
+  getActivityLogCreatedAtSearchRange,
   isVisibleActivityLogEventType,
   normalizeActivityLogDisplayFields,
   redactPhoneLikeText,
