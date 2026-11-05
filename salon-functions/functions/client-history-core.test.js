@@ -4,6 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   applyHistoryPreferences,
+  buildClientNameQueryVariants,
   chooseProfileMatch,
   filterClientHistoryRecordsForIdentity,
   getClientNoShowWarning,
@@ -94,6 +95,20 @@ test("joins historic profile branches when only the client name capitalization d
     }).map(record => record.id),
     ["first", "second"]
   );
+  assert.deepEqual(buildClientNameQueryVariants("nina cardinal"), [
+    "nina cardinal",
+    "Nina Cardinal",
+    "NINA CARDINAL"
+  ]);
+  assert.deepEqual(
+    filterClientHistoryRecordsForIdentity(records, {
+      clientId: "different-current-client",
+      clientProfileId: "different-current-profile",
+      clientNameNormalized: "nina cardinal"
+    }, { allowExactFullNameFallback: true }).map(record => record.id),
+    ["first", "second", "fourth"]
+  );
+  assert.deepEqual(buildClientNameQueryVariants("Nina"), []);
 });
 
 test("selects a unique close profile but does not guess between tied people on one phone", () => {

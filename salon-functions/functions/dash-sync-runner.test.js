@@ -12,6 +12,7 @@ const {
   buildDashMonitorMessageDoc,
   buildDashOutboundMismatchMessage,
   buildDefaultConfig,
+  canRetryDashImportReceipt,
   dashCycleNeedsBrowser,
   dateKeyInTimeZone,
   getDailyReconciliationWindows,
@@ -75,6 +76,15 @@ test("retries incomplete incoming receipts but not terminal Dash outcomes", () =
   assert.equal(isTerminalIncomingStatus("baseline_parse_error"), true);
   assert.equal(isTerminalIncomingStatus("unmapped_staff"), false);
   assert.equal(isTerminalIncomingStatus("parse_error"), false);
+});
+
+test("a user-triggered Dash import rechecks alerted receipts for appointment and off-work conflicts", () => {
+  assert.equal(canRetryDashImportReceipt("alerted", true), true);
+  assert.equal(canRetryDashImportReceipt("calendar_alerted", true), true);
+  assert.equal(canRetryDashImportReceipt("conflict", true), true);
+  assert.equal(canRetryDashImportReceipt("imported", true), false);
+  assert.equal(canRetryDashImportReceipt("duplicate", true), false);
+  assert.equal(canRetryDashImportReceipt("alerted", false), false);
 });
 
 test("calendar fallback links one strong local match even after a Dash notification was read", () => {

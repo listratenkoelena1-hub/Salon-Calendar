@@ -428,6 +428,7 @@ function buildClientHistoryData(appointmentId, appointment, identity, FieldValue
     appointmentId,
     clientId: identity.clientId,
     clientProfileId: identity.clientProfileId,
+    clientNameNormalized: normalizeClientName(appointment?.client),
     date: String(appointment?.date || ""),
     start: Number(appointment?.start) || 0,
     staffId: String(appointment?.staffId || ""),

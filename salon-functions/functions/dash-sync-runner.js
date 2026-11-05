@@ -128,6 +128,14 @@ function isTerminalReceiptForDashBooking(receipt, dashBookingId) {
   );
 }
 
+function canRetryDashImportReceipt(status, allowUserRequestedRetry = false) {
+  return allowUserRequestedRetry && [
+    "alerted",
+    "calendar_alerted",
+    "conflict"
+  ].includes(String(status || ""));
+}
+
 function getDashMonitorIgnoreReason(detail, now = new Date()) {
   if (!detail) return "missing_detail";
   if (String(detail.dashStatus || "confirmed") !== "confirmed") return "appointment_not_active";
@@ -1539,7 +1547,7 @@ async function importDashAppointment({
       transaction.get(appointmentRef)
     ]);
     const existingStatus = String(existingReceipt.data()?.status || "");
-    const canRetryConflict = allowConflictRetry && existingStatus === "conflict";
+    const canRetryConflict = canRetryDashImportReceipt(existingStatus, allowConflictRetry);
     if (
       (existingReceipt.exists && isTerminalIncomingStatus(existingStatus) && !canRetryConflict) ||
       existingAppointment.exists
@@ -2289,6 +2297,7 @@ module.exports = {
   buildDashActivityLogDoc,
   buildDashEventDocumentId,
   buildDefaultConfig,
+  canRetryDashImportReceipt,
   dashCycleNeedsBrowser,
   dateKeyInTimeZone,
   collectDashAuditState,

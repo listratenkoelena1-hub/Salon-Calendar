@@ -61,16 +61,34 @@ function isSameClientName(leftValue, rightValue) {
   return Boolean(left && right && left === right);
 }
 
-function filterClientHistoryRecordsForIdentity(records, identity = {}) {
+function buildClientNameQueryVariants(value) {
+  const normalized = normalizeClientName(value);
+  if (!normalized || normalized.split(" ").filter(Boolean).length < 2) return [];
+  const titleCase = normalized.replace(/(^|\s)(\p{L})/gu, (match, prefix, letter) => (
+    `${prefix}${letter.toLocaleUpperCase("en-CA")}`
+  ));
+  return [...new Set([
+    normalized,
+    titleCase,
+    normalized.toLocaleUpperCase("en-CA")
+  ])].slice(0, 10);
+}
+
+function filterClientHistoryRecordsForIdentity(records, identity = {}, { allowExactFullNameFallback = false } = {}) {
   const clientProfileId = String(identity.clientProfileId || "");
   const clientId = String(identity.clientId || "");
   const clientNameNormalized = normalizeClientName(identity.clientNameNormalized || identity.clientName || "");
+  const fullNameFallbackAllowed = allowExactFullNameFallback &&
+    buildClientNameQueryVariants(clientNameNormalized).length > 0;
   return (Array.isArray(records) ? records : []).filter(record => (
     String(record?.clientProfileId || "") === clientProfileId ||
     Boolean(
       clientId &&
       clientNameNormalized &&
       String(record?.clientId || "") === clientId &&
+      normalizeClientName(record?.client) === clientNameNormalized
+    ) || Boolean(
+      fullNameFallbackAllowed &&
       normalizeClientName(record?.client) === clientNameNormalized
     )
   ));
@@ -632,6 +650,7 @@ function stripPrivateAppointmentFields(value) {
 
 module.exports = {
   applyHistoryPreferences,
+  buildClientNameQueryVariants,
   chooseProfileMatch,
   damerauLevenshtein,
   filterClientHistoryRecordsForIdentity,

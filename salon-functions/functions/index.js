@@ -38,6 +38,7 @@ const {
 } = require("./appointment-schedule");
 const {
   applyHistoryPreferences,
+  buildClientNameQueryVariants,
   filterClientHistoryRecordsForIdentity,
   getClientNoShowWarning,
   getServiceFingerprint,
@@ -2577,7 +2578,7 @@ async function loadClientHistoryForPrivateIdentity(privateData, limit = 120) {
   const clientNameNormalized = normalizeClientName(privateData?.clientNameNormalized || "");
   if (!clientProfileId) return [];
 
-  const historySnapshot = clientId
+  const identitySnapshot = clientId
     ? await db.collection(CLIENT_HISTORY_COLLECTION)
         .where("clientId", "==", clientId)
         .limit(limit)
@@ -2587,9 +2588,22 @@ async function loadClientHistoryForPrivateIdentity(privateData, limit = 120) {
         .limit(limit)
         .get();
 
+  const nameVariants = buildClientNameQueryVariants(clientNameNormalized);
+  const exactNameSnapshot = nameVariants.length
+    ? await db.collection(CLIENT_HISTORY_COLLECTION)
+        .where("client", "in", nameVariants)
+        .limit(limit)
+        .get()
+    : null;
+  const recordsById = new Map();
+  [...identitySnapshot.docs, ...(exactNameSnapshot?.docs || [])].forEach(document => {
+    recordsById.set(document.id, { id: document.id, ...document.data() });
+  });
+
   return filterClientHistoryRecordsForIdentity(
-    historySnapshot.docs.map(document => ({ id: document.id, ...document.data() })),
-    { clientProfileId, clientId, clientNameNormalized }
+    [...recordsById.values()],
+    { clientProfileId, clientId, clientNameNormalized },
+    { allowExactFullNameFallback: nameVariants.length > 0 }
   );
 }
 
