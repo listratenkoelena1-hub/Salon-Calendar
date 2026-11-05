@@ -67,6 +67,7 @@ const {
 } = require("./client-history-store");
 const {
   ACTIVITY_LOG_PAGE_LIMIT,
+  isVisibleActivityLogEventType,
   redactPhoneLikeText,
   serializeStaffActivityLogEntry
 } = require("./activity-log-access");
@@ -2558,8 +2559,9 @@ exports.getStaffActivityLog = onCall(
       .get();
     const truncated = logSnapshot.size > ACTIVITY_LOG_PAGE_LIMIT;
     const entries = logSnapshot.docs
-      .slice(0, ACTIVITY_LOG_PAGE_LIMIT)
-      .map(serializeStaffActivityLogEntry);
+      .map(serializeStaffActivityLogEntry)
+      .filter(entry => isVisibleActivityLogEventType(entry.eventType))
+      .slice(0, ACTIVITY_LOG_PAGE_LIMIT);
     return { ok: true, logDate, entries, truncated };
   }
 );
@@ -3490,11 +3492,11 @@ exports.cancelOnlineBookingAppointment = onCall(
       }
       tx.set(logRef, {
         createdAt: FieldValue.serverTimestamp(),
-        logDate: before.date,
-        actorLabel: "Online Booking Client",
-        actorKey: "online_booking_client",
+        logDate: salonNow.date,
+        actorLabel: "Online Booking",
+        actorKey: "online_booking",
         staffId: before.staffId,
-        eventType: "canceled",
+        eventType: "online_client_canceled",
         entityType: "appointment",
         entityId: appointmentId,
         client: before.client,

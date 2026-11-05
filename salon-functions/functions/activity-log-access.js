@@ -25,10 +25,28 @@ function timestampToMillis(value) {
   return null;
 }
 
+function isVisibleActivityLogEventType(eventType) {
+  const normalized = String(eventType || "");
+  return !normalized.startsWith("dash_") || normalized === "dash_appointment_added";
+}
+
+function normalizeActivityLogDisplayFields(data = {}) {
+  const isLegacyOnlineClientCancellation = data.eventType === "canceled" &&
+    (data.actorKey === "online_booking_client" || data.lastMutationMode === "online_client_cancel");
+  if (!isLegacyOnlineClientCancellation) return data;
+  return {
+    ...data,
+    actorLabel: "Online Booking",
+    actorKey: "online_booking",
+    eventType: "online_client_canceled"
+  };
+}
+
 function serializeStaffActivityLogEntry(document) {
-  const data = document?.data && typeof document.data === "function"
+  const rawData = document?.data && typeof document.data === "function"
     ? document.data() || {}
     : (document?.data || {});
+  const data = normalizeActivityLogDisplayFields(rawData);
   return {
     id: String(document?.id || ""),
     createdAtMillis: timestampToMillis(data.createdAt),
@@ -49,6 +67,8 @@ function serializeStaffActivityLogEntry(document) {
 
 module.exports = {
   ACTIVITY_LOG_PAGE_LIMIT,
+  isVisibleActivityLogEventType,
+  normalizeActivityLogDisplayFields,
   redactPhoneLikeText,
   serializeStaffActivityLogEntry,
   timestampToMillis

@@ -10,11 +10,11 @@ const calendarHtml = fs.readFileSync(
   "utf8"
 );
 
-test("shows ongoing Dash events as normal calendar events without a new confirmation action", () => {
+test("shows ongoing Dash messages normally without treating Dash as a human Log editor", () => {
   assert.match(calendarHtml, /dash_appointment_added: 'Dash Booking appointment'/);
   assert.match(calendarHtml, /dash_appointment_rescheduled: 'Dash Booking rescheduled'/);
   assert.match(calendarHtml, /dash_appointment_canceled: 'Dash Booking canceled'/);
-  assert.match(calendarHtml, /value: 'dash_booking', label: '@DashBooking'/);
+  assert.doesNotMatch(calendarHtml, /value: 'dash_booking', label: '@DashBooking'/);
 });
 
 test("archive preserves Dash Booking as a distinct appointment source", () => {

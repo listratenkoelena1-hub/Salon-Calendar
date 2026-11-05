@@ -5192,10 +5192,8 @@ stroke-linejoin="round">
           <option value="online_request_created">Online request</option>
           <option value="online_request_confirmed">Online request confirmed</option>
           <option value="online_request_declined">Online request declined</option>
+          <option value="online_client_canceled">Online cancellation by client</option>
           <option value="dash_appointment_added">Dash Booking added</option>
-          <option value="dash_appointment_rescheduled">Dash Booking changed</option>
-          <option value="dash_appointment_canceled">Dash Booking canceled</option>
-          <option value="dash_appointment_conflict">Dash Booking conflict</option>
           <option value="off_created">New off work</option>
           <option value="off_updated">Off work updated</option>
           <option value="off_deleted">Off work deleted</option>
@@ -13563,13 +13561,8 @@ function getActivityLogEventLabel(eventType) {
     online_request_created: 'Online request',
     online_request_confirmed: 'Online request confirmed',
     online_request_declined: 'Online request declined',
-    dash_request_created: 'Dash Booking request',
-    dash_request_conflict: 'Dash Booking conflict',
-    dash_request_confirmed: 'Dash Booking confirmed',
+    online_client_canceled: 'Online cancellation by client',
     dash_appointment_added: 'Dash Booking added',
-    dash_appointment_rescheduled: 'Dash Booking changed',
-    dash_appointment_canceled: 'Dash Booking canceled',
-    dash_appointment_conflict: 'Dash Booking conflict',
     off_created: 'New off work',
     off_updated: 'Off work updated',
     off_deleted: 'Off work deleted'
@@ -13657,7 +13650,10 @@ function renderActivityLog() {
   const eventFilter = logEventFilter?.value || '';
   const changedByFilter = logChangedByFilter?.value || '';
 
-  let results = activityLogEntries.slice();
+  let results = activityLogEntries.filter(entry => {
+    const eventType = String(entry.eventType || '');
+    return !eventType.startsWith('dash_') || eventType === 'dash_appointment_added';
+  });
 
   if (queryText) {
     results = results.filter(entry =>
@@ -13815,6 +13811,8 @@ async function loadSanitizedStaffActivityLog(logDate, loadRunId) {
         createdAt: hasCreatedAt && Number.isFinite(createdAtMillis) ? new Date(createdAtMillis) : null
       };
     });
+    await mergeOnlineClientCancellationLogFallbacks(logDate, loadRunId);
+    if (loadRunId !== activityLogContactLoadRunId) return;
     renderActivityLog();
     if (result.truncated === true) {
       console.warn('Activity log reached the safe daily display limit.');
@@ -13824,6 +13822,63 @@ async function loadSanitizedStaffActivityLog(logDate, loadRunId) {
     console.warn('Sanitized activity log was not loaded:', error);
     activityLogEntries = [];
     renderActivityLog();
+  }
+}
+
+function normalizeActivityLogDisplayEntry(entry = {}) {
+  if (
+    entry.eventType === 'canceled' &&
+    (entry.actorKey === 'online_booking_client' || entry.lastMutationMode === 'online_client_cancel')
+  ) {
+    return {
+      ...entry,
+      actorLabel: 'Online Booking',
+      actorKey: 'online_booking',
+      eventType: 'online_client_canceled'
+    };
+  }
+  return entry;
+}
+
+async function mergeOnlineClientCancellationLogFallbacks(logDate, loadRunId) {
+  if (!logDate) return;
+  try {
+    const snapshot = await getDocs(query(
+      collection(db, 'appointments'),
+      where('lastMutationMode', '==', 'online_client_cancel'),
+      limit(100)
+    ));
+    if (loadRunId !== activityLogContactLoadRunId) return;
+
+    snapshot.docs.forEach(document => {
+      const appointment = document.data() || {};
+      const canceledAt = appointment.canceledAt?.toDate ? appointment.canceledAt.toDate() : null;
+      if (!canceledAt || toInputDate(canceledAt) !== logDate) return;
+      const alreadyListed = activityLogEntries.some(entry =>
+        String(entry.entityId || '') === document.id &&
+        ['online_client_canceled', 'canceled'].includes(String(entry.eventType || ''))
+      );
+      if (alreadyListed) return;
+
+      activityLogEntries.push({
+        id: `online-client-cancel-${document.id}`,
+        createdAt: appointment.canceledAt,
+        logDate,
+        actorLabel: 'Online Booking',
+        actorKey: 'online_booking',
+        staffId: appointment.staffId || '',
+        staffName: getActivityLogStaffName(appointment.staffId),
+        eventType: 'online_client_canceled',
+        entityType: 'appointment',
+        entityId: document.id,
+        client: appointment.client || '',
+        service: appointment.note || '',
+        details: `${appointment.client || 'Client'} canceled the appointment through Online Booking.`,
+        source: 'online_booking'
+      });
+    });
+  } catch (error) {
+    console.warn('Online client cancellation Log fallback was not loaded:', error);
   }
 }
 
@@ -13856,10 +13911,14 @@ function loadActivityLogForDate() {
       where('logDate', '==', dateStr)
     ),
     snap => {
-      activityLogEntries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      activityLogEntries = snap.docs.map(d => normalizeActivityLogDisplayEntry({ id: d.id, ...d.data() }));
       activityLogEntries.forEach(repairActivityLogDate);
       renderActivityLog();
       hydrateManagerActivityLogContacts(dateStr, loadRunId);
+      void mergeOnlineClientCancellationLogFallbacks(dateStr, loadRunId).then(() => {
+        if (loadRunId !== activityLogContactLoadRunId) return;
+        renderActivityLog();
+      });
     },
     err => {
       console.warn('Activity log was not loaded:', err);
@@ -13883,7 +13942,6 @@ function populateLogFilters() {
       { value: 'reception', label: '@Reception' },
       { value: 'manager', label: '@Manager' },
       { value: 'online_booking', label: 'Online booking' },
-      { value: 'dash_booking', label: '@DashBooking' },
       ...staff
         .filter(s => s.id !== ANYONE_ID)
         .map(s => ({ value: s.id, label: '@' + s.name }))
@@ -17484,7 +17542,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-11-05.1';
+const CALENDAR_APP_VERSION = '2026-11-05.2';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';

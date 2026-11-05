@@ -2,12 +2,21 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const {
   ACTIVITY_LOG_PAGE_LIMIT,
+  isVisibleActivityLogEventType,
+  normalizeActivityLogDisplayFields,
   redactPhoneLikeText,
   serializeStaffActivityLogEntry,
   timestampToMillis
 } = require("./activity-log-access");
+
+const calendarHtml = fs.readFileSync(
+  path.join(__dirname, "..", "..", "salon-calendar", "index.html"),
+  "utf8"
+);
 
 test("phone-like text is removed from staff-visible log content", () => {
   assert.equal(redactPhoneLikeText("Call 780-555-0123"), "Call [phone hidden]");
@@ -63,4 +72,34 @@ test("timestamp conversion and server page limit stay bounded", () => {
   assert.equal(timestampToMillis(new Date("2026-09-16T12:00:00Z")), 1_789_560_000_000);
   assert.equal(timestampToMillis(null), null);
   assert.equal(ACTIVITY_LOG_PAGE_LIMIT, 500);
+});
+
+test("daily Log keeps only the initial Dash addition event", () => {
+  assert.equal(isVisibleActivityLogEventType("dash_appointment_added"), true);
+  assert.equal(isVisibleActivityLogEventType("dash_appointment_rescheduled"), false);
+  assert.equal(isVisibleActivityLogEventType("dash_appointment_canceled"), false);
+  assert.equal(isVisibleActivityLogEventType("dash_appointment_conflict"), false);
+  assert.equal(isVisibleActivityLogEventType("updated_app"), true);
+});
+
+test("legacy client cancellations use the current Online Booking Log label", () => {
+  assert.deepEqual(normalizeActivityLogDisplayFields({
+    actorLabel: "Online Booking Client",
+    actorKey: "online_booking_client",
+    eventType: "canceled"
+  }), {
+    actorLabel: "Online Booking",
+    actorKey: "online_booking",
+    eventType: "online_client_canceled"
+  });
+});
+
+test("Log offers the client cancellation event and hides non-addition Dash event filters", () => {
+  assert.match(calendarHtml, /value="online_client_canceled">Online cancellation by client/);
+  assert.match(calendarHtml, /value="dash_appointment_added">Dash Booking added/);
+  assert.doesNotMatch(calendarHtml, /value="dash_appointment_rescheduled">Dash Booking changed/);
+  assert.doesNotMatch(calendarHtml, /value="dash_appointment_canceled">Dash Booking canceled/);
+  assert.doesNotMatch(calendarHtml, /value="dash_appointment_conflict">Dash Booking conflict/);
+  assert.doesNotMatch(calendarHtml, /value: 'dash_booking', label: '@DashBooking'/);
+  assert.match(calendarHtml, /where\('lastMutationMode', '==', 'online_client_cancel'\)/);
 });
