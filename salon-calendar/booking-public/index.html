@@ -2018,7 +2018,7 @@
           <section class="screen" data-screen="cancellation-complete">
             <header>
               <h2>Appointment cancelled</h2>
-              <p class="lead" id="cancellationCompleteMessage">Your appointment has been cancelled. The salon and your technician have been notified.</p>
+              <p class="lead" id="cancellationCompleteMessage">Your appointment has been cancelled. We hope to see you again soon.</p>
             </header>
             <div class="content"></div>
             <nav class="actions">
@@ -2030,7 +2030,7 @@
           <section class="screen" data-screen="reschedule-complete">
             <header>
               <h2>Appointment rescheduled</h2>
-              <p class="lead" id="rescheduleCompleteMessage">Your appointment was moved. The salon and the technicians have been notified.</p>
+              <p class="lead" id="rescheduleCompleteMessage">Your appointment has been successfully rescheduled. We look forward to seeing you.</p>
             </header>
             <div class="content"></div>
             <nav class="actions">
@@ -3014,6 +3014,39 @@
       }).format(new Date(year, month - 1, day, 12));
     }
 
+    function renderCancellationCompleteMessage(appointment, includedComment) {
+      const date = formatManagedAppointmentDate(appointment?.date || '');
+      const time = appointment?.time || '';
+      const technician = appointment?.technician || '';
+      const details = [date, time ? `at ${time}` : '', technician ? `with ${technician}` : '']
+        .filter(Boolean)
+        .join(' ');
+      const commentLine = includedComment
+        ? '<br><br>Your cancellation comment was sent to the salon.'
+        : '';
+      document.getElementById('cancellationCompleteMessage').innerHTML =
+        `Your appointment${details ? ` on <strong>${escapeHtml(details)}</strong>` : ''} has been cancelled.` +
+        `<br><br>We hope to see you again soon.${commentLine}`;
+    }
+
+    function renderRescheduleCompleteMessage(previousAppointment, updatedAppointment) {
+      const previousDetails = [
+        formatManagedAppointmentDate(previousAppointment?.date || ''),
+        previousAppointment?.time ? `at ${previousAppointment.time}` : '',
+        previousAppointment?.technician ? `with ${previousAppointment.technician}` : ''
+      ].filter(Boolean).join(' ');
+      const updatedDetails = [
+        formatManagedAppointmentDate(updatedAppointment?.date || ''),
+        updatedAppointment?.time ? `at ${updatedAppointment.time}` : '',
+        updatedAppointment?.technician ? `with ${updatedAppointment.technician}` : ''
+      ].filter(Boolean).join(' ');
+      document.getElementById('rescheduleCompleteMessage').innerHTML =
+        'Your appointment has been successfully rescheduled.' +
+        `<br><br><strong>Previous appointment:</strong> ${escapeHtml(previousDetails)}` +
+        `<br><strong>New appointment:</strong> ${escapeHtml(updatedDetails)}` +
+        '<br><br>We look forward to seeing you.';
+    }
+
     function getSelectedManagedAppointment() {
       return state.managedAppointments.find(item => item.id === state.selectedAppointmentId) || null;
     }
@@ -3317,9 +3350,7 @@
         const includedComment = Boolean(cancellationCommentInput.value.trim());
         state.managedAppointments = state.managedAppointments.filter(item => item.id !== appointment.id);
         state.selectedAppointmentId = '';
-        document.getElementById('cancellationCompleteMessage').textContent = includedComment
-          ? 'Your appointment has been cancelled. The salon and your technician have been notified, and your comment was included.'
-          : 'Your appointment has been cancelled. The salon and your technician have been notified.';
+        renderCancellationCompleteMessage(appointment, includedComment);
         cancellationCommentInput.value = '';
         showScreen('cancellation-complete');
       } catch (cancellationRequestError) {
@@ -4204,10 +4235,19 @@
     sendRequestButton.addEventListener('click', async () => {
       const start = getSelectedTimeSlot();
       if (start == null) return;
+      const previousAppointment = state.rescheduleAppointmentId
+        ? state.managedAppointments.find(item => item.id === state.rescheduleAppointmentId) || null
+        : null;
 
       if (APPOINTMENT_PREVIEW_ENABLED) {
         if (state.rescheduleAppointmentId) {
           await waitForPreview();
+          const previewTechnician = getVisibleStaff().find(item => item.id === state.staff)?.name || 'Technician';
+          renderRescheduleCompleteMessage(previousAppointment, {
+            date: dateInput.value,
+            time: state.time,
+            technician: previewTechnician
+          });
           state.rescheduleAppointmentId = '';
           showScreen('reschedule-complete');
         } else {
@@ -4234,8 +4274,11 @@
             state.managedAppointments = state.managedAppointments.map(item => item.id === updated.id ? updated : item);
           }
           state.rescheduleAppointmentId = '';
-          document.getElementById('rescheduleCompleteMessage').textContent =
-            'Your appointment was moved. The salon and the technicians have been notified.';
+          renderRescheduleCompleteMessage(previousAppointment, updated || {
+            date: dateInput.value,
+            time: state.time,
+            technician: getVisibleStaff().find(item => item.id === state.staff)?.name || 'Technician'
+          });
           showScreen('reschedule-complete');
         } else {
           await createOnlineBookingRequest({

@@ -294,6 +294,47 @@ if (eventType === "booking_unavailable") {
   };
 }
 
+if (eventType === "booking_canceled") {
+  const appointmentLine = `Your appointment${dateLine ? ` on ${dateLine}` : ""}${data.staffName ? ` with ${data.staffName}` : ""} has been cancelled.`;
+  const text = plainLines([
+    `Hello ${client},`,
+    "",
+    appointmentLine,
+    "",
+    "We hope to see you again soon.",
+    "",
+    "Roses Nails"
+  ]);
+  return {
+    subject: "Your Roses Nails appointment has been cancelled",
+    text,
+    html: `<p>Hello ${escapeHtml(client)},</p><p>${escapeHtml(appointmentLine)}</p><p>We hope to see you again soon.</p><p>Roses Nails</p>`
+  };
+}
+
+if (eventType === "booking_rescheduled") {
+  const previousLine = [data.previousBookingDate, data.previousBookingTime].filter(Boolean).join(" at ");
+  const previousAppointmentLine = `Previous appointment: ${previousLine || "Previous time"}${data.previousStaffName ? ` with ${data.previousStaffName}` : ""}`;
+  const newAppointmentLine = `New appointment: ${dateLine || "New time"}${data.staffName ? ` with ${data.staffName}` : ""}`;
+  const text = plainLines([
+    `Hello ${client},`,
+    "",
+    "Your appointment has been successfully rescheduled.",
+    "",
+    previousAppointmentLine,
+    newAppointmentLine,
+    "",
+    "We look forward to seeing you.",
+    "",
+    "Roses Nails"
+  ]);
+  return {
+    subject: "Your Roses Nails appointment has been rescheduled",
+    text,
+    html: `<p>Hello ${escapeHtml(client)},</p><p>Your appointment has been successfully rescheduled.</p><p><strong>${escapeHtml(previousAppointmentLine)}</strong><br><strong>${escapeHtml(newAppointmentLine)}</strong></p><p>We look forward to seeing you.</p><p>Roses Nails</p>`
+  };
+}
+
 const text = plainLines([
   `Hello ${client},`,
   "",
@@ -310,16 +351,30 @@ return {
   html: `<p>Hello ${escapeHtml(client)},</p><p>We received your booking request${dateLine ? ` for ${escapeHtml(dateLine)}` : ""}.</p>${staffLine ? `<p>${escapeHtml(staffLine)}</p>` : ""}${serviceLine ? `<p>${escapeHtml(serviceLine)}</p>` : ""}<p>This appointment is not confirmed yet.</p><p>Your request is under review. After we review it, you will receive a confirmation or an update by text message, phone, or email if you added one.</p><p>If you do not hear from us soon, please contact us at ${salonPhoneHtml}.</p>`
 };
 }
-function buildBookingEmailQueueDoc({ eventType, appointmentId, appointmentData, staffRecords, email }) {
+function buildBookingEmailQueueDoc({
+  eventType,
+  appointmentId,
+  appointmentData,
+  previousAppointmentData = null,
+  staffRecords,
+  email
+}) {
 const staffName = appointmentData.clientNotificationStaffName ||
   getStaffName(staffRecords, appointmentData.staffId);
+const previousStaffName = previousAppointmentData
+  ? (previousAppointmentData.clientNotificationStaffName ||
+    getStaffName(staffRecords, previousAppointmentData.staffId))
+  : "";
 const service = appointmentData.note || "";
 const content = buildBookingEmailContent(eventType, {
   client: appointmentData.client,
-  bookingDate: appointmentData.date,
+  bookingDate: formatDate(appointmentData.date),
   bookingTime: slotToTime(appointmentData.start),
   staffName,
-  service
+  service,
+  previousBookingDate: previousAppointmentData ? formatDate(previousAppointmentData.date) : "",
+  previousBookingTime: previousAppointmentData ? slotToTime(previousAppointmentData.start) : "",
+  previousStaffName
 });
 return {
   status: "pending",
@@ -343,14 +398,25 @@ return {
   source: "onlineBooking"
 };
 }
-function buildBookingEmailContactDoc({ email, appointmentId, requestId }) {
+function getBookingEmailContactExpiry(appointmentDate) {
+const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(appointmentDate || ""));
+const minimumExpiryMs = Date.now() + BOOKING_EMAIL_TTL_MS;
+if (!match) return Timestamp.fromMillis(minimumExpiryMs);
+const appointmentRetentionMs = Date.UTC(
+  Number(match[1]),
+  Number(match[2]) - 1,
+  Number(match[3]) + 2
+);
+return Timestamp.fromMillis(Math.max(minimumExpiryMs, appointmentRetentionMs));
+}
+function buildBookingEmailContactDoc({ email, appointmentId, requestId, appointmentDate }) {
 return {
   email,
   appointmentId,
   requestId,
   status: "active",
   createdAt: FieldValue.serverTimestamp(),
-  expiresAt: Timestamp.fromDate(new Date(Date.now() + BOOKING_EMAIL_TTL_MS)),
+  expiresAt: getBookingEmailContactExpiry(appointmentDate),
   purpose: "appointment_email_notifications_only"
 };
 }
@@ -394,17 +460,35 @@ if (eventType === "booking_confirmed") {
   const staffLine = data.staffName ? ` with ${data.staffName}` : "";
   return `Your appointment at Rose's Nails is confirmed${dateLine ? ` for ${dateLine}` : ""}${staffLine}. See you soon!`;
 }
+if (eventType === "booking_canceled") {
+  return `Roses Nails: Your appointment${dateLine ? ` on ${dateLine}` : ""} has been cancelled. We hope to see you again soon.`;
+}
+if (eventType === "booking_rescheduled") {
+  const previousLine = [data.previousBookingDate, data.previousBookingTime].filter(Boolean).join(" at ");
+  const staffLine = data.staffName ? ` with ${data.staffName}` : "";
+  const fullBody = `Roses Nails: Your appointment was moved${previousLine ? ` from ${previousLine}` : ""}${dateLine ? ` to ${dateLine}` : ""}${staffLine}. See you then!`;
+  if (fullBody.length <= 160) return fullBody;
+  return `Roses Nails: Your appointment was moved${previousLine ? ` from ${previousLine}` : ""}${dateLine ? ` to ${dateLine}` : ""}. See you then!`;
+}
 return "Your online booking request at Rose's Nails cannot be confirmed for the selected time. We will contact you soon to find a better option.";
 }
 
-function buildBookingSmsQueueDoc({ eventType, appointmentId, appointmentData, staffRecords }) {
+function buildBookingSmsQueueDoc({
+  eventType,
+  appointmentId,
+  appointmentData,
+  previousAppointmentData = null,
+  staffRecords
+}) {
 const staffName = appointmentData.clientNotificationStaffName ||
   getStaffName(staffRecords, appointmentData.staffId);
 const to = normalizePhoneToE164(appointmentData.phone);
 const body = buildBookingSmsContent(eventType, {
   bookingDate: formatDate(appointmentData.date),
   bookingTime: slotToTime(appointmentData.start),
-  staffName
+  staffName,
+  previousBookingDate: previousAppointmentData ? formatDate(previousAppointmentData.date) : "",
+  previousBookingTime: previousAppointmentData ? slotToTime(previousAppointmentData.start) : ""
 });
 return {
   status: to ? "pending" : "skipped",
@@ -3381,6 +3465,8 @@ exports.cancelOnlineBookingAppointment = onCall(
     const challengeRef = db.collection(BOOKING_VERIFICATION_COLLECTION).doc(challengeId);
     const appointmentRef = db.collection("appointments").doc(appointmentId);
     const privateAppointmentRef = db.collection(APPOINTMENT_PRIVATE_COLLECTION).doc(appointmentId);
+    const clientSmsRef = db.collection(SMS_QUEUE_COLLECTION).doc();
+    const clientEmailRef = db.collection(EMAIL_QUEUE_COLLECTION).doc();
     const logRef = db.collection("activityLog").doc();
     const staffMessageRef = db.collection("staffMessages").doc();
     const sessionTokenHash = buildSessionTokenHash(sessionToken);
@@ -3445,6 +3531,23 @@ exports.cancelOnlineBookingAppointment = onCall(
       if (!linkedPrivateAppointment && !linkedLegacyAppointment) {
         throw new HttpsError("failed-precondition", "This appointment is no longer available to manage.");
       }
+
+      const emailContactRef = db.collection(BOOKING_EMAIL_CONTACT_COLLECTION)
+        .doc(String(before.onlineBookingGroupId || appointmentId));
+      const emailContactSnap = await tx.get(emailContactRef);
+      const emailContact = emailContactSnap.exists ? emailContactSnap.data() || {} : {};
+      const emailContactExpiresAtMs = emailContact.expiresAt?.toMillis
+        ? emailContact.expiresAt.toMillis()
+        : 0;
+      const notificationEmail = emailContact.status === "active" && emailContact.email &&
+        (!emailContactExpiresAtMs || emailContactExpiresAtMs > nowMs)
+        ? String(emailContact.email)
+        : "";
+      const notificationPhone = privateAppointment?.phoneDisplay ||
+        privateAppointment?.phoneNormalized ||
+        String(challenge.phoneDigits || "") ||
+        before.phone ||
+        "";
 
       const cancellationEligibility = getClientCancellationEligibility(before, {
         today: salonNow.date,
@@ -3532,6 +3635,24 @@ exports.cancelOnlineBookingAppointment = onCall(
         source: "online_booking",
         messageGroupId: `online-booking-cancel-${appointmentId}`
       }));
+      if (before.smsConsent !== false) {
+        tx.set(clientSmsRef, buildBookingSmsQueueDoc({
+          eventType: "booking_canceled",
+          appointmentId,
+          appointmentData: { ...before, phone: notificationPhone },
+          staffRecords
+        }));
+      }
+      if (notificationEmail) {
+        tx.set(clientEmailRef, buildBookingEmailQueueDoc({
+          eventType: "booking_canceled",
+          appointmentId,
+          appointmentData: before,
+          staffRecords,
+          email: notificationEmail
+        }));
+      }
+      if (emailContactSnap.exists) tx.delete(emailContactRef);
       tx.set(challengeRef, {
         sessionLastUsedAt: FieldValue.serverTimestamp(),
         managedAppointmentIds: FieldValue.arrayUnion(appointmentId)
@@ -3566,6 +3687,8 @@ exports.rescheduleOnlineBookingAppointment = onCall(
     const challengeRef = db.collection(BOOKING_VERIFICATION_COLLECTION).doc(challengeId);
     const appointmentRef = db.collection("appointments").doc(appointmentId);
     const privateAppointmentRef = db.collection(APPOINTMENT_PRIVATE_COLLECTION).doc(appointmentId);
+    const clientSmsRef = db.collection(SMS_QUEUE_COLLECTION).doc();
+    const clientEmailRef = db.collection(EMAIL_QUEUE_COLLECTION).doc();
     const logRef = db.collection("activityLog").doc();
     const staffMessageRef = db.collection("staffMessages").doc();
     const sessionTokenHash = buildSessionTokenHash(sessionToken);
@@ -3611,6 +3734,23 @@ exports.rescheduleOnlineBookingAppointment = onCall(
       if (!linkedPrivateAppointment && !linkedLegacyAppointment) {
         throw new HttpsError("failed-precondition", "This appointment is no longer available to manage.");
       }
+
+      const emailContactRef = db.collection(BOOKING_EMAIL_CONTACT_COLLECTION)
+        .doc(String(before.onlineBookingGroupId || appointmentId));
+      const emailContactSnap = await tx.get(emailContactRef);
+      const emailContact = emailContactSnap.exists ? emailContactSnap.data() || {} : {};
+      const emailContactExpiresAtMs = emailContact.expiresAt?.toMillis
+        ? emailContact.expiresAt.toMillis()
+        : 0;
+      const notificationEmail = emailContact.status === "active" && emailContact.email &&
+        (!emailContactExpiresAtMs || emailContactExpiresAtMs > nowMs)
+        ? String(emailContact.email)
+        : "";
+      const notificationPhone = privateAppointment?.phoneDisplay ||
+        privateAppointment?.phoneNormalized ||
+        String(challenge.phoneDigits || "") ||
+        before.phone ||
+        "";
 
       const eligibility = getClientCancellationEligibility(before, {
         today: salonNow.date,
@@ -3734,6 +3874,29 @@ exports.rescheduleOnlineBookingAppointment = onCall(
       });
       staffMessage.importantStaffIds = [...new Set([before.staffId, staffId].filter(id => id && id !== ANYONE_ID))];
       tx.set(staffMessageRef, staffMessage);
+      if (before.smsConsent !== false) {
+        tx.set(clientSmsRef, buildBookingSmsQueueDoc({
+          eventType: "booking_rescheduled",
+          appointmentId,
+          appointmentData: { ...after, phone: notificationPhone },
+          previousAppointmentData: before,
+          staffRecords
+        }));
+      }
+      if (notificationEmail) {
+        tx.set(clientEmailRef, buildBookingEmailQueueDoc({
+          eventType: "booking_rescheduled",
+          appointmentId,
+          appointmentData: after,
+          previousAppointmentData: before,
+          staffRecords,
+          email: notificationEmail
+        }));
+        tx.set(emailContactRef, {
+          expiresAt: getBookingEmailContactExpiry(date),
+          lastUsedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+      }
       tx.set(challengeRef, {
         sessionLastUsedAt: FieldValue.serverTimestamp(),
         managedAppointmentIds: FieldValue.arrayUnion(appointmentId)
@@ -4294,7 +4457,8 @@ exports.createOnlineBookingRequest = onCall(
         tx.set(emailContactRef, buildBookingEmailContactDoc({
           email,
           appointmentId: appointmentRef.id,
-          requestId
+          requestId,
+          appointmentDate: date
         }));
       }
 
@@ -4766,7 +4930,14 @@ exports.appointmentStatusEmailUpdated = onDocumentUpdated(
           email: contact.email
         })));
       }
-      writes.push(contactRef.delete().catch(() => null));
+      if (after.status === "confirmed") {
+        writes.push(contactRef.set({
+          expiresAt: getBookingEmailContactExpiry(after.date),
+          lastUsedAt: FieldValue.serverTimestamp()
+        }, { merge: true }));
+      } else {
+        writes.push(contactRef.delete().catch(() => null));
+      }
     }
 
     if (smsEventType && after.smsConsent !== false && contactAppointment.phone) {

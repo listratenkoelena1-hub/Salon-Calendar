@@ -30,6 +30,11 @@ test("all booking entry points contain the same secure management experience", (
   assert.match(page, /Confirmed and pending online appointments can be rescheduled or cancelled until 3 hours/);
   assert.match(page, /Rescheduling keeps the same service and duration/);
   assert.match(page, /To change the service, cancel this appointment and book a new one/);
+  assert.match(page, /renderCancellationCompleteMessage\(appointment, includedComment\)/);
+  assert.match(page, /Your appointment has been successfully rescheduled/);
+  assert.match(page, /Previous appointment:/);
+  assert.match(page, /New appointment:/);
+  assert.match(page, /We look forward to seeing you/);
 });
 
 test("booking preview remains isolated to localhost and Firebase preview channels", () => {
