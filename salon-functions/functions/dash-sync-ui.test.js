@@ -30,10 +30,17 @@ test("calendar interface has no experimental Dash audit window or callable depen
   assert.doesNotMatch(calendarHtml, /get\('dashAudit'\)/);
 });
 
-test("monitor-only Dash alerts can add a checked appointment from Messages", () => {
+test("monitor-only Dash alerts open an editable appointment draft before saving", () => {
   assert.match(calendarHtml, /httpsCallable\(functions, "addDashMonitorAppointment"\)/);
   assert.match(calendarHtml, /data-dash-add-receipt-id/);
   assert.match(calendarHtml, />Add to calendar<\/button>/);
+  assert.match(calendarHtml, /addDashMonitorAppointment\(\{ receiptId, preview: true \}\)/);
+  assert.match(calendarHtml, /openDashAppointmentImportDraft\(result\.draft, receiptId, notificationId\)/);
+  assert.match(calendarHtml, /pendingDashImportDraft/);
+  assert.match(calendarHtml, /Review or change the information, then save it to Calendar/);
+  assert.match(calendarHtml, /appointment: getAtomicAppointmentForm\(data\)/);
   assert.match(calendarHtml, /result\.status === 'conflict'/);
   assert.match(calendarHtml, /offWorkConflictModal/);
+  assert.match(calendarHtml, /if \(pendingDashImportDraft\) \{\s*await saveDashAppointmentImportDraft\(data\);/);
+  assert.match(calendarHtml, /window\.closeAppointment = \(\) => \{[\s\S]*?pendingDashImportDraft = null;/);
 });

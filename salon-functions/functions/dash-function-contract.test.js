@@ -36,7 +36,10 @@ test("monitor-only mode cannot queue or execute outbound Dash changes", () => {
   assert.match(functionsSource, /allowConflictRetry: true/);
   assert.match(functionsSource, /requestedByLabel: actor\.label/);
   assert.match(functionsSource, /requestedByKey: actor\.staffId \|\| actor\.uid/);
-  assert.match(functionsSource, /messageUpdate\.body = buildDashMonitorOutcomeMessage\(detail, result\.status\)/);
+  assert.match(functionsSource, /request\.data\?\.preview === true/);
+  assert.match(functionsSource, /status: "draft"/);
+  assert.match(functionsSource, /sanitizeAppointmentForm\(request\.data\.appointment, actor\)/);
+  assert.match(functionsSource, /messageUpdate\.body = buildDashMonitorOutcomeMessage\(importDetail, result\.status\)/);
   assert.match(functionsSource, /messageUpdate\.eventType = "dash_appointment_added"/);
   assert.match(functionsSource, /messageUpdate\.eventType = "dash_appointment_conflict"/);
   assert.match(runnerSource, /visibleToAllStaff: true/);

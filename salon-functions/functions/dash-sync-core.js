@@ -602,10 +602,14 @@ function buildDashAppointment(detail, localStaff) {
     requestWarning: null,
     dashBookingId: detail.dashBookingId,
     dashOriginBookingId: detail.dashBookingId,
-    dashOriginDate: detail.date,
-    dashOriginStart: detail.start,
-    dashOriginDuration: Number(detail.dashOriginalDuration || detail.duration),
-    dashOriginStaffName: detail.staffName,
+    dashOriginDate: detail.dashOriginDate || detail.date,
+    dashOriginStart: Number.isFinite(Number(detail.dashOriginStart))
+      ? Number(detail.dashOriginStart)
+      : detail.start,
+    dashOriginDuration: Number(
+      detail.dashOriginDuration || detail.dashOriginalDuration || detail.duration
+    ),
+    dashOriginStaffName: detail.dashOriginStaffName || detail.staffName,
     dashStaffName: detail.staffName,
     selectedServices: [detail.service],
     privacySchemaVersion: detail.dashClientId ? 1 : null,

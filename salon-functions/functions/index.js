@@ -112,6 +112,7 @@ const {
   weeklyRuleActiveOnDate,
   runDashSyncCycle
 } = require("./dash-sync-runner");
+const { resolveLocalStaffForDashName } = require("./dash-sync-core");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -2361,17 +2362,64 @@ exports.addDashMonitorAppointment = onCall(
       { id: ANYONE_ID, name: "Anyone", active: true },
       ...staffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }))
     ];
+    const resolvedStaff = resolveLocalStaffForDashName(staffRecords, detail.staffName, mappings);
+    if (!resolvedStaff) {
+      return { status: "unmapped_staff" };
+    }
+
+    if (request.data?.preview === true) {
+      return {
+        status: "draft",
+        draft: {
+          date: String(detail.date || ""),
+          staffId: resolvedStaff.id,
+          start: Number(detail.start),
+          duration: Math.max(1, Number(detail.duration) || 1),
+          client: String(detail.client || ""),
+          note: String(detail.service || ""),
+          dashBookingId: String(detail.dashBookingId || "")
+        }
+      };
+    }
+
+    let importDetail = detail;
+    let importStaff = resolvedStaff;
+    if (request.data?.appointment) {
+      const form = sanitizeAppointmentForm(request.data.appointment, actor);
+      const selectedStaff = staffRecords.find(record => (
+        record.id === form.staffId && (record.id === ANYONE_ID || record.active !== false)
+      ));
+      if (!selectedStaff) {
+        throw new HttpsError("failed-precondition", "Selected technician is not active.");
+      }
+      importStaff = selectedStaff;
+      importDetail = {
+        ...detail,
+        date: form.date,
+        staffId: selectedStaff.id,
+        staffName: selectedStaff.name || detail.staffName,
+        start: form.start,
+        duration: form.duration,
+        client: form.client,
+        service: form.note,
+        dashOriginDate: detail.date,
+        dashOriginStart: detail.start,
+        dashOriginDuration: Number(detail.dashOriginalDuration || detail.duration),
+        dashOriginStaffName: detail.staffName
+      };
+    }
     const result = await importDashAppointment({
       db,
       FieldValue,
       Timestamp,
       item: {
         notificationKey: String(receipt.notificationKey),
-        detail
+        detail: importDetail
       },
       staffRecords,
       mappings,
       allowConflictRetry: true,
+      localStaffOverride: importStaff,
       requestedByLabel: actor.label,
       requestedByKey: actor.staffId || actor.uid
     });
@@ -2387,14 +2435,14 @@ exports.addDashMonitorAppointment = onCall(
       messageUpdate.title = result.status === "duplicate"
         ? "Dash Booking appointment already in Calendar"
         : "Dash Booking appointment added";
-      messageUpdate.body = buildDashMonitorOutcomeMessage(detail, result.status);
+      messageUpdate.body = buildDashMonitorOutcomeMessage(importDetail, result.status);
       messageUpdate.eventType = "dash_appointment_added";
       messageUpdate.entityType = "appointment";
       messageUpdate.entityId = result.appointmentId;
       messageUpdate.dashImportedAt = FieldValue.serverTimestamp();
     } else if (result.status === "conflict") {
       messageUpdate.title = "Dash Booking — no available time";
-      messageUpdate.body = buildDashMonitorOutcomeMessage(detail, "conflict");
+      messageUpdate.body = buildDashMonitorOutcomeMessage(importDetail, "conflict");
       messageUpdate.eventType = "dash_appointment_conflict";
       messageUpdate.entityType = "dashBooking";
     }

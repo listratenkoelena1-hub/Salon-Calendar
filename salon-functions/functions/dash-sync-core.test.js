@@ -398,6 +398,34 @@ test("keeps the original Dash duration when the Rose Calendar duration is longer
   assert.equal(appointment.dashOriginDuration, 6);
 });
 
+test("keeps original Dash provenance when staff edits the Calendar draft", () => {
+  const appointment = buildDashAppointment({
+    dashBookingId: "dash-booking-edited-draft",
+    client: "Edited Client Name",
+    date: "2026-10-04",
+    start: 20,
+    duration: 8,
+    service: "Edited service details",
+    staffName: "Natalia",
+    dashOriginDate: "2026-10-03",
+    dashOriginStart: 16,
+    dashOriginDuration: 6,
+    dashOriginStaffName: "Tanya"
+  }, { id: "local-natalia", name: "Natalia" });
+
+  assert.equal(appointment.source, "dash_booking");
+  assert.equal(appointment.date, "2026-10-04");
+  assert.equal(appointment.staffId, "local-natalia");
+  assert.equal(appointment.start, 20);
+  assert.equal(appointment.duration, 8);
+  assert.equal(appointment.client, "Edited Client Name");
+  assert.equal(appointment.note, "Edited service details");
+  assert.equal(appointment.dashOriginDate, "2026-10-03");
+  assert.equal(appointment.dashOriginStart, 16);
+  assert.equal(appointment.dashOriginDuration, 6);
+  assert.equal(appointment.dashOriginStaffName, "Tanya");
+});
+
 test("detects appointment and off-work conflicts for inbound Dash requests", () => {
   const detail = {
     dashBookingId: "dash-1",

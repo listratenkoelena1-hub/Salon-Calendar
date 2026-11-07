@@ -1539,6 +1539,7 @@ async function importDashAppointment({
   staffRecords,
   mappings,
   allowConflictRetry = false,
+  localStaffOverride = null,
   requestedByLabel = "DashBooking",
   requestedByKey = "dash_booking"
 }) {
@@ -1553,7 +1554,8 @@ async function importDashAppointment({
     return { status: "parse_error" };
   }
 
-  const localStaff = resolveLocalStaffForDashName(staffRecords, detail.staffName, mappings);
+  const localStaff = localStaffOverride ||
+    resolveLocalStaffForDashName(staffRecords, detail.staffName, mappings);
   const appointmentId = getDashRequestDocumentId(detail.dashBookingId);
   const receiptRef = db.collection(DASH_RECEIPT_COLLECTION).doc(appointmentId);
   const appointmentRef = db.collection("appointments").doc(appointmentId);
