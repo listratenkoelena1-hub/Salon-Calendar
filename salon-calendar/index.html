@@ -5516,7 +5516,6 @@ import {
   where,
   orderBy,
   limit,
-  startAfter,
   getDocs,
   serverTimestamp,
   getDoc, 
@@ -5620,7 +5619,7 @@ let staffPinnedChatMessages = [];
 let activePinnedNotificationIndex = 0;
 let staffMessageReplyTarget = null;
 const STAFF_MESSAGES_PAGE_SIZE = 50;
-let staffMessagesOldestSnapshot = null;
+let staffMessagesVisibleLimit = STAFF_MESSAGES_PAGE_SIZE;
 let staffMessagesHasEarlier = false;
 let staffMessagesLoading = true;
 let staffMessagesLoadingEarlier = false;
@@ -5634,9 +5633,8 @@ let staffMessagesScrollToLatestPending = false;
 let staffMessagesLatestAnchorFrame = 0;
 const staffChatTranslationState = new Map();
 let staffMessageLatestPages = { legacy: [], canonical: [] };
-let staffMessageOldestSnapshots = { legacy: null, canonical: null };
 let staffMessageHasEarlierBySource = { legacy: false, canonical: false };
-let staffMessageLoadedSources = new Set();
+let staffMessagesQueryGeneration = 0;
 let staffPushStatuses = {};
 let staffPushStatusesState = 'idle';
 let staffMessageAttachment = null;
@@ -11914,6 +11912,7 @@ async function queueStaffNotification({
 }
 
 function stopStaffNotificationsListener() {
+  staffMessagesQueryGeneration += 1;
   if (staffNotificationsUnsubscribe) {
     staffNotificationsUnsubscribe();
     staffNotificationsUnsubscribe = null;
@@ -11927,12 +11926,10 @@ function stopStaffNotificationsListener() {
     staffPinnedChatUnsubscribe = null;
   }
   staffNotifications = [];
-  staffMessagesOldestSnapshot = null;
+  staffMessagesVisibleLimit = STAFF_MESSAGES_PAGE_SIZE;
   staffMessagesHasEarlier = false;
   staffMessageLatestPages = { legacy: [], canonical: [] };
-  staffMessageOldestSnapshots = { legacy: null, canonical: null };
   staffMessageHasEarlierBySource = { legacy: false, canonical: false };
-  staffMessageLoadedSources = new Set();
   staffMessagesLoading = true;
   staffMessagesLoadError = '';
   staffPinnedNotificationIds = [];
@@ -11988,7 +11985,6 @@ function getDashPreviewDemoNotifications() {
 
 function mergeStaffMessageSources(extraItems = []) {
   const candidates = [
-    ...staffNotifications.filter(item => item._olderPage === true),
     ...staffMessageLatestPages.legacy,
     ...staffMessageLatestPages.canonical,
     ...extraItems,
@@ -12000,19 +11996,85 @@ function mergeStaffMessageSources(extraItems = []) {
     const existing = merged.get(identity);
     if (!existing || item._collection === 'staffMessages') merged.set(identity, item);
   });
-  staffNotifications = Array.from(merged.values()).sort((a, b) => getStaffNotificationMillis(a) - getStaffNotificationMillis(b));
+  const chronological = Array.from(merged.values())
+    .sort((a, b) => getStaffNotificationMillis(a) - getStaffNotificationMillis(b));
+  staffMessagesHasEarlier = chronological.length > staffMessagesVisibleLimit ||
+    Object.values(staffMessageHasEarlierBySource).some(Boolean);
+  staffNotifications = chronological.slice(-staffMessagesVisibleLimit);
 }
 
-function buildStaffMessagesQueryForSource(sourceKey, { afterSnapshot = null } = {}) {
+function buildStaffMessagesQueryForSource(sourceKey, resultLimit = staffMessagesVisibleLimit + 1) {
   const isCanonical = sourceKey === 'canonical';
   const baseRef = collection(db, isCanonical ? 'staffMessages' : 'staffNotifications');
   const filters = currentUserRole === 'manager'
     ? [where('visibleToManager', '==', true)]
     : [where(isCanonical ? 'audienceStaffIds' : 'recipientStaffId', isCanonical ? 'array-contains' : '==', currentUserStaffId)];
   const clauses = [...filters, orderBy('createdAt', 'desc')];
-  if (afterSnapshot) clauses.push(startAfter(afterSnapshot));
-  clauses.push(limit(STAFF_MESSAGES_PAGE_SIZE));
+  clauses.push(limit(resultLimit));
   return query(baseRef, ...clauses);
+}
+
+function subscribeStaffMessageWindow({ initial = false } = {}) {
+  if (staffNotificationsUnsubscribe) staffNotificationsUnsubscribe();
+  const generation = ++staffMessagesQueryGeneration;
+  const pendingPages = { legacy: null, canonical: null };
+  const pendingHasEarlier = { legacy: false, canonical: false };
+  const pendingErrors = { legacy: '', canonical: '' };
+  const queryLimit = staffMessagesVisibleLimit + 1;
+  let windowReady = false;
+
+  const commitWindow = () => {
+    if (generation !== staffMessagesQueryGeneration) return;
+    if (!pendingPages.legacy || !pendingPages.canonical) return;
+    staffMessageLatestPages = {
+      legacy: pendingPages.legacy,
+      canonical: pendingPages.canonical
+    };
+    staffMessageHasEarlierBySource = {
+      legacy: pendingHasEarlier.legacy,
+      canonical: pendingHasEarlier.canonical
+    };
+    mergeStaffMessageSources();
+    staffMessagesUnreadBoundaryPendingAbove = staffMessagesHasEarlier &&
+      staffMessagesUnreadBoundaryMs > 0 &&
+      getStaffNotificationMillis(staffNotifications[0]) > staffMessagesUnreadBoundaryMs;
+    staffMessagesLoading = false;
+    staffMessagesLoadingEarlier = false;
+    staffMessagesLoadError = pendingErrors.canonical || pendingErrors.legacy || '';
+    updateStaffNotificationsBadge();
+    renderStaffNotifications();
+    if (initial && !windowReady && !staffMessagesUnreadBoundaryMs) scrollStaffNotificationsToBottom();
+    windowReady = true;
+  };
+
+  const unsubscribers = ['legacy', 'canonical'].map(sourceKey => onSnapshot(
+    buildStaffMessagesQueryForSource(sourceKey, queryLimit),
+    snap => {
+      if (generation !== staffMessagesQueryGeneration) return;
+      const collectionName = sourceKey === 'canonical' ? 'staffMessages' : 'staffNotifications';
+      pendingPages[sourceKey] = snap.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+        _snapshot: docSnap,
+        _sourceKey: sourceKey,
+        _collection: collectionName
+      })).reverse();
+      pendingHasEarlier[sourceKey] = snap.size > staffMessagesVisibleLimit;
+      pendingErrors[sourceKey] = '';
+      commitWindow();
+    },
+    err => {
+      if (generation !== staffMessagesQueryGeneration) return;
+      console.warn(`${sourceKey} staff messages could not be loaded:`, err);
+      pendingPages[sourceKey] = staffMessageLatestPages[sourceKey] || [];
+      pendingHasEarlier[sourceKey] = staffMessageHasEarlierBySource[sourceKey] || false;
+      pendingErrors[sourceKey] = sourceKey === 'canonical'
+        ? 'New messages could not be loaded.'
+        : 'Messages could not be loaded.';
+      commitWindow();
+    }
+  ));
+  staffNotificationsUnsubscribe = () => unsubscribers.forEach(unsubscribe => unsubscribe());
 }
 
 function startStaffNotificationsListener() {
@@ -12025,38 +12087,7 @@ function startStaffNotificationsListener() {
   staffMessagesLoading = true;
   staffMessagesLoadError = '';
   renderStaffNotifications();
-  const unsubscribers = ['legacy', 'canonical'].map(sourceKey => onSnapshot(
-    buildStaffMessagesQueryForSource(sourceKey),
-    snap => {
-      const collectionName = sourceKey === 'canonical' ? 'staffMessages' : 'staffNotifications';
-      staffMessageLatestPages[sourceKey] = snap.docs.map(docSnap => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-        _snapshot: docSnap,
-        _sourceKey: sourceKey,
-        _collection: collectionName
-      })).reverse();
-      staffMessageOldestSnapshots[sourceKey] = snap.docs[snap.docs.length - 1] || null;
-      staffMessageHasEarlierBySource[sourceKey] = snap.size === STAFF_MESSAGES_PAGE_SIZE;
-      staffMessageLoadedSources.add(sourceKey);
-      mergeStaffMessageSources();
-      staffMessagesOldestSnapshot = staffMessageOldestSnapshots;
-      staffMessagesHasEarlier = Object.values(staffMessageHasEarlierBySource).some(Boolean);
-      staffMessagesLoading = staffMessageLoadedSources.size < 2;
-      staffMessagesLoadError = '';
-      updateStaffNotificationsBadge();
-      renderStaffNotifications();
-      if (!staffMessagesUnreadBoundaryMs) scrollStaffNotificationsToBottom();
-    },
-    err => {
-      console.warn(`${sourceKey} staff messages could not be loaded:`, err);
-      staffMessageLoadedSources.add(sourceKey);
-      staffMessagesLoading = staffMessageLoadedSources.size < 2;
-      staffMessagesLoadError = sourceKey === 'canonical' ? 'New messages could not be loaded.' : 'Messages could not be loaded.';
-      renderStaffNotifications();
-    }
-  ));
-  staffNotificationsUnsubscribe = () => unsubscribers.forEach(unsubscribe => unsubscribe());
+  subscribeStaffMessageWindow({ initial: true });
 }
 
 function getStaffNotificationMillis(item) {
@@ -12067,33 +12098,8 @@ window.loadEarlierStaffNotifications = async () => {
   if (!staffMessagesHasEarlier || staffMessagesLoadingEarlier) return;
   staffMessagesLoadingEarlier = true;
   renderStaffNotifications();
-  try {
-    const sourceKeys = ['legacy', 'canonical'].filter(sourceKey => staffMessageHasEarlierBySource[sourceKey]);
-    const pages = await Promise.all(sourceKeys.map(async sourceKey => {
-      const snap = await getDocs(buildStaffMessagesQueryForSource(sourceKey, { afterSnapshot: staffMessageOldestSnapshots[sourceKey] }));
-      if (snap.docs.length) staffMessageOldestSnapshots[sourceKey] = snap.docs[snap.docs.length - 1];
-      staffMessageHasEarlierBySource[sourceKey] = snap.size === STAFF_MESSAGES_PAGE_SIZE;
-      const collectionName = sourceKey === 'canonical' ? 'staffMessages' : 'staffNotifications';
-      return snap.docs.map(docSnap => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-        _snapshot: docSnap,
-        _sourceKey: sourceKey,
-        _collection: collectionName,
-        _olderPage: true
-      })).reverse();
-    }));
-    mergeStaffMessageSources(pages.flat());
-    staffMessagesOldestSnapshot = staffMessageOldestSnapshots;
-    staffMessagesHasEarlier = Object.values(staffMessageHasEarlierBySource).some(Boolean);
-    staffMessagesUnreadBoundaryPendingAbove = staffMessagesHasEarlier && staffMessagesUnreadBoundaryMs > 0 && getStaffNotificationMillis(staffNotifications[0]) > staffMessagesUnreadBoundaryMs;
-  } catch (err) {
-    console.warn('Earlier staff messages could not be loaded:', err);
-    showToast('Earlier messages could not be loaded', 'error');
-  } finally {
-    staffMessagesLoadingEarlier = false;
-    renderStaffNotifications();
-  }
+  staffMessagesVisibleLimit += STAFF_MESSAGES_PAGE_SIZE;
+  subscribeStaffMessageWindow();
 };
 
 window.retryStaffNotifications = () => startStaffNotificationsListener();
@@ -12641,6 +12647,11 @@ async function handleStaffChatTranslation(messageId, targetLanguage) {
   }
 }
 
+function buildStaffLoadEarlierButton() {
+  if (!staffMessagesHasEarlier) return '';
+  return `<button type="button" class="staff-load-earlier" onclick="loadEarlierStaffNotifications()" ${staffMessagesLoadingEarlier ? 'disabled' : ''}>${staffMessagesLoadingEarlier ? 'Loading…' : 'Load earlier'}</button>`;
+}
+
 function renderStaffNotifications() {
   const list = document.getElementById('staffNotificationsList');
   if (!list) return;
@@ -12661,16 +12672,14 @@ function renderStaffNotifications() {
   releaseStaffMessageMediaUrls();
   const visibleNotifications = getFilteredStaffNotifications();
   if (!visibleNotifications.length) {
-    list.innerHTML = '<div class="staff-notification-empty">No messages yet.</div>';
+    list.innerHTML = buildStaffLoadEarlierButton() + '<div class="staff-notification-empty">No messages in the loaded period.</div>';
     return;
   }
 
   let lastDateLabel = '';
   const htmlParts = [];
 
-  if (staffMessagesHasEarlier) {
-    htmlParts.push(`<button type="button" class="staff-load-earlier" onclick="loadEarlierStaffNotifications()" ${staffMessagesLoadingEarlier ? 'disabled' : ''}>${staffMessagesLoadingEarlier ? 'Loading…' : 'Load earlier'}</button>`);
-  }
+  htmlParts.push(buildStaffLoadEarlierButton());
   if (staffMessagesUnreadBoundaryPendingAbove) {
     htmlParts.push('<div class="staff-notification-unread-divider">Unread continues above</div>');
   }
@@ -17544,7 +17553,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-11-10.1';
+const CALENDAR_APP_VERSION = '2026-11-10.2';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';

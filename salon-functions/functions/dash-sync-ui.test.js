@@ -54,3 +54,14 @@ test("Bookings tab replaces Unread and contains every Online and Dash booking me
   assert.match(calendarHtml, /staffMessagesFilter === 'bookings'[\s\S]*?filter\(isBookingStaffNotification\)/);
   assert.match(calendarHtml, /currentUserRole === 'manager'[\s\S]*?isBookingStaffNotification\(item\)[\s\S]*?'key'/);
 });
+
+test("Messenger paginates legacy and canonical messages as one chronological feed", () => {
+  assert.match(calendarHtml, /let staffMessagesVisibleLimit = STAFF_MESSAGES_PAGE_SIZE/);
+  assert.match(calendarHtml, /const queryLimit = staffMessagesVisibleLimit \+ 1/);
+  assert.match(calendarHtml, /const chronological = Array\.from\(merged\.values\(\)\)[\s\S]*?sort\(\(a, b\) => getStaffNotificationMillis\(a\) - getStaffNotificationMillis\(b\)\)/);
+  assert.match(calendarHtml, /staffNotifications = chronological\.slice\(-staffMessagesVisibleLimit\)/);
+  assert.match(calendarHtml, /staffMessagesVisibleLimit \+= STAFF_MESSAGES_PAGE_SIZE;\s*subscribeStaffMessageWindow\(\)/);
+  assert.match(calendarHtml, /No messages in the loaded period/);
+  assert.match(calendarHtml, /function buildStaffLoadEarlierButton\(\)/);
+  assert.doesNotMatch(calendarHtml, /_olderPage|startAfter\(staffMessageOldestSnapshots/);
+});
