@@ -12008,10 +12008,21 @@ function buildStaffMessagesQueryForSource(sourceKey, resultLimit = staffMessages
   const baseRef = collection(db, isCanonical ? 'staffMessages' : 'staffNotifications');
   const filters = currentUserRole === 'manager'
     ? [where('visibleToManager', '==', true)]
-    : [where(isCanonical ? 'audienceStaffIds' : 'recipientStaffId', isCanonical ? 'array-contains' : '==', currentUserStaffId)];
+    : isCanonical
+      ? []
+      : [where('recipientStaffId', '==', currentUserStaffId)];
   const clauses = [...filters, orderBy('createdAt', 'desc')];
   clauses.push(limit(resultLimit));
   return query(baseRef, ...clauses);
+}
+
+function isStaffMessageVisibleToCurrentUser(item, sourceKey) {
+  if (currentUserRole === 'manager') return item?.visibleToManager === true;
+  if (currentUserRole !== 'staff' || !currentUserStaffId) return false;
+  if (sourceKey === 'legacy') return item?.recipientStaffId === currentUserStaffId;
+  return item?.visibleToAllStaff === true ||
+    item?.recipientStaffId === currentUserStaffId ||
+    (Array.isArray(item?.audienceStaffIds) && item.audienceStaffIds.includes(currentUserStaffId));
 }
 
 function subscribeStaffMessageWindow({ initial = false } = {}) {
@@ -12052,13 +12063,16 @@ function subscribeStaffMessageWindow({ initial = false } = {}) {
     snap => {
       if (generation !== staffMessagesQueryGeneration) return;
       const collectionName = sourceKey === 'canonical' ? 'staffMessages' : 'staffNotifications';
-      pendingPages[sourceKey] = snap.docs.map(docSnap => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-        _snapshot: docSnap,
-        _sourceKey: sourceKey,
-        _collection: collectionName
-      })).reverse();
+      pendingPages[sourceKey] = snap.docs
+        .map(docSnap => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+          _snapshot: docSnap,
+          _sourceKey: sourceKey,
+          _collection: collectionName
+        }))
+        .filter(item => isStaffMessageVisibleToCurrentUser(item, sourceKey))
+        .reverse();
       pendingHasEarlier[sourceKey] = snap.size > staffMessagesVisibleLimit;
       pendingErrors[sourceKey] = '';
       commitWindow();
@@ -17553,7 +17567,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-11-10.2';
+const CALENDAR_APP_VERSION = '2026-11-10.3';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';

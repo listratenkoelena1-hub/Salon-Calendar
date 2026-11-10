@@ -58,6 +58,10 @@ test("Bookings tab replaces Unread and contains every Online and Dash booking me
 test("Messenger paginates legacy and canonical messages as one chronological feed", () => {
   assert.match(calendarHtml, /let staffMessagesVisibleLimit = STAFF_MESSAGES_PAGE_SIZE/);
   assert.match(calendarHtml, /const queryLimit = staffMessagesVisibleLimit \+ 1/);
+  assert.match(calendarHtml, /isCanonical\s*\? \[\]\s*:\s*\[where\('recipientStaffId'/);
+  assert.match(calendarHtml, /function isStaffMessageVisibleToCurrentUser\(item, sourceKey\)/);
+  assert.match(calendarHtml, /item\?\.visibleToAllStaff === true/);
+  assert.match(calendarHtml, /filter\(item => isStaffMessageVisibleToCurrentUser\(item, sourceKey\)\)/);
   assert.match(calendarHtml, /const chronological = Array\.from\(merged\.values\(\)\)[\s\S]*?sort\(\(a, b\) => getStaffNotificationMillis\(a\) - getStaffNotificationMillis\(b\)\)/);
   assert.match(calendarHtml, /staffNotifications = chronological\.slice\(-staffMessagesVisibleLimit\)/);
   assert.match(calendarHtml, /staffMessagesVisibleLimit \+= STAFF_MESSAGES_PAGE_SIZE;\s*subscribeStaffMessageWindow\(\)/);
