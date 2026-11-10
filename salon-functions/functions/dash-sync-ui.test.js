@@ -44,3 +44,13 @@ test("monitor-only Dash alerts open an editable appointment draft before saving"
   assert.match(calendarHtml, /if \(pendingDashImportDraft\) \{\s*await saveDashAppointmentImportDraft\(data\);/);
   assert.match(calendarHtml, /window\.closeAppointment = \(\) => \{[\s\S]*?pendingDashImportDraft = null;/);
 });
+
+test("Bookings tab replaces Unread and contains every Online and Dash booking message", () => {
+  assert.match(calendarHtml, /data-message-filter="bookings">Bookings<\/button>/);
+  assert.doesNotMatch(calendarHtml, /data-message-filter="unread">Unread<\/button>/);
+  assert.match(calendarHtml, /function isBookingStaffNotification\(item\)/);
+  assert.match(calendarHtml, /source === 'online_booking' \|\| source === 'dash_booking'/);
+  assert.match(calendarHtml, /eventType\.startsWith\('online_'\) \|\| eventType\.startsWith\('dash_'\)/);
+  assert.match(calendarHtml, /staffMessagesFilter === 'bookings'[\s\S]*?filter\(isBookingStaffNotification\)/);
+  assert.match(calendarHtml, /currentUserRole === 'manager'[\s\S]*?isBookingStaffNotification\(item\)[\s\S]*?'key'/);
+});

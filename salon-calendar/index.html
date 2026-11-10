@@ -5042,7 +5042,7 @@ stroke-linejoin="round">
     <div id="staffMessageTabs" class="staff-message-tabs" role="tablist">
       <button class="staff-message-tab active" type="button" data-message-filter="all">All</button>
       <button class="staff-message-tab" id="staffMessagesForMeTab" type="button" data-message-filter="for-me">For me</button>
-      <button class="staff-message-tab" type="button" data-message-filter="unread">Unread</button>
+      <button class="staff-message-tab" type="button" data-message-filter="bookings">Bookings</button>
       <button class="staff-message-tab" type="button" data-message-filter="chat">Chat</button>
     </div>
     <div id="staffNotificationsList" class="staff-notification-list"></div>
@@ -11414,7 +11414,7 @@ function getStaffOnboardingCopy(language = staffOnboardingLanguage) {
         ['Calendar and appointments', 'Tap an available time to create an appointment. Choose the date, time, duration and technician, add the client name and service, then save. An existing appointment can be opened, moved, canceled or marked No Show. Walk-in creates an appointment without a prior booking: the calendar automatically selects today, the current technician and the next 15-minute time. You only need to enter the duration and save.'],
         ['Off Work', 'Use Off Work to close one time period, a full day, a repeating weekly time period or a repeating full day. Vacation closes a range between two selected dates. Finish Day closes all remaining free time until the end of the current workday.'],
         ['Log and Archive', 'Log shows every action by all calendar users for the selected date. Use its filters to make the information easier to review. Archive keeps appointment history; search by client name to find older appointments.'],
-        ['Messages', 'The bell opens work messages and important events. The For me, Unread and Chat filters show messages for you, all unread messages, or only chat messages. You can send text, photos and voice messages. Tap an appointment message to open it; swipe right to pin or left to reply. Messages are kept for 60 days. If you need to keep an important chat message longer, pin it by swiping right.'],
+        ['Messages', 'The bell opens work messages and important events. The For me, Bookings and Chat filters show messages for you, all Online Booking and Dash Booking messages, or only chat messages. You can send text, photos and voice messages. Tap an appointment message to open it; swipe right to pin or left to reply. Messages are kept for 60 days. If you need to keep an important chat message longer, pin it by swiping right.'],
         ['Staff Settings and Analytics', 'In Staff Settings, you can choose your column color. Be sure to enter the average duration of your services so Online Booking shows clients the correct times. Analytics shows appointment, busy, free and off-work hour totals, cancellations, No Show and other work data for a day or selected period.'],
         ['Account', 'Logout safely ends your session. If you forget your password or need to create one, tap Forgot password? on the Login screen and check Inbox, Spam and Junk.']
       ],
@@ -11429,7 +11429,7 @@ function getStaffOnboardingCopy(language = staffOnboardingLanguage) {
         ['Календар і записи', 'Натисніть на вільний час, щоб створити запис. Виберіть дату, час, тривалість і майстра, додайте ім’я клієнта та сервіс, потім збережіть. Існуючий запис можна відкрити, перенести, скасувати або позначити No Show. Walk-in створює запис без попереднього бронювання: календар автоматично вибирає сьогоднішню дату, поточного майстра та найближче наступне 15-хвилинне вікно. Вам залишається вказати тривалість і зберегти запис.'],
         ['Off Work', 'В Off Work можна закрити окремий проміжок часу, увесь день, повторюваний щотижневий проміжок або цілий щотижневий день. Vacation закриває період між двома вибраними датами. Finish Day закриває весь вільний час, що залишився до кінця поточного робочого дня.'],
         ['Log і Archive', 'Log показує всі дії всіх користувачів календаря за вибрану дату. Дані можна відфільтрувати для зручного перегляду. В Archive зберігається історія записів; старі записи можна знайти за ім’ям клієнта.'],
-        ['Messages', 'Дзвіночок відкриває робочі повідомлення та важливі події. Фільтри For me, Unread і Chat показують повідомлення для вас, усі непрочитані або тільки повідомлення чату. Тут можна надсилати текст, фотографії та голосові повідомлення. Натисніть повідомлення про запис, щоб відкрити його; свайп вправо закріплює повідомлення, свайп вліво дає змогу відповісти. Повідомлення зберігаються 60 днів. Якщо важливе повідомлення чату потрібно зберегти довше, закріпіть його свайпом вправо.'],
+        ['Messages', 'Дзвіночок відкриває робочі повідомлення та важливі події. Фільтри For me, Bookings і Chat показують повідомлення для вас, усі повідомлення Online Booking і Dash Booking або тільки повідомлення чату. Тут можна надсилати текст, фотографії та голосові повідомлення. Натисніть повідомлення про запис, щоб відкрити його; свайп вправо закріплює повідомлення, свайп вліво дає змогу відповісти. Повідомлення зберігаються 60 днів. Якщо важливе повідомлення чату потрібно зберегти довше, закріпіть його свайпом вправо.'],
         ['Staff Settings і Analytics', 'У Staff Settings можна вибрати колір своєї колонки. Обов’язково вкажіть середню тривалість своїх процедур, щоб Online Booking правильно показував час клієнтам. В Analytics можна побачити показники записів, зайнятих, вільних і off-work годин, скасування, No Show та інші дані роботи за певний день або вибраний період.'],
         ['Акаунт', 'Logout безпечно завершує сеанс. Якщо ви забули пароль або хочете створити новий, натисніть Forgot password? на екрані Login і перевірте Inbox, Spam та Junk.']
       ],
@@ -11444,7 +11444,7 @@ function getStaffOnboardingCopy(language = staffOnboardingLanguage) {
         ['Календарь и записи', 'Нажмите на свободное время, чтобы создать запись. Выберите дату, время, продолжительность и мастера, добавьте имя клиента и сервис, затем сохраните. Существующую запись можно открыть, перенести, отменить или отметить No Show. Walk-in создаёт запись без предварительного бронирования: календарь автоматически выбирает сегодняшнюю дату, текущего мастера и ближайшее следующее 15-минутное окно. Вам остаётся указать продолжительность и сохранить запись.'],
         ['Off Work', 'В Off Work можно закрыть отдельный промежуток времени, весь день, повторяющийся еженедельный промежуток или целый еженедельный день. Vacation закрывает период между двумя выбранными датами. Finish Day закрывает всё оставшееся свободное время до конца текущего рабочего дня.'],
         ['Log и Archive', 'Log показывает все действия всех пользователей календаря за выбранную дату. Данные можно отфильтровать для удобного просмотра. В Archive хранится история записей; старые записи можно найти по имени клиента.'],
-        ['Messages', 'Значок колокольчика открывает рабочие сообщения и важные события. Фильтры For me, Unread и Chat показывают сообщения для вас, все непрочитанные или только сообщения чата. Здесь можно отправлять текст, фотографии и голосовые сообщения. Нажмите на сообщение о записи, чтобы открыть её; свайп вправо закрепляет сообщение, свайп влево позволяет ответить. Сообщения хранятся 60 дней. Если важное сообщение чата нужно сохранить дольше, закрепите его свайпом вправо.'],
+        ['Messages', 'Значок колокольчика открывает рабочие сообщения и важные события. Фильтры For me, Bookings и Chat показывают сообщения для вас, все сообщения Online Booking и Dash Booking или только сообщения чата. Здесь можно отправлять текст, фотографии и голосовые сообщения. Нажмите на сообщение о записи, чтобы открыть её; свайп вправо закрепляет сообщение, свайп влево позволяет ответить. Сообщения хранятся 60 дней. Если важное сообщение чата нужно сохранить дольше, закрепите его свайпом вправо.'],
         ['Staff Settings и Analytics', 'В Staff Settings можно выбрать цвет своей колонки. Обязательно укажите среднюю продолжительность своих процедур, чтобы Online Booking правильно показывал время клиентам. В Analytics можно увидеть показатели записей, занятых, свободных и off-work часов, отмены, No Show и другие данные работы за определённый день или выбранный период.'],
         ['Аккаунт', 'Logout безопасно завершает сеанс. Если вы забыли пароль или хотите создать новый, на экране Login нажмите Forgot password?.']
       ],
@@ -11713,7 +11713,9 @@ function getStaffNotificationPriority(eventType, message = '') {
 function getEffectiveStaffNotificationPriority(item) {
   if (item?.audienceVersion !== 2) return item?.priority || 'secondary';
   if (item.priority === 'message' || item.eventType === 'staff_message') return 'message';
-  if (currentUserRole === 'manager') return item.managerPriority === 'key' ? 'key' : 'secondary';
+  if (currentUserRole === 'manager') {
+    return isBookingStaffNotification(item) || item.managerPriority === 'key' ? 'key' : 'secondary';
+  }
   return Array.isArray(item.importantStaffIds) && item.importantStaffIds.includes(currentUserStaffId)
     ? 'key'
     : 'secondary';
@@ -12436,9 +12438,16 @@ function isStaffNotificationForCurrentUser(item) {
   return getEffectiveStaffNotificationPriority(item) === 'key';
 }
 
+function isBookingStaffNotification(item) {
+  const source = String(item?.source || '').trim().toLowerCase();
+  const eventType = String(item?.eventType || '').trim().toLowerCase();
+  return source === 'online_booking' || source === 'dash_booking' ||
+    eventType.startsWith('online_') || eventType.startsWith('dash_');
+}
+
 function getFilteredStaffNotifications() {
   if (staffMessagesFilter === 'for-me') return staffNotifications.filter(isStaffNotificationForCurrentUser);
-  if (staffMessagesFilter === 'unread') return staffNotifications.filter(item => isStaffNotificationUnread(item) || staffMessagesAcknowledgedIds.has(item.id));
+  if (staffMessagesFilter === 'bookings') return staffNotifications.filter(isBookingStaffNotification);
   if (staffMessagesFilter === 'chat') return staffNotifications.filter(item => item.priority === 'message' || item.eventType === 'staff_message');
   return staffNotifications;
 }
@@ -17535,7 +17544,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-11-07.1';
+const CALENDAR_APP_VERSION = '2026-11-10.1';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';
