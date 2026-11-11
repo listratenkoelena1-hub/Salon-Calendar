@@ -17,6 +17,10 @@ const versionManifest = JSON.parse(fs.readFileSync(
   path.join(__dirname, "..", "..", "salon-calendar", "version.json"),
   "utf8"
 ));
+const hostingConfig = JSON.parse(fs.readFileSync(
+  path.join(__dirname, "..", "..", "salon-calendar", "firebase.json"),
+  "utf8"
+).replace(/^\uFEFF/, ""));
 
 test("calendar update control is hidden until a new version is ready", () => {
   assert.match(calendarHtml, /id="calendarUpdateBtn"[\s\S]*?class="hidden"/);
@@ -45,7 +49,7 @@ test("Update activates the waiting worker and reloads after controller change", 
 test("service worker waits for the user's update action", () => {
   assert.doesNotMatch(serviceWorkerSource, /addEventListener\('install'[\s\S]*?skipWaiting/);
   assert.match(serviceWorkerSource, /event\.data\.type === 'SKIP_WAITING'/);
-  assert.match(serviceWorkerSource, /salon-cache-v14/);
+  assert.match(serviceWorkerSource, /salon-cache-v15/);
 });
 
 test("calendar checks a no-cache release manifest independently of the service worker", () => {
@@ -55,6 +59,14 @@ test("calendar checks a no-cache release manifest independently of the service w
   assert.match(calendarHtml, /visibilityState === 'visible'/);
   const embeddedVersion = calendarHtml.match(/const CALENDAR_APP_VERSION = '([^']+)'/)?.[1];
   assert.equal(embeddedVersion, versionManifest.version);
+});
+
+test("calendar shell and update files are never served from the hosting cache", () => {
+  const calendarHosting = hostingConfig.hosting.find(item => item.target === "calendar");
+  const noStoreSources = new Set((calendarHosting.headers || [])
+    .filter(entry => (entry.headers || []).some(header => header.key === "Cache-Control" && /no-store/.test(header.value)))
+    .map(entry => entry.source));
+  assert.deepEqual(noStoreSources, new Set(["/", "/index.html", "/version.json", "/sw.js"]));
 });
 
 test("the Update control clears once the loaded release matches the manifest", () => {

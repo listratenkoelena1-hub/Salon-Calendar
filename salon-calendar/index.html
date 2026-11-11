@@ -5632,8 +5632,8 @@ let staffMessagesMayClearUnread = false;
 let staffMessagesScrollToLatestPending = false;
 let staffMessagesLatestAnchorFrame = 0;
 const staffChatTranslationState = new Map();
-let staffMessageLatestPages = { legacy: [], canonical: [] };
-let staffMessageHasEarlierBySource = { legacy: false, canonical: false };
+let staffMessageLatestPages = { canonical: [] };
+let staffMessageHasEarlierBySource = { canonical: false };
 let staffMessagesQueryGeneration = 0;
 let staffPushStatuses = {};
 let staffPushStatusesState = 'idle';
@@ -11798,7 +11798,7 @@ function buildStaffNotificationDoc({
     photoReviewUrl: photoReviewUrl || '',
     readBy: isOwnNotification ? { [senderReadKey]: true } : {},
     createdAt: serverTimestamp(),
-    expiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     senderLabel: getCurrentActorLabel(),
     senderUid: auth.currentUser?.uid || '',
     senderStaffId: currentUserStaffId || '',
@@ -11833,7 +11833,7 @@ function buildStaffChatMessageDoc({ text, senderLabel, recipientStaffId = '', re
     photoReviewUrl: '',
     readBy: senderReadKey ? { [senderReadKey]: true } : {},
     createdAt: serverTimestamp(),
-    expiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     source: 'calendar_chat',
     messageGroupId: messageGroupId || (crypto?.randomUUID ? crypto.randomUUID() : String(Date.now())),
     sourceMessageId: messageGroupId || '',
@@ -11928,8 +11928,8 @@ function stopStaffNotificationsListener() {
   staffNotifications = [];
   staffMessagesVisibleLimit = STAFF_MESSAGES_PAGE_SIZE;
   staffMessagesHasEarlier = false;
-  staffMessageLatestPages = { legacy: [], canonical: [] };
-  staffMessageHasEarlierBySource = { legacy: false, canonical: false };
+  staffMessageLatestPages = { canonical: [] };
+  staffMessageHasEarlierBySource = { canonical: false };
   staffMessagesLoading = true;
   staffMessagesLoadError = '';
   staffPinnedNotificationIds = [];
@@ -11985,7 +11985,6 @@ function getDashPreviewDemoNotifications() {
 
 function mergeStaffMessageSources(extraItems = []) {
   const candidates = [
-    ...staffMessageLatestPages.legacy,
     ...staffMessageLatestPages.canonical,
     ...extraItems,
     ...getDashPreviewDemoNotifications()
@@ -12028,21 +12027,19 @@ function isStaffMessageVisibleToCurrentUser(item, sourceKey) {
 function subscribeStaffMessageWindow({ initial = false } = {}) {
   if (staffNotificationsUnsubscribe) staffNotificationsUnsubscribe();
   const generation = ++staffMessagesQueryGeneration;
-  const pendingPages = { legacy: null, canonical: null };
-  const pendingHasEarlier = { legacy: false, canonical: false };
-  const pendingErrors = { legacy: '', canonical: '' };
+  const pendingPages = { canonical: null };
+  const pendingHasEarlier = { canonical: false };
+  const pendingErrors = { canonical: '' };
   const queryLimit = staffMessagesVisibleLimit + 1;
   let windowReady = false;
 
   const commitWindow = () => {
     if (generation !== staffMessagesQueryGeneration) return;
-    if (!pendingPages.legacy || !pendingPages.canonical) return;
+    if (!pendingPages.canonical) return;
     staffMessageLatestPages = {
-      legacy: pendingPages.legacy,
       canonical: pendingPages.canonical
     };
     staffMessageHasEarlierBySource = {
-      legacy: pendingHasEarlier.legacy,
       canonical: pendingHasEarlier.canonical
     };
     mergeStaffMessageSources();
@@ -12051,14 +12048,14 @@ function subscribeStaffMessageWindow({ initial = false } = {}) {
       getStaffNotificationMillis(staffNotifications[0]) > staffMessagesUnreadBoundaryMs;
     staffMessagesLoading = false;
     staffMessagesLoadingEarlier = false;
-    staffMessagesLoadError = pendingErrors.canonical || pendingErrors.legacy || '';
+    staffMessagesLoadError = pendingErrors.canonical || '';
     updateStaffNotificationsBadge();
     renderStaffNotifications();
     if (initial && !windowReady && !staffMessagesUnreadBoundaryMs) scrollStaffNotificationsToBottom();
     windowReady = true;
   };
 
-  const unsubscribers = ['legacy', 'canonical'].map(sourceKey => onSnapshot(
+  const unsubscribers = ['canonical'].map(sourceKey => onSnapshot(
     buildStaffMessagesQueryForSource(sourceKey, queryLimit),
     snap => {
       if (generation !== staffMessagesQueryGeneration) return;
@@ -17567,7 +17564,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-11-11.1';
+const CALENDAR_APP_VERSION = '2026-11-11.2';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';

@@ -135,7 +135,7 @@ const DEFAULT_BOOKING_SERVICE_GROUPS = ["manicure", "pedicure"];
 const MAX_PHOTO_UPLOADS = 3;
 const MAX_PHOTO_BYTES = 1250000;
 const PHOTO_TTL_MS = 24 * 60 * 60 * 1000;
-const STAFF_NOTIFICATION_TTL_MS = 60 * 24 * 60 * 60 * 1000;
+const STAFF_NOTIFICATION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const CHAT_TRANSLATION_CACHE_COLLECTION = "chatTranslations";
 const RELEASE_NOTICE_VERSION = "chat-translation-v1";
 const PUSH_DEVICE_TTL_MS = 120 * 24 * 60 * 60 * 1000;
@@ -5455,6 +5455,23 @@ exports.staffMessageCreated = onDocumentCreated(
   handleStaffMessageCreated
 );
 
+async function deleteExpiredStaffMessageBatches(collectionName, now, { batchSize = 400, maxBatches = 10 } = {}) {
+  let deleted = 0;
+  for (let batchNumber = 0; batchNumber < maxBatches; batchNumber += 1) {
+    const snapshot = await db.collection(collectionName)
+      .where("expiresAt", "<=", now)
+      .limit(batchSize)
+      .get();
+    if (snapshot.empty) break;
+    const batch = db.batch();
+    snapshot.docs.forEach(docSnap => batch.delete(docSnap.ref));
+    await batch.commit();
+    deleted += snapshot.size;
+    if (snapshot.size < batchSize) break;
+  }
+  return deleted;
+}
+
 exports.cleanupExpiredStaffNotifications = onSchedule(
   {
     region: "us-central1",
@@ -5462,23 +5479,15 @@ exports.cleanupExpiredStaffNotifications = onSchedule(
     timeZone: "America/Edmonton"
   },
   async () => {
-    const snap = await db.collection("staffNotifications")
-      .where("expiresAt", "<=", Timestamp.now())
-      .limit(200)
-      .get();
-    const canonicalSnap = await db.collection("staffMessages")
-      .where("expiresAt", "<=", Timestamp.now())
-      .limit(200)
-      .get();
-
+    const now = Timestamp.now();
     const expiredDevices = await db.collection("staffPushDevices")
-      .where("expiresAt", "<=", Timestamp.now())
+      .where("expiresAt", "<=", now)
       .limit(200)
       .get();
 
     await Promise.all([
-      ...snap.docs.map(docSnap => docSnap.ref.delete()),
-      ...canonicalSnap.docs.map(docSnap => docSnap.ref.delete()),
+      deleteExpiredStaffMessageBatches("staffNotifications", now),
+      deleteExpiredStaffMessageBatches("staffMessages", now),
       ...expiredDevices.docs.map(docSnap => docSnap.ref.delete())
     ]);
   }
