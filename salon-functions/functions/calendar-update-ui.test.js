@@ -46,6 +46,15 @@ test("Update activates the waiting worker and reloads after controller change", 
   assert.match(calendarHtml, /window\.location\.replace\(url\.toString\(\)\)/);
 });
 
+test("an already-current page activates its waiting worker without showing Update twice", () => {
+  assert.match(calendarHtml, /async function reconcileCalendarWaitingWorker\(worker, \{ autoApply = false \} = \{\}\)/);
+  assert.match(calendarHtml, /const versionChecked = await checkCalendarAppVersion\(\)/);
+  assert.match(calendarHtml, /versionChecked && !calendarAvailableVersion[\s\S]*?hideCalendarUpdateButton\(\);[\s\S]*?worker\.postMessage\(\{ type: 'SKIP_WAITING' \}\)/);
+  assert.match(calendarHtml, /reconcileCalendarWaitingWorker\(registration\.waiting, \{ autoApply: true \}\)/);
+  assert.match(calendarHtml, /reconcileCalendarWaitingWorker\(newWorker\)/);
+  assert.doesNotMatch(calendarHtml, /newWorker\.state === 'installed'[\s\S]{0,160}offerCalendarUpdate\(\)/);
+});
+
 test("service worker waits for the user's update action", () => {
   assert.doesNotMatch(serviceWorkerSource, /addEventListener\('install'[\s\S]*?skipWaiting/);
   assert.match(serviceWorkerSource, /event\.data\.type === 'SKIP_WAITING'/);

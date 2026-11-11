@@ -17564,7 +17564,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-11-11.2';
+const CALENDAR_APP_VERSION = '2026-11-11.3';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';
@@ -17607,20 +17607,33 @@ function offerCalendarUpdate({ autoApply = false } = {}) {
 async function checkCalendarAppVersion({ autoApply = false } = {}) {
   try {
     const response = await fetch(`./version.json?check=${Date.now()}`, { cache: 'no-store' });
-    if (!response.ok) return;
+    if (!response.ok) return false;
     const payload = await response.json();
     const availableVersion = String(payload?.version || '').trim();
-    if (!availableVersion) return;
+    if (!availableVersion) return false;
     if (availableVersion === CALENDAR_APP_VERSION) {
       calendarAvailableVersion = '';
       hideCalendarUpdateButton();
-      return;
+      return true;
     }
     calendarAvailableVersion = availableVersion;
     offerCalendarUpdate({ autoApply });
+    return true;
   } catch (error) {
     console.log('Calendar version check skipped:', error);
+    return false;
   }
+}
+
+async function reconcileCalendarWaitingWorker(worker, { autoApply = false } = {}) {
+  if (!worker) return;
+  const versionChecked = await checkCalendarAppVersion();
+  if (versionChecked && !calendarAvailableVersion) {
+    hideCalendarUpdateButton();
+    worker.postMessage({ type: 'SKIP_WAITING' });
+    return;
+  }
+  offerCalendarUpdate({ autoApply });
 }
 
 function applyCalendarUpdate() {
@@ -17681,7 +17694,7 @@ if ('serviceWorker' in navigator) {
         registration.update();
 
         if (registration.waiting && navigator.serviceWorker.controller) {
-          offerCalendarUpdate({ autoApply: true });
+          reconcileCalendarWaitingWorker(registration.waiting, { autoApply: true });
         }
 
         registration.addEventListener('updatefound', function() {
@@ -17690,7 +17703,7 @@ if ('serviceWorker' in navigator) {
 
           newWorker.addEventListener('statechange', function() {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              offerCalendarUpdate();
+              reconcileCalendarWaitingWorker(newWorker);
             }
           });
         });
