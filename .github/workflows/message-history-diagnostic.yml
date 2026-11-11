@@ -1,0 +1,36 @@
+name: Diagnose message history
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/message-history-diagnostic.yml
+      - .github/scripts/diagnose-message-history.js
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: salon-functions/functions/package-lock.json
+      - working-directory: salon-functions/functions
+        run: npm ci
+      - uses: google-github-actions/auth@v3
+        with:
+          project_id: rosesnails-calendar
+          workload_identity_provider: projects/1000239390265/locations/global/workloadIdentityPools/github-actions/providers/salon-calendar-main
+          service_account: github-production-deployer@rosesnails-calendar.iam.gserviceaccount.com
+      - name: Count message documents by date and schema
+        working-directory: salon-functions/functions
+        shell: bash
+        run: NODE_PATH="$PWD/node_modules" node ../../.github/scripts/diagnose-message-history.js
