@@ -58,7 +58,7 @@ test("an already-current page activates its waiting worker without showing Updat
 test("service worker waits for the user's update action", () => {
   assert.doesNotMatch(serviceWorkerSource, /addEventListener\('install'[\s\S]*?skipWaiting/);
   assert.match(serviceWorkerSource, /event\.data\.type === 'SKIP_WAITING'/);
-  assert.match(serviceWorkerSource, /salon-cache-v15/);
+  assert.match(serviceWorkerSource, /salon-cache-v16/);
 });
 
 test("calendar checks a no-cache release manifest independently of the service worker", () => {

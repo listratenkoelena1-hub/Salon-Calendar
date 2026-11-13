@@ -17163,6 +17163,7 @@ window.openWalkIn = () => {
   const currentStaffId = getCurrentStaffId();
   if (!currentStaffId) return;
 
+  setAppointmentReadonly(false);
   editId = null;
   pendingCreateAppointmentId = null;
   pendingCreateMutationId = null;
@@ -17181,10 +17182,11 @@ const todayStr =
 aDate.value = todayStr;
 
   fillSelects();
-// ===== WALK-IN LOCK STAFF =====
+// Default to the signed-in technician, but allow any technician to reassign
+// the walk-in before saving it.
 aStaff.value = getCurrentStaffId();
-aStaff.disabled = true;
-aStaff.style.opacity = '0.6';
+aStaff.disabled = false;
+aStaff.style.opacity = '1';
 
 // ===== WALK-IN LOCK DATE =====
 aDate.setAttribute('readonly', true);
@@ -17564,7 +17566,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </button>
 <div id="toastContainer"></div>
 <script>
-const CALENDAR_APP_VERSION = '2026-11-11.3';
+const CALENDAR_APP_VERSION = '2026-11-13.1';
 let calendarServiceWorkerRegistration = null;
 let calendarUpdateReloadRequested = false;
 let calendarAvailableVersion = '';
