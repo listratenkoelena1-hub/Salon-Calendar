@@ -129,7 +129,8 @@ function resolveDashStaff(localStaff, overrides = {}) {
 }
 
 function resolveLocalStaffForDashName(staffRecords, dashName, overrides = {}) {
-  const records = Array.isArray(staffRecords) ? staffRecords : [];
+  const records = (Array.isArray(staffRecords) ? staffRecords : [])
+    .filter(record => record && record.active !== false);
   const wanted = getDirectoryEntryByDashName(dashName);
   const normalizedDashName = normalizeStaffName(dashName);
 
@@ -139,13 +140,27 @@ function resolveLocalStaffForDashName(staffRecords, dashName, overrides = {}) {
   });
   if (explicit) return explicit;
 
-  if (!wanted) return null;
-  return records.find(record => {
-    const values = [record.id, record.name, record.displayName]
+  if (wanted) {
+    const directoryMatch = records.find(record => {
+      const values = [record.id, record.name, record.displayName]
+        .map(normalizeStaffName)
+        .filter(Boolean);
+      return wanted.aliases.some(alias => values.includes(normalizeStaffName(alias)));
+    });
+    if (directoryMatch) return directoryMatch;
+  }
+
+  // New Dash technicians should not be blocked merely because the static
+  // directory predates them. An exact normalized name is safe when it points
+  // to exactly one active Calendar technician; ambiguous names still require
+  // an explicit mapping.
+  const exactMatches = records.filter(record => (
+    [record.name, record.displayName]
       .map(normalizeStaffName)
-      .filter(Boolean);
-    return wanted.aliases.some(alias => values.includes(normalizeStaffName(alias)));
-  }) || null;
+      .filter(Boolean)
+      .includes(normalizedDashName)
+  ));
+  return exactMatches.length === 1 ? exactMatches[0] : null;
 }
 
 function isIsoDate(value) {

@@ -47,6 +47,20 @@ test("an explicit mapping overrides the built-in directory", () => {
   });
 });
 
+test("links a new Dash technician to one active Calendar technician with the same name", () => {
+  const anna = resolveLocalStaffForDashName([
+    { id: "local-anna", name: "Anna", active: true },
+    { id: "inactive-anna", name: "Anna", active: false },
+    { id: "local-cindy", name: "Cindy", active: true }
+  ], "Anna");
+
+  assert.equal(anna.id, "local-anna");
+  assert.equal(resolveLocalStaffForDashName([
+    { id: "anna-1", name: "Anna", active: true },
+    { id: "anna-2", displayName: "anna", active: true }
+  ], "Anna"), null);
+});
+
 test("builds an appointment block and clips it to Dash business hours", () => {
   const result = appointmentToDashBlock({
     id: "appt-1",
