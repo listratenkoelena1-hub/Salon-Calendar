@@ -414,6 +414,23 @@ test("monitor-only draft uses the assigned technician procedure duration", () =>
   assert.equal(buildDashMonitorDetail(detail, { id: "anyone" }).duration, 4);
 });
 
+test("Dash monitor messages append the approved possible duplicate warning", () => {
+  const warning = [
+    "⚠️ POSSIBLE DUPLICATE BOOKING",
+    "A client with the same or a similar name may already have a similar appointment on Friday, November 27 at 1:45 PM through Online Booking."
+  ].join("\n");
+  const message = buildDashMonitorMessage({
+    client: "Joanne Page",
+    date: "2026-11-29",
+    start: 24,
+    staffName: "Anna",
+    service: "Manicure"
+  }, warning);
+  assert.match(message, /POSSIBLE DUPLICATE BOOKING/);
+  assert.match(message, /through Online Booking/);
+  assert.doesNotMatch(message, /Please check whether|Please review/i);
+});
+
 test("uses distinct titles for ongoing Dash cancellation and reschedule events", () => {
   const FieldValue = { serverTimestamp: () => "SERVER_TIME" };
   const Timestamp = { fromDate: date => ({ millis: date.getTime() }) };

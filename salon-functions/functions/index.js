@@ -99,6 +99,13 @@ const {
   isOnlineBookingReminderDue
 } = require("./online-booking-reminder");
 const {
+  appointmentToDuplicateCandidate,
+  buildPossibleDuplicateBookingWarning,
+  dashReceiptToDuplicateCandidate,
+  findPossibleDuplicateBookings,
+  getDuplicateBookingDateRange
+} = require("./possible-duplicate-booking");
+const {
   enqueueDashReconciliation,
   enqueueDashSource,
   dateKeyInTimeZone,
@@ -1669,7 +1676,10 @@ function buildOnlineBookingTelegramMessage(data, staffRecords) {
   const warningLine = data.requestWarning
     ? `\n\n⚠️ <b>${escapeHtml(data.requestWarning)}</b>`
     : "";
-  return `ONLINE BOOKING REQUEST\n${data.client} requested <b>${requestedStaffName}</b> - <u>${formatDate(data.date)}</u> at <i>${slotToTime(data.start)}</i>.${noteLine}${photoLine}${assignmentLine}${warningLine}`;
+  const duplicateWarningLine = data.possibleDuplicateWarning
+    ? `\n\n${escapeHtml(data.possibleDuplicateWarning)}`
+    : "";
+  return `ONLINE BOOKING REQUEST\n${data.client} requested <b>${requestedStaffName}</b> - <u>${formatDate(data.date)}</u> at <i>${slotToTime(data.start)}</i>.${noteLine}${photoLine}${assignmentLine}${warningLine}${duplicateWarningLine}`;
 }
 
 function buildAppointmentLogDetails(data, staffRecords) {
@@ -4107,6 +4117,29 @@ exports.createOnlineBookingRequest = onCall(
         ...docSnap.data()
       }));
 
+      const duplicateDateRange = getDuplicateBookingDateRange([date]);
+      const duplicateAppointmentsSnap = await tx.get(
+        db.collection("appointments")
+          .where("date", ">=", duplicateDateRange.startDate)
+          .where("date", "<=", duplicateDateRange.endDate)
+      );
+      const duplicateDashReceiptsSnap = await tx.get(
+        db.collection("dashIncomingReceipts")
+          .where("detail.date", ">=", duplicateDateRange.startDate)
+          .where("detail.date", "<=", duplicateDateRange.endDate)
+          .limit(100)
+      );
+      const duplicateBookingCandidates = [
+        ...duplicateAppointmentsSnap.docs.map(docSnap => appointmentToDuplicateCandidate({
+          id: docSnap.id,
+          ...docSnap.data()
+        })),
+        ...duplicateDashReceiptsSnap.docs.map(docSnap => dashReceiptToDuplicateCandidate({
+          id: docSnap.id,
+          ...docSnap.data()
+        }))
+      ];
+
       const offWorkSnap = await tx.get(
         db.collection("OffWork").where("date", "==", date)
       );
@@ -4319,6 +4352,19 @@ exports.createOnlineBookingRequest = onCall(
       const groupStaffNames = splitAssignment
         ? [splitAssignment.hands.staff.name || "Staff", splitAssignment.feet.staff.name || "Staff"]
         : [getStaffName(staffRecords, assignedStaffId)];
+      const possibleDuplicateWarning = buildPossibleDuplicateBookingWarning(
+        findPossibleDuplicateBookings({
+          id: appointmentRef.id,
+          appointmentId: appointmentRef.id,
+          onlineBookingGroupId: appointmentRef.id,
+          source: "online_booking",
+          client,
+          date,
+          start,
+          selectedServices,
+          serviceDetails
+        }, duplicateBookingCandidates)
+      );
       const appointmentData = stripPrivateAppointmentFields({
         date,
         staffId: assignedStaffId,
@@ -4359,6 +4405,7 @@ exports.createOnlineBookingRequest = onCall(
         selectedLanguage,
         selectedServices: primarySelectedServices,
         requestWarning: clientNoShowWarning || null,
+        possibleDuplicateWarning: possibleDuplicateWarning || null,
         photoRefs: photoReview ? photoReview.refs : [],
         photoLinks: photoReview ? [photoReview.url] : [],
         photoReviewToken: photoReview ? photoReview.token : null,

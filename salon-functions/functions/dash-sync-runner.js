@@ -34,6 +34,13 @@ const {
 } = require("./client-history-store");
 const { dedupeWeeklyOffRules } = require("./weekly-off-dedupe-core");
 const { getBookingDurationDecision } = require("./booking-duration");
+const {
+  appointmentToDuplicateCandidate,
+  buildPossibleDuplicateBookingWarning,
+  dashReceiptToDuplicateCandidate,
+  findPossibleDuplicateBookings,
+  getDuplicateBookingDateRange
+} = require("./possible-duplicate-booking");
 
 const ANYONE_ID = "anyone";
 const DASH_QUEUE_COLLECTION = "dashSyncQueue";
@@ -976,7 +983,7 @@ function buildDashMessageDoc({
   };
 }
 
-function buildDashMonitorMessage(detail = {}) {
+function buildDashMonitorMessage(detail = {}, possibleDuplicateWarning = "") {
   const startMinutes = slotToMinutes(detail.start);
   const startText = Number.isFinite(startMinutes) ? minutesToTime(startMinutes) : "unknown time";
   return [
@@ -985,7 +992,8 @@ function buildDashMonitorMessage(detail = {}) {
     `${detail.date || "Unknown date"} at ${startText}.`,
     ...(detail.service ? [detail.service] : []),
     "",
-    "Please check your time availability. If you have enough time, add this appointment to Calendar."
+    "Please check your time availability. If you have enough time, add this appointment to Calendar.",
+    ...(possibleDuplicateWarning ? ["", possibleDuplicateWarning] : [])
   ].join("\n");
 }
 
@@ -1040,7 +1048,14 @@ function buildDashMonitorDetail(detail = {}, localStaff = null) {
   };
 }
 
-function buildDashMonitorMessageDoc({ FieldValue, Timestamp, detail, localStaff, staffRecords }) {
+function buildDashMonitorMessageDoc({
+  FieldValue,
+  Timestamp,
+  detail,
+  localStaff,
+  staffRecords,
+  possibleDuplicateWarning = ""
+}) {
   const activeStaffIds = staffRecords
     .filter(staff => staff.active !== false && staff.id && staff.id !== ANYONE_ID)
     .map(staff => staff.id);
@@ -1053,7 +1068,7 @@ function buildDashMonitorMessageDoc({ FieldValue, Timestamp, detail, localStaff,
     ...buildDashMessageDoc({
       FieldValue,
       Timestamp,
-      message: buildDashMonitorMessage(detail),
+      message: buildDashMonitorMessage(detail, possibleDuplicateWarning),
       eventType: "dash_appointment_detected",
       entityType: "dashBooking",
       entityId,
@@ -1803,10 +1818,31 @@ async function processDashIncoming({ db, FieldValue, Timestamp, client, mappings
     if (notificationKey) knownNotificationKeys.add(notificationKey);
   });
   const items = await client.readDashEvents({ knownNotificationKeys, limit: 50 });
-  const staffSnap = await db.collection("staff").get();
+  const duplicateDateRange = getDuplicateBookingDateRange(
+    items.map(item => item?.detail?.date)
+  );
+  const [staffSnap, duplicateAppointmentSnap] = await Promise.all([
+    db.collection("staff").get(),
+    duplicateDateRange
+      ? db.collection("appointments")
+          .where("date", ">=", duplicateDateRange.startDate)
+          .where("date", "<=", duplicateDateRange.endDate)
+          .get()
+      : Promise.resolve({ docs: [] })
+  ]);
   const staffRecords = [
     { id: ANYONE_ID, name: "Anyone", active: true },
     ...staffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }))
+  ];
+  const duplicateBookingCandidates = [
+    ...duplicateAppointmentSnap.docs.map(docSnap => appointmentToDuplicateCandidate({
+      id: docSnap.id,
+      ...docSnap.data()
+    })),
+    ...receiptSnap.docs.map(docSnap => dashReceiptToDuplicateCandidate({
+      id: docSnap.id,
+      ...docSnap.data()
+    }))
   ];
   const report = {
     scanned: items.length,
@@ -1927,6 +1963,17 @@ async function processDashMonitorAlerts({ db, FieldValue, Timestamp, client, map
 
     const localStaff = resolveLocalStaffForDashName(staffRecords, detail.staffName, mappings);
     const monitoredDetail = buildDashMonitorDetail(detail, localStaff);
+    const possibleDuplicateWarning = buildPossibleDuplicateBookingWarning(
+      findPossibleDuplicateBookings({
+        id: entityId,
+        dashBookingId: detail.dashBookingId,
+        source: "dash_booking",
+        client: detail.client,
+        date: detail.date,
+        start: detail.start,
+        service: detail.service
+      }, duplicateBookingCandidates)
+    );
     const messageRef = db.collection("staffMessages").doc(`dash_monitor_${entityId}`);
     const batch = db.batch();
     batch.set(notificationRef, {
@@ -1952,9 +1999,16 @@ async function processDashMonitorAlerts({ db, FieldValue, Timestamp, client, map
       Timestamp,
       detail: monitoredDetail,
       localStaff,
-      staffRecords
+      staffRecords,
+      possibleDuplicateWarning
     }));
     await batch.commit();
+    duplicateBookingCandidates.push(dashReceiptToDuplicateCandidate({
+      id: entityId,
+      dashBookingId: detail.dashBookingId,
+      status: "alerted",
+      detail: monitoredDetail
+    }));
     report.alerted += 1;
   }
   return report;
@@ -2008,16 +2062,32 @@ async function processDashCalendarMonitorAlerts({
   horizonDays = 1
 }) {
   const range = getReconciliationRange(startDate, horizonDays);
-  const [observed, staffSnap, appointmentSnap] = await Promise.all([
+  const duplicateDateRange = getDuplicateBookingDateRange([range.startDate, range.endDate]);
+  const [observed, staffSnap, appointmentSnap, receiptSnap] = await Promise.all([
     client.readCalendarRange({ startDate: range.startDate, endDate: range.endDate }),
     db.collection("staff").get(),
-    db.collection("appointments").where("date", ">=", range.startDate).where("date", "<=", range.endDate).get()
+    db.collection("appointments")
+      .where("date", ">=", duplicateDateRange.startDate)
+      .where("date", "<=", duplicateDateRange.endDate)
+      .get(),
+    db.collection(DASH_RECEIPT_COLLECTION)
+      .where("detail.date", ">=", duplicateDateRange.startDate)
+      .where("detail.date", "<=", duplicateDateRange.endDate)
+      .limit(100)
+      .get()
   ]);
   const staffRecords = [
     { id: ANYONE_ID, name: "Anyone", active: true },
     ...staffSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }))
   ];
   const appointments = appointmentSnap.docs.map(docSnap => ({ id: docSnap.id, ref: docSnap.ref, ...docSnap.data() }));
+  const duplicateBookingCandidates = [
+    ...appointments.map(appointmentToDuplicateCandidate),
+    ...receiptSnap.docs.map(docSnap => dashReceiptToDuplicateCandidate({
+      id: docSnap.id,
+      ...docSnap.data()
+    }))
+  ];
   const report = { scanned: 0, alerted: 0, matchedExisting: 0, ignored: 0, ambiguous: 0 };
 
   for (const detail of observed.appointments || []) {
@@ -2037,6 +2107,17 @@ async function processDashCalendarMonitorAlerts({
 
     const localStaff = resolveLocalStaffForDashName(staffRecords, detail.staffName, mappings);
     const monitoredDetail = buildDashMonitorDetail(detail, localStaff);
+    const possibleDuplicateWarning = buildPossibleDuplicateBookingWarning(
+      findPossibleDuplicateBookings({
+        id: entityId,
+        dashBookingId: detail.dashBookingId,
+        source: "dash_booking",
+        client: detail.client,
+        date: detail.date,
+        start: detail.start,
+        service: detail.service
+      }, duplicateBookingCandidates)
+    );
     const match = findDashCalendarMatch(monitoredDetail, appointments, localStaff);
     const messageRef = db.collection("staffMessages").doc(`dash_calendar_${entityId}`);
     const batch = db.batch();
@@ -2099,7 +2180,14 @@ async function processDashCalendarMonitorAlerts({
         staffId: match.appointment.staffId || localStaff?.id || "",
         message: `Dash Booking source linked to the existing calendar appointment (${match.confidence}).`
       }));
-      const messageDoc = buildDashMonitorMessageDoc({ FieldValue, Timestamp, detail: monitoredDetail, localStaff, staffRecords });
+      const messageDoc = buildDashMonitorMessageDoc({
+        FieldValue,
+        Timestamp,
+        detail: monitoredDetail,
+        localStaff,
+        staffRecords,
+        possibleDuplicateWarning
+      });
       messageDoc.title = "Dash Booking appointment received";
       messageDoc.body = [
         "NEW APPOINTMENT RECEIVED THROUGH DASH BOOKING",
@@ -2107,7 +2195,8 @@ async function processDashCalendarMonitorAlerts({
         detail.service || "",
         "",
         `Booked with ${detail.staffName || localStaff?.name || "a technician"}.`,
-        "This appointment is already in Calendar."
+        "This appointment is already in Calendar.",
+        ...(possibleDuplicateWarning ? ["", possibleDuplicateWarning] : [])
       ].filter(Boolean).join("\n");
       messageDoc.entityType = "appointment";
       messageDoc.entityId = match.appointment.id;
@@ -2123,11 +2212,24 @@ async function processDashCalendarMonitorAlerts({
         processedAt: FieldValue.serverTimestamp()
       }, { merge: true });
       await batch.commit();
+      duplicateBookingCandidates.push(dashReceiptToDuplicateCandidate({
+        id: entityId,
+        dashBookingId: detail.dashBookingId,
+        status: "matched_existing",
+        detail: monitoredDetail
+      }));
       report.matchedExisting += 1;
       continue;
     }
 
-    const messageDoc = buildDashMonitorMessageDoc({ FieldValue, Timestamp, detail: monitoredDetail, localStaff, staffRecords });
+    const messageDoc = buildDashMonitorMessageDoc({
+      FieldValue,
+      Timestamp,
+      detail: monitoredDetail,
+      localStaff,
+      staffRecords,
+      possibleDuplicateWarning
+    });
     if (match.confidence === "ambiguous") {
       messageDoc.title = "Dash Booking needs review";
       messageDoc.body += "\n\nMore than one Calendar appointment may match. Please check manually.";
@@ -2145,6 +2247,12 @@ async function processDashCalendarMonitorAlerts({
       processedAt: FieldValue.serverTimestamp()
     }, { merge: true });
     await batch.commit();
+    duplicateBookingCandidates.push(dashReceiptToDuplicateCandidate({
+      id: entityId,
+      dashBookingId: detail.dashBookingId,
+      status: "calendar_alerted",
+      detail: monitoredDetail
+    }));
     report.alerted += 1;
   }
   return report;
